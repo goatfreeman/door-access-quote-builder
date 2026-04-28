@@ -99,6 +99,24 @@ button {
   margin: 0 auto;
 }
 
+.page-view {
+  display: none;
+}
+
+.page-view.active {
+  display: grid;
+}
+
+#items-view.active {
+  display: block;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+.wide-panel {
+  width: 100%;
+}
+
 .panel {
   min-width: 0;
   background: var(--panel);
@@ -243,6 +261,29 @@ button {
   gap: 8px;
 }
 
+.item-toolbar {
+  grid-template-columns: minmax(220px, 1fr) minmax(280px, 420px);
+  align-items: start;
+}
+
+.item-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.item-table {
+  min-width: 1080px;
+}
+
+.item-table td {
+  min-width: 130px;
+}
+
+.item-table .description-cell {
+  min-width: 260px;
+}
+
 .item-meta {
   color: var(--muted-2) !important;
   font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
@@ -323,6 +364,20 @@ button {
 .button.compact {
   min-height: 32px;
   padding: 6px 9px;
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.check-row input {
+  width: 16px;
+  height: 16px;
 }
 
 .quote-form {
@@ -442,6 +497,22 @@ tr:last-child td {
   font-weight: 800;
 }
 
+.labor-control {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 12px;
+  background: var(--panel-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.labor-inputs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .status-note {
   display: flex;
   align-items: flex-start;
@@ -464,6 +535,24 @@ tr:last-child td {
 .subhead {
   margin: 18px 0 10px;
   font-size: 14px;
+}
+
+.settings-dialog {
+  width: min(720px, calc(100vw - 28px));
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.settings-dialog::backdrop {
+  background: rgba(23, 23, 23, 0.45);
+}
+
+.settings-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
 }
 
 .preview {
@@ -562,6 +651,11 @@ tr:last-child td {
 
   .template-form {
     display: grid;
+  }
+
+  .item-toolbar,
+  .labor-inputs {
+    grid-template-columns: 1fr;
   }
 }
 
