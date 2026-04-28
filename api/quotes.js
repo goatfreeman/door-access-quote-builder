@@ -1,4 +1,4 @@
-const { list, mode, readBody, send, upsert } = require("./_store");
+const { list, mode, readBody, remove, send, upsert } = require("./_store");
 
 module.exports = async function handler(request, response) {
   try {
@@ -12,6 +12,13 @@ module.exports = async function handler(request, response) {
         ...quote,
         updatedAt: new Date().toISOString(),
       });
+      return send(response, 200, { mode: mode(), quotes });
+    }
+
+    if (request.method === "DELETE") {
+      const { id } = await readBody(request);
+      if (!id) return send(response, 400, { error: "Quote id is required" });
+      const quotes = await remove("quotes", id);
       return send(response, 200, { mode: mode(), quotes });
     }
 
