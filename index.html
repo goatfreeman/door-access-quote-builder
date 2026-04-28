@@ -14,7 +14,12 @@
     <main class="app-shell">
       <header class="topbar">
         <div class="brand">
-          <div class="brand-mark" aria-hidden="true">D</div>
+          <button class="mobile-menu-button" type="button" id="open-menu" aria-label="Open menu">
+            <span aria-hidden="true"></span>
+            <span aria-hidden="true"></span>
+            <span aria-hidden="true"></span>
+          </button>
+          <div class="brand-mark" aria-hidden="true">Q</div>
           <div>
             <h1>Quick Quote Builder</h1>
             <p>Build fast quotes from repeatable item and labor packages.</p>
@@ -23,6 +28,7 @@
         <div class="top-actions">
           <button class="button secondary" type="button" data-view="quote-view">Quote</button>
           <button class="button secondary" type="button" data-view="items-view">Items</button>
+          <button class="button secondary" type="button" data-view="previous-quotes-view">Previous Quotes</button>
           <button class="button secondary" type="button" id="copy-summary" title="Copy quote summary">
             <span aria-hidden="true">[]</span> Copy summary
           </button>
@@ -38,6 +44,18 @@
           <button class="button secondary" type="button" id="open-settings" title="Settings">Settings</button>
         </div>
       </header>
+
+      <div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
+      <nav class="mobile-drawer" id="mobile-drawer" aria-label="Mobile navigation" aria-hidden="true">
+        <div class="drawer-header">
+          <strong>Quick Quote Builder</strong>
+          <button class="button ghost icon" type="button" id="close-menu" aria-label="Close menu">x</button>
+        </div>
+        <button class="drawer-link" type="button" data-view="quote-view">Quotes</button>
+        <button class="drawer-link" type="button" data-view="items-view">Items</button>
+        <button class="drawer-link" type="button" data-view="previous-quotes-view">Previous Quotes</button>
+        <button class="drawer-link" type="button" id="drawer-settings">Settings</button>
+      </nav>
 
       <div class="layout-grid page-view active" id="quote-view">
         <section class="panel catalog-panel">
@@ -204,6 +222,7 @@
                     <th>Name</th>
                     <th>Category</th>
                     <th>Price</th>
+                    <th>MSRP</th>
                     <th>Inventory</th>
                     <th>Source ID</th>
                     <th>Description</th>
@@ -216,6 +235,28 @@
           </div>
         </div>
       </section>
+
+      <section class="page-view" id="previous-quotes-view">
+        <div class="wide-panel panel">
+          <div class="panel-header">
+            <div>
+              <h2>Previous Quotes</h2>
+              <p>Review the quoted date, historical price, and reopen a quote to view or edit it.</p>
+            </div>
+            <button class="button" type="button" data-view="quote-view">New quote</button>
+          </div>
+          <div class="panel-body">
+            <div class="quote-history-list" id="previous-quote-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <div class="bottom-print-bar" aria-label="Print actions">
+        <strong>Print</strong>
+        <button class="button secondary" type="button" id="bottom-save-quote">Save</button>
+        <button class="button secondary" type="button" id="bottom-generate-pdf">PDF</button>
+        <button class="button" type="button" id="bottom-print-quote">Print</button>
+      </div>
 
       <dialog class="settings-dialog" id="settings-dialog">
         <div class="settings-panel">
