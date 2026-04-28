@@ -12,6 +12,7 @@ const seedItems = [
   category,
   description,
   unitPrice,
+  msrp: null,
   inventory,
   source: "Local",
   lastSyncedAt: null,
@@ -72,6 +73,7 @@ const el = {
   templateName: $("#template-name"),
   templateList: $("#template-list"),
   quoteList: $("#quote-list"),
+  previousQuoteList: $("#previous-quote-list"),
   previewProject: $("#preview-project"),
   previewCustomer: $("#preview-customer"),
   previewQuote: $("#preview-quote"),
@@ -96,6 +98,14 @@ const el = {
   laborRate: $("#labor-rate"),
   copySummary: $("#copy-summary"),
   printQuote: $("#print-quote"),
+  openMenu: $("#open-menu"),
+  closeMenu: $("#close-menu"),
+  drawerBackdrop: $("#drawer-backdrop"),
+  mobileDrawer: $("#mobile-drawer"),
+  drawerSettings: $("#drawer-settings"),
+  bottomSaveQuote: $("#bottom-save-quote"),
+  bottomGeneratePdf: $("#bottom-generate-pdf"),
+  bottomPrintQuote: $("#bottom-print-quote"),
   dataMode: $("#data-mode"),
   dataStatus: $("#data-status"),
 };
@@ -124,6 +134,25 @@ function html(value) {
 function makeLine(item) {
   if (!item) return null;
   return { ...item, lineId: crypto.randomUUID(), quantity: item.category === "Labor" ? 4 : 1, notes: item.description };
+}
+
+function switchView(viewId) {
+  document.querySelectorAll(".page-view").forEach((view) => view.classList.remove("active"));
+  const next = $(`#${viewId}`);
+  if (next) next.classList.add("active");
+  closeMobileMenu();
+}
+
+function openMobileMenu() {
+  el.mobileDrawer.classList.add("open");
+  el.mobileDrawer.setAttribute("aria-hidden", "false");
+  el.drawerBackdrop.hidden = false;
+}
+
+function closeMobileMenu() {
+  el.mobileDrawer.classList.remove("open");
+  el.mobileDrawer.setAttribute("aria-hidden", "true");
+  el.drawerBackdrop.hidden = true;
 }
 
 function laborLine() {
@@ -160,6 +189,11 @@ function totals(currentLines = lines) {
   const marginAmount = subtotal * (quote.margin / 100);
   const taxAmount = (subtotal + marginAmount) * (quote.taxRate / 100);
   return { subtotal, marginAmount, taxAmount, total: subtotal + marginAmount + taxAmount };
+}
+
+function quoteDateLabel(saved) {
+  const value = saved.createdAt || saved.updatedAt;
+  return value ? new Date(value).toLocaleDateString() : "No date";
 }
 
 async function api(path, options = {}) {
@@ -199,6 +233,7 @@ function render() {
   renderPreview();
   renderTemplates();
   renderQuotes();
+  renderPreviousQuotes();
   renderSettings();
 }
 
@@ -241,7 +276,7 @@ function renderCatalog() {
               <p>${html(item.description)}</p>
               <p class="item-meta">${html(item.source || "Local")} ${item.sourceId ? `ID: ${html(item.sourceId)}` : ""} ${
                 item.inventory === null || item.inventory === undefined ? "" : `Stock: ${item.inventory}`
-              }</p>
+              } ${item.msrp ? `MSRP: ${money.format(item.msrp)}` : ""}</p>
             </div>
             <span class="price">${money.format(item.unitPrice)}</span>
           </div>
@@ -274,6 +309,7 @@ function renderItemsTable() {
             </select>
           </td>
           <td data-label="Price"><input class="input money-input" type="number" min="0" step="0.01" data-item-field="unitPrice" value="${item.unitPrice}" /></td>
+          <td data-label="MSRP"><input class="input money-input" type="number" min="0" step="0.01" data-item-field="msrp" value="${item.msrp ?? ""}" /></td>
           <td data-label="Inventory"><input class="input number-input" type="number" min="0" step="1" data-item-field="inventory" value="${item.inventory ?? ""}" /></td>
           <td data-label="Source ID"><input class="input" data-item-field="sourceId" value="${html(item.sourceId || "")}" /></td>
           <td class="description-cell" data-label="Description"><textarea class="textarea" data-item-field="description">${html(item.description)}</textarea></td>
@@ -373,6 +409,32 @@ function renderQuotes() {
     .join("");
 }
 
+function renderPreviousQuotes() {
+  if (!quotes.length) {
+    el.previousQuoteList.innerHTML = '<div class="empty-state"><div>No saved quotes yet.</div></div>';
+    return;
+  }
+  el.previousQuoteList.innerHTML = quotes
+    .map(
+      (saved) => `
+        <article class="history-item">
+          <div>
+            <div class="history-title">
+              <h3>${html(saved.quoteNumber)} - ${html(saved.customer)}</h3>
+              <span>${quoteDateLabel(saved)}</span>
+            </div>
+            <p>${html(saved.project)}</p>
+            <strong>${money.format(saved.totals?.total || 0)}</strong>
+          </div>
+          <div class="history-actions">
+            <button class="button secondary" type="button" data-load-quote="${saved.id}">View / Edit</button>
+            <button class="button ghost icon" type="button" data-delete-quote="${saved.id}">x</button>
+          </div>
+        </article>`,
+    )
+    .join("");
+}
+
 async function persist(collection, item) {
   const key = keys[collection];
   const list = collection === "items" ? items : collection === "templates" ? templates : quotes;
@@ -402,7 +464,7 @@ async function saveItemFromRow(itemId) {
   const next = { ...existing };
   row.querySelectorAll("[data-item-field]").forEach((input) => {
     const field = input.dataset.itemField;
-    if (field === "unitPrice") next[field] = Number(input.value);
+    if (["unitPrice", "msrp"].includes(field)) next[field] = input.value === "" ? null : Number(input.value);
     else if (field === "inventory") next[field] = input.value === "" ? null : Number(input.value);
     else next[field] = input.value;
   });
@@ -418,6 +480,7 @@ function addBlankItem() {
     category: "Door Hardware",
     description: "",
     unitPrice: 0,
+    msrp: null,
     inventory: 0,
     source: "Manual",
     lastSyncedAt: null,
@@ -449,6 +512,7 @@ function currentQuote() {
     lines: clone(lines),
     totals: totals(),
     createdAt: quote.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
 }
 
@@ -465,6 +529,7 @@ async function deleteQuote(id) {
     el.dataStatus.textContent = "Quote removed locally. Configure database API for shared storage.";
   }
   renderQuotes();
+  renderPreviousQuotes();
 }
 
 async function saveCurrentQuote() {
@@ -474,14 +539,32 @@ async function saveCurrentQuote() {
   await persist("quotes", saved);
 }
 
-function generatePdf() {
+function customerEmailPrompt() {
+  const email = prompt("Customer email for this quote PDF", quote.email || "");
+  if (email === null) return null;
+  quote.email = email.trim();
+  return quote.email;
+}
+
+function generatePdf(customerEmail = "") {
   const quoteTotals = totals();
   const rows = lines
     .map((line) => `<tr><td>${html(line.name)}</td><td>${line.quantity}</td><td>${money.format(line.unitPrice)}</td><td>${money.format(line.quantity * line.unitPrice)}</td></tr>`)
     .join("");
   const doc = window.open("", "_blank");
-  doc.document.write(`<!doctype html><html><head><title>${html(quote.quoteNumber)}</title><style>body{font-family:Arial,sans-serif;margin:32px;color:#111}table{width:100%;border-collapse:collapse;margin-top:20px}td,th{border-bottom:1px solid #ddd;padding:10px;text-align:left}.totals{margin-left:auto;width:280px;margin-top:20px}.totals div{display:flex;justify-content:space-between;padding:5px 0}.total{border-top:2px solid #111;font-weight:bold;font-size:18px}.terms{margin-top:28px;color:#555;font-size:13px}</style></head><body><h1>${html(quote.project)}</h1><p>Customer: ${html(quote.customer)}<br>Quote: ${html(quote.quoteNumber)}<br>Date: ${new Date().toLocaleDateString()}</p><table><thead><tr><th>Item</th><th>Quantity</th><th>Unit Price</th><th>Total</th></tr></thead><tbody>${rows}</tbody></table><div class="totals"><div><span>Subtotal</span><strong>${money.format(quoteTotals.subtotal)}</strong></div><div><span>Margin</span><strong>${money.format(quoteTotals.marginAmount)}</strong></div><div><span>Tax</span><strong>${money.format(quoteTotals.taxAmount)}</strong></div><div class="total"><span>Total</span><strong>${money.format(quoteTotals.total)}</strong></div></div><p class="terms">${html(quote.terms)}</p><script>window.addEventListener("load",()=>window.print())</script></body></html>`);
+  doc.document.write(`<!doctype html><html><head><title>${html(quote.quoteNumber)}</title><style>body{font-family:Arial,sans-serif;margin:32px;color:#111}table{width:100%;border-collapse:collapse;margin-top:20px}td,th{border-bottom:1px solid #ddd;padding:10px;text-align:left}.totals{margin-left:auto;width:280px;margin-top:20px}.totals div{display:flex;justify-content:space-between;padding:5px 0}.total{border-top:2px solid #111;font-weight:bold;font-size:18px}.terms{margin-top:28px;color:#555;font-size:13px}</style></head><body><h1>${html(quote.project)}</h1><p>Customer: ${html(quote.customer)}<br>Quote: ${html(quote.quoteNumber)}<br>Date: ${new Date().toLocaleDateString()}${customerEmail ? `<br>Email: ${html(customerEmail)}` : ""}</p><table><thead><tr><th>Item</th><th>Quantity</th><th>Unit Price</th><th>Total</th></tr></thead><tbody>${rows}</tbody></table><div class="totals"><div><span>Subtotal</span><strong>${money.format(quoteTotals.subtotal)}</strong></div><div><span>Margin</span><strong>${money.format(quoteTotals.marginAmount)}</strong></div><div><span>Tax</span><strong>${money.format(quoteTotals.taxAmount)}</strong></div><div class="total"><span>Total</span><strong>${money.format(quoteTotals.total)}</strong></div></div><p class="terms">${html(quote.terms)}</p><script>window.addEventListener("load",()=>window.print())</script></body></html>`);
   doc.document.close();
+}
+
+function emailQuotePdf() {
+  const email = customerEmailPrompt();
+  if (email === null) return;
+  generatePdf(email);
+  if (email) {
+    const subject = encodeURIComponent(`Quote ${quote.quoteNumber} - ${quote.project}`);
+    const body = encodeURIComponent(`Hi,\n\nPlease see quote ${quote.quoteNumber} for ${quote.project}.\n\nTotal: ${money.format(totals().total)}\n\nThe PDF is ready to attach from the print window.`);
+    window.location.href = `mailto:${encodeURIComponent(email)}?subject=${subject}&body=${body}`;
+  }
 }
 
 el.search.addEventListener("input", (event) => {
@@ -569,7 +652,7 @@ el.saveTemplate.addEventListener("click", () => {
   if (name && lines.length) persist("templates", { id: crypto.randomUUID(), name, lines: clone(lines), createdAt: new Date().toISOString() });
 });
 el.saveQuote.addEventListener("click", () => lines.length && saveCurrentQuote());
-el.generatePdf.addEventListener("click", generatePdf);
+el.generatePdf.addEventListener("click", emailQuotePdf);
 el.settingsSync.addEventListener("click", async () => {
   el.dataStatus.textContent = "Checking ServiceTitan sync endpoint...";
   try {
@@ -591,10 +674,14 @@ el.saveSettings.addEventListener("click", saveSettings);
 el.openSettings.addEventListener("click", () => el.settingsDialog.showModal());
 el.closeSettings.addEventListener("click", () => el.settingsDialog.close());
 el.viewButtons.forEach((button) => {
-  button.addEventListener("click", () => {
-    document.querySelectorAll(".page-view").forEach((view) => view.classList.remove("active"));
-    $(`#${button.dataset.view}`).classList.add("active");
-  });
+  button.addEventListener("click", () => switchView(button.dataset.view));
+});
+el.openMenu.addEventListener("click", openMobileMenu);
+el.closeMenu.addEventListener("click", closeMobileMenu);
+el.drawerBackdrop.addEventListener("click", closeMobileMenu);
+el.drawerSettings.addEventListener("click", () => {
+  closeMobileMenu();
+  el.settingsDialog.showModal();
 });
 el.includeLabor.addEventListener("change", (event) => setLabor(event.target.checked));
 el.laborQty.addEventListener("input", (event) => {
@@ -627,7 +714,7 @@ el.templateList.addEventListener("click", (event) => {
     renderTemplates();
   }
 });
-el.quoteList.addEventListener("click", (event) => {
+function handleSavedQuoteClick(event) {
   const button = event.target.closest("[data-load-quote]");
   const deleteButton = event.target.closest("[data-delete-quote]");
   if (button) {
@@ -644,9 +731,13 @@ el.quoteList.addEventListener("click", (event) => {
     };
     lines = clone(saved.lines);
     render();
+    switchView("quote-view");
   }
   if (deleteButton) deleteQuote(deleteButton.dataset.deleteQuote);
-});
+}
+
+el.quoteList.addEventListener("click", handleSavedQuoteClick);
+el.previousQuoteList.addEventListener("click", handleSavedQuoteClick);
 el.copySummary.addEventListener("click", async () => {
   const quoteTotals = totals();
   await navigator.clipboard.writeText([
@@ -662,6 +753,9 @@ el.copySummary.addEventListener("click", async () => {
   ].join("\n"));
 });
 el.printQuote.addEventListener("click", () => window.print());
+el.bottomSaveQuote.addEventListener("click", () => lines.length && saveCurrentQuote());
+el.bottomGeneratePdf.addEventListener("click", emailQuotePdf);
+el.bottomPrintQuote.addEventListener("click", () => window.print());
 
 render();
 hydrate();
