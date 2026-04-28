@@ -51,6 +51,7 @@ GET  /templates
 POST /templates
 GET  /quotes
 POST /quotes
+DELETE /quotes/:id
 POST /items/bulk
 ```
 
