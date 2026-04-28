@@ -130,11 +130,22 @@ async function upsert(collection, item) {
   return memory[collection];
 }
 
+async function remove(collection, id) {
+  const remote = await dataApi(`/${collection}/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+  if (remote) return remote[collection] || [];
+
+  memory[collection] = memory[collection].filter((current) => current.id !== id);
+  return memory[collection];
+}
+
 module.exports = {
   dataApi,
   list,
   memory,
   mode,
+  remove,
   readBody,
   send,
   upsert,
