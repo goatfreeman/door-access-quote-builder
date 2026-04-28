@@ -259,5 +259,11 @@
       </dialog>
     </main>
     <script src="app.js"></script>
+    <script>
+      const templateName = document.querySelector("#template-name");
+      if (templateName?.value === "Single door access package") {
+        templateName.value = "Standard quote package";
+      }
+    </script>
   </body>
 </html>
