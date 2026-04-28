@@ -624,29 +624,69 @@ tr:last-child td {
 
 @media (max-width: 760px) {
   .app-shell {
-    padding: 14px;
+    padding: 10px;
   }
 
-  .topbar,
+  .topbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .brand {
+    align-items: flex-start;
+  }
+
+  .brand-mark {
+    width: 36px;
+    height: 36px;
+    font-size: 20px;
+  }
+
+  .brand h1 {
+    font-size: 20px;
+  }
+
+  .brand p {
+    font-size: 12px;
+  }
+
   .layout-grid,
   .quote-form {
     grid-template-columns: 1fr;
   }
 
-  .topbar {
-    align-items: stretch;
+  .panel {
+    border-radius: 7px;
+    box-shadow: none;
+  }
+
+  .panel-header,
+  .panel-body {
+    padding: 14px;
+  }
+
+  .panel-header {
+    align-items: center;
   }
 
   .top-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     justify-content: stretch;
   }
 
   .top-actions .button {
-    flex: 1;
+    width: 100%;
+    min-height: 42px;
+    padding: 8px;
+    white-space: nowrap;
   }
 
   .layout-grid {
     display: grid;
+    gap: 10px;
   }
 
   .template-form {
@@ -655,6 +695,103 @@ tr:last-child td {
 
   .item-toolbar,
   .labor-inputs {
+    grid-template-columns: 1fr;
+  }
+
+  .category-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .item-main,
+  .preview-line {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .item-actions,
+  .template-item .top-actions {
+    display: grid;
+    grid-template-columns: 1fr auto;
+  }
+
+  .summary-total {
+    font-size: 20px;
+  }
+
+  .quote-table,
+  .item-table-wrap {
+    overflow: visible;
+    border: 0;
+  }
+
+  .quote-table table,
+  .quote-table thead,
+  .quote-table tbody,
+  .quote-table tr,
+  .quote-table td,
+  .item-table,
+  .item-table thead,
+  .item-table tbody,
+  .item-table tr,
+  .item-table td {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .quote-table thead,
+  .item-table thead {
+    display: none;
+  }
+
+  .quote-table tr,
+  .item-table tr {
+    margin-bottom: 10px;
+    padding: 12px;
+    background: var(--panel-soft);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+
+  .quote-table td,
+  .item-table td {
+    display: grid;
+    grid-template-columns: minmax(78px, 30%) minmax(0, 1fr);
+    gap: 10px;
+    align-items: center;
+    padding: 7px 0;
+    border-bottom: 0;
+  }
+
+  .quote-table td::before,
+  .item-table td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .cell-name,
+  .cell-notes,
+  .item-table .description-cell {
+    min-width: 0;
+  }
+
+  .number-input,
+  .money-input {
+    width: 100%;
+  }
+
+  .line-total {
+    white-space: normal;
+  }
+
+  .settings-dialog {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+  }
+
+  .settings-dialog .quote-form {
     grid-template-columns: 1fr;
   }
 }
