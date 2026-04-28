@@ -21,6 +21,8 @@
           </div>
         </div>
         <div class="top-actions">
+          <button class="button secondary" type="button" data-view="quote-view">Quote</button>
+          <button class="button secondary" type="button" data-view="items-view">Items</button>
           <button class="button secondary" type="button" id="copy-summary" title="Copy quote summary">
             <span aria-hidden="true">[]</span> Copy summary
           </button>
@@ -33,17 +35,18 @@
           <button class="button" type="button" id="print-quote" title="Print quote">
             <span aria-hidden="true">P</span> Print quote
           </button>
+          <button class="button secondary" type="button" id="open-settings" title="Settings">Settings</button>
         </div>
       </header>
 
-      <div class="layout-grid">
+      <div class="layout-grid page-view active" id="quote-view">
         <section class="panel catalog-panel">
           <div class="panel-header">
             <div>
               <h2>Item Catalog</h2>
               <p>Start with common Axis, Honeywell, and ASSA ABLOY door access parts.</p>
             </div>
-            <button class="button secondary compact" type="button" id="sync-items">Sync</button>
+            <span class="panel-icon" aria-hidden="true">I</span>
           </div>
           <div class="panel-body">
             <div class="data-banner">
@@ -130,6 +133,23 @@
               </div>
             </div>
 
+            <div class="labor-control">
+              <label class="check-row">
+                <input type="checkbox" id="include-labor" checked />
+                <span>Include labor</span>
+              </label>
+              <div class="labor-inputs">
+                <label class="field">
+                  <span>Hours</span>
+                  <input class="input" id="labor-qty" type="number" min="0" step="0.5" />
+                </label>
+                <label class="field">
+                  <span>Rate</span>
+                  <input class="input" id="labor-rate" type="number" min="0" step="0.01" />
+                </label>
+              </div>
+            </div>
+
             <div class="status-note">
               <span aria-hidden="true">OK</span>
               <span>Templates are saved in this browser, so you can reuse your standard door packages without a database.</span>
@@ -159,6 +179,84 @@
           </div>
         </aside>
       </div>
+
+      <section class="page-view" id="items-view">
+        <div class="wide-panel panel">
+          <div class="panel-header">
+            <div>
+              <h2>Items</h2>
+              <p>Full catalog view for pricing, inventory, ServiceTitan mapping, and manual overrides.</p>
+            </div>
+            <button class="button" type="button" id="add-item">Add item</button>
+          </div>
+          <div class="panel-body">
+            <div class="catalog-controls item-toolbar">
+              <div class="search-row">
+                <span aria-hidden="true">?</span>
+                <input class="input" id="item-search" placeholder="Search all items" aria-label="Search all items" />
+              </div>
+              <div class="category-tabs" id="item-category-tabs" aria-label="Filter items by category"></div>
+            </div>
+            <div class="item-table-wrap">
+              <table class="item-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Category</th>
+                    <th>Price</th>
+                    <th>Inventory</th>
+                    <th>Source ID</th>
+                    <th>Description</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="items-table"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <dialog class="settings-dialog" id="settings-dialog">
+        <div class="settings-panel">
+          <div class="panel-header">
+            <div>
+              <h2>Settings</h2>
+              <p>Admin controls for sync while this app is being built. Later this can be reduced to Sync and last sync time.</p>
+            </div>
+            <button class="button ghost icon" type="button" id="close-settings">x</button>
+          </div>
+          <div class="panel-body">
+            <div class="summary-grid">
+              <div class="summary-row">
+                <span>Last sync</span>
+                <strong id="last-sync-time">Never</strong>
+              </div>
+            </div>
+            <button class="button" type="button" id="settings-sync">Sync items</button>
+            <h2 class="subhead">ServiceTitan Admin</h2>
+            <div class="quote-form">
+              <label class="field full">
+                <span>Base URL</span>
+                <input class="input" id="st-base-url" placeholder="https://api.servicetitan.io" />
+              </label>
+              <label class="field">
+                <span>Tenant ID</span>
+                <input class="input" id="st-tenant-id" />
+              </label>
+              <label class="field">
+                <span>Client ID</span>
+                <input class="input" id="st-client-id" />
+              </label>
+              <label class="field full">
+                <span>Client Secret</span>
+                <input class="input" id="st-client-secret" type="password" />
+              </label>
+            </div>
+            <button class="button secondary" type="button" id="save-settings">Save settings locally</button>
+          </div>
+        </div>
+      </dialog>
     </main>
     <script src="app.js"></script>
   </body>
