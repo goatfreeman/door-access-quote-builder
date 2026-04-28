@@ -171,7 +171,8 @@ button {
   display: grid;
 }
 
-#items-view.active {
+#items-view.active,
+#previous-quotes-view.active {
   display: block;
   max-width: 1440px;
   margin: 0 auto;
