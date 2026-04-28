@@ -1,13 +1,17 @@
-const { dataApi, memory, send } = require("./_store");
+const { dataApi, memory, readBody, send } = require("./_store");
 const { randomUUID } = require("crypto");
 
-function serviceTitanConfigured() {
-  return Boolean(
-    process.env.SERVICETITAN_BASE_URL &&
-      process.env.SERVICETITAN_CLIENT_ID &&
-      process.env.SERVICETITAN_CLIENT_SECRET &&
-      process.env.SERVICETITAN_TENANT_ID,
-  );
+function getConfig(overrides = {}) {
+  return {
+    baseUrl: overrides.baseUrl || process.env.SERVICETITAN_BASE_URL,
+    clientId: overrides.clientId || process.env.SERVICETITAN_CLIENT_ID,
+    clientSecret: overrides.clientSecret || process.env.SERVICETITAN_CLIENT_SECRET,
+    tenantId: overrides.tenantId || process.env.SERVICETITAN_TENANT_ID,
+  };
+}
+
+function serviceTitanConfigured(config) {
+  return Boolean(config.baseUrl && config.clientId && config.clientSecret && config.tenantId);
 }
 
 function mapServiceTitanItem(item) {
@@ -29,7 +33,9 @@ module.exports = async function handler(request, response) {
     return send(response, 405, { error: "Method not allowed" });
   }
 
-  if (!serviceTitanConfigured()) {
+  const config = getConfig(await readBody(request));
+
+  if (!serviceTitanConfigured(config)) {
     return send(response, 200, {
       configured: false,
       message:
@@ -39,20 +45,20 @@ module.exports = async function handler(request, response) {
   }
 
   try {
-    const tokenResponse = await fetch(`${process.env.SERVICETITAN_BASE_URL}/connect/token`, {
+    const tokenResponse = await fetch(`${config.baseUrl}/connect/token`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         grant_type: "client_credentials",
-        client_id: process.env.SERVICETITAN_CLIENT_ID,
-        client_secret: process.env.SERVICETITAN_CLIENT_SECRET,
+        client_id: config.clientId,
+        client_secret: config.clientSecret,
       }),
     });
     if (!tokenResponse.ok) throw new Error(await tokenResponse.text());
     const token = await tokenResponse.json();
 
     const itemsResponse = await fetch(
-      `${process.env.SERVICETITAN_BASE_URL}/inventory/v2/tenant/${process.env.SERVICETITAN_TENANT_ID}/items`,
+      `${config.baseUrl}/inventory/v2/tenant/${config.tenantId}/items`,
       { headers: { Authorization: `Bearer ${token.access_token}` } },
     );
     if (!itemsResponse.ok) throw new Error(await itemsResponse.text());
