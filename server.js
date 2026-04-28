@@ -56,5 +56,5 @@ const server = http.createServer((request, response) => {
 
 const port = process.env.PORT || 3000;
 server.listen(port, () => {
-  console.log(`Door Access Quote Builder running at http://localhost:${port}`);
+  console.log(`Quick Quote Builder running at http://localhost:${port}`);
 });
