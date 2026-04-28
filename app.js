@@ -264,8 +264,8 @@ function renderItemsTable() {
     .map(
       (item) => `
         <tr data-item-row="${item.id}">
-          <td><input class="input" data-item-field="name" value="${html(item.name)}" /></td>
-          <td>
+          <td data-label="Name"><input class="input" data-item-field="name" value="${html(item.name)}" /></td>
+          <td data-label="Category">
             <select class="input" data-item-field="category">
               ${categories
                 .filter((name) => name !== "All")
@@ -273,11 +273,11 @@ function renderItemsTable() {
                 .join("")}
             </select>
           </td>
-          <td><input class="input money-input" type="number" min="0" step="0.01" data-item-field="unitPrice" value="${item.unitPrice}" /></td>
-          <td><input class="input number-input" type="number" min="0" step="1" data-item-field="inventory" value="${item.inventory ?? ""}" /></td>
-          <td><input class="input" data-item-field="sourceId" value="${html(item.sourceId || "")}" /></td>
-          <td class="description-cell"><textarea class="textarea" data-item-field="description">${html(item.description)}</textarea></td>
-          <td>
+          <td data-label="Price"><input class="input money-input" type="number" min="0" step="0.01" data-item-field="unitPrice" value="${item.unitPrice}" /></td>
+          <td data-label="Inventory"><input class="input number-input" type="number" min="0" step="1" data-item-field="inventory" value="${item.inventory ?? ""}" /></td>
+          <td data-label="Source ID"><input class="input" data-item-field="sourceId" value="${html(item.sourceId || "")}" /></td>
+          <td class="description-cell" data-label="Description"><textarea class="textarea" data-item-field="description">${html(item.description)}</textarea></td>
+          <td data-label="Actions">
             <button class="button secondary compact" type="button" data-save-item="${item.id}">Save</button>
             <button class="button ghost icon" type="button" data-delete-item="${item.id}">x</button>
           </td>
@@ -308,12 +308,12 @@ function renderLines() {
             .map(
               (line) => `
                 <tr>
-                  <td class="cell-name"><input class="input" data-line="${line.lineId}" data-field="name" value="${html(line.name)}" /></td>
-                  <td><input class="input number-input" type="number" min="0" step="1" data-line="${line.lineId}" data-field="quantity" value="${line.quantity}" /></td>
-                  <td><input class="input money-input" type="number" min="0" step="0.01" data-line="${line.lineId}" data-field="unitPrice" value="${line.unitPrice}" /></td>
-                  <td class="cell-notes"><textarea class="textarea" data-line="${line.lineId}" data-field="notes">${html(line.notes)}</textarea></td>
-                  <td class="line-total">${money.format(line.quantity * line.unitPrice)}</td>
-                  <td><button class="button ghost icon" type="button" data-remove="${line.lineId}">x</button></td>
+                  <td class="cell-name" data-label="Item"><input class="input" data-line="${line.lineId}" data-field="name" value="${html(line.name)}" /></td>
+                  <td data-label="Qty"><input class="input number-input" type="number" min="0" step="1" data-line="${line.lineId}" data-field="quantity" value="${line.quantity}" /></td>
+                  <td data-label="Unit"><input class="input money-input" type="number" min="0" step="0.01" data-line="${line.lineId}" data-field="unitPrice" value="${line.unitPrice}" /></td>
+                  <td class="cell-notes" data-label="Notes"><textarea class="textarea" data-line="${line.lineId}" data-field="notes">${html(line.notes)}</textarea></td>
+                  <td class="line-total" data-label="Total">${money.format(line.quantity * line.unitPrice)}</td>
+                  <td data-label="Remove"><button class="button ghost icon" type="button" data-remove="${line.lineId}">x</button></td>
                 </tr>`,
             )
             .join("")}
