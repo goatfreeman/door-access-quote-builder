@@ -12,6 +12,26 @@ const types = {
 
 const server = http.createServer((request, response) => {
   const url = new URL(request.url, "http://localhost");
+  if (url.pathname.startsWith("/api/")) {
+    const apiName = url.pathname.replace("/api/", "");
+    const apiPath = path.join(root, "api", `${apiName}.js`);
+    if (!apiPath.startsWith(path.join(root, "api"))) {
+      response.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
+      response.end("Forbidden");
+      return;
+    }
+
+    try {
+      delete require.cache[require.resolve(apiPath)];
+      const handler = require(apiPath);
+      handler(request, response);
+    } catch (error) {
+      response.writeHead(404, { "Content-Type": "application/json; charset=utf-8" });
+      response.end(JSON.stringify({ error: "API route not found" }));
+    }
+    return;
+  }
+
   const requestedPath = decodeURIComponent(url.pathname).replace(/^\/+/, "");
   const safePath = path.normalize(requestedPath || "index.html");
   const filePath = path.join(root, safePath);
