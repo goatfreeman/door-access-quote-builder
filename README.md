@@ -1,6 +1,6 @@
-# Door Access Quote Builder
+# Quick Quote Builder
 
-A small static web app for building door access quotes from reusable equipment templates.
+A small static web app for building quick quotes from reusable item and labor templates.
 
 ## Features
 
