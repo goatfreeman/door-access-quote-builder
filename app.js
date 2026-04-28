@@ -467,6 +467,13 @@ async function deleteQuote(id) {
   renderQuotes();
 }
 
+async function saveCurrentQuote() {
+  const saved = currentQuote();
+  quote.id = saved.id;
+  quote.createdAt = saved.createdAt;
+  await persist("quotes", saved);
+}
+
 function generatePdf() {
   const quoteTotals = totals();
   const rows = lines
@@ -561,7 +568,7 @@ el.saveTemplate.addEventListener("click", () => {
   const name = el.templateName.value.trim();
   if (name && lines.length) persist("templates", { id: crypto.randomUUID(), name, lines: clone(lines), createdAt: new Date().toISOString() });
 });
-el.saveQuote.addEventListener("click", () => lines.length && persist("quotes", currentQuote()));
+el.saveQuote.addEventListener("click", () => lines.length && saveCurrentQuote());
 el.generatePdf.addEventListener("click", generatePdf);
 el.settingsSync.addEventListener("click", async () => {
   el.dataStatus.textContent = "Checking ServiceTitan sync endpoint...";
