@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Door Access Quote Builder</title>
+    <meta
+      name="description"
+      content="Build reusable quotes for door access systems, cameras, card access panels, and electric strikes."
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">D</div>
+          <div>
+            <h1>Door Access Quote Builder</h1>
+            <p>Build fast quotes from repeatable access-control packages.</p>
+          </div>
+        </div>
+        <div class="top-actions">
+          <button class="button secondary" type="button" id="copy-summary" title="Copy quote summary">
+            <span aria-hidden="true">[]</span> Copy summary
+          </button>
+          <button class="button" type="button" id="print-quote" title="Print quote">
+            <span aria-hidden="true">P</span> Print quote
+          </button>
+        </div>
+      </header>
+
+      <div class="layout-grid">
+        <section class="panel catalog-panel">
+          <div class="panel-header">
+            <div>
+              <h2>Item Catalog</h2>
+              <p>Start with common Axis, Honeywell, and ASSA ABLOY door access parts.</p>
+            </div>
+            <span class="panel-icon" aria-hidden="true">OK</span>
+          </div>
+          <div class="panel-body">
+            <div class="catalog-controls">
+              <div class="search-row">
+                <span aria-hidden="true">?</span>
+                <input class="input" id="search" placeholder="Search equipment" aria-label="Search equipment" />
+              </div>
+              <div class="category-tabs" id="category-tabs" aria-label="Filter by category"></div>
+            </div>
+            <div class="catalog-list" id="catalog-list"></div>
+          </div>
+        </section>
+
+        <section class="panel quote-editor">
+          <div class="panel-header">
+            <div>
+              <h2>Quote Workspace</h2>
+              <p>Customize quantities, pricing, notes, tax, and margin for this customer.</p>
+            </div>
+            <span class="panel-icon" aria-hidden="true">Q</span>
+          </div>
+          <div class="panel-body">
+            <div class="quote-form">
+              <label class="field">
+                <span>Customer</span>
+                <input class="input" id="customer" />
+              </label>
+              <label class="field">
+                <span>Quote #</span>
+                <input class="input" id="quote-number" />
+              </label>
+              <label class="field full">
+                <span>Project</span>
+                <input class="input" id="project" />
+              </label>
+              <label class="field">
+                <span>Margin %</span>
+                <input class="input" id="margin" type="number" min="0" step="0.5" />
+              </label>
+              <label class="field">
+                <span>Tax %</span>
+                <input class="input" id="tax" type="number" min="0" step="0.01" />
+              </label>
+            </div>
+
+            <div id="quote-lines"></div>
+
+            <label class="field full terms-field">
+              <span>Quote terms</span>
+              <textarea class="textarea" id="terms"></textarea>
+            </label>
+          </div>
+        </section>
+
+        <aside class="panel side-panel">
+          <div class="panel-header">
+            <div>
+              <h2>Templates and Preview</h2>
+              <p>Save repeatable packages, then print or copy a clean quote summary.</p>
+            </div>
+            <span class="panel-icon" aria-hidden="true">T</span>
+          </div>
+          <div class="panel-body">
+            <div class="summary-grid" aria-label="Quote totals">
+              <div class="summary-row">
+                <span>Equipment and labor</span>
+                <strong id="subtotal">$0.00</strong>
+              </div>
+              <div class="summary-row">
+                <span>Margin</span>
+                <strong id="margin-amount">$0.00</strong>
+              </div>
+              <div class="summary-row">
+                <span>Tax</span>
+                <strong id="tax-amount">$0.00</strong>
+              </div>
+              <div class="summary-row summary-total">
+                <span>Total</span>
+                <strong id="total">$0.00</strong>
+              </div>
+            </div>
+
+            <div class="status-note">
+              <span aria-hidden="true">OK</span>
+              <span>Templates are saved in this browser, so you can reuse your standard door packages without a database.</span>
+            </div>
+
+            <div class="template-form">
+              <input class="input" id="template-name" placeholder="Template name" aria-label="Template name" />
+              <button class="button" type="button" id="save-template" title="Save template">
+                <span aria-hidden="true">+</span> Save
+              </button>
+            </div>
+
+            <div class="template-list" id="template-list"></div>
+
+            <section class="preview" aria-label="Quote preview">
+              <h3 id="preview-project"></h3>
+              <div class="preview-meta">
+                <span id="preview-customer"></span>
+                <span id="preview-quote"></span>
+              </div>
+              <div class="preview-lines" id="preview-lines"></div>
+              <p class="fine-print" id="preview-terms"></p>
+            </section>
+          </div>
+        </aside>
+      </div>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>
