@@ -9,6 +9,9 @@ A small static web app for building door access quotes from reusable equipment t
 - Browser-saved quote templates with Vercel API routes for database-backed storage
 - Item overrides for price and inventory to avoid ServiceTitan/catalog discrepancies
 - Future-ready ServiceTitan sync endpoint for items, price, and inventory
+- Dedicated Items view for full catalog editing
+- Settings admin panel for temporary ServiceTitan configuration during setup
+- Quote total labor checkbox with editable hours and rate
 - Saved quote history
 - PDF-ready quote generation through the browser print/save-as-PDF workflow
 - Copyable quote summary
@@ -64,7 +67,7 @@ SERVICETITAN_CLIENT_SECRET=...
 SERVICETITAN_TENANT_ID=...
 ```
 
-Synced items keep their ServiceTitan source ID, then you can edit local price/inventory overrides in the catalog to resolve discrepancies before quoting.
+Synced items keep their ServiceTitan source ID, then you can edit local price/inventory overrides in the Items view to resolve discrepancies before quoting. During setup, the Settings panel can store ServiceTitan values locally in the browser; in production, prefer Vercel environment variables and expose only Sync plus last sync time.
 
 ## License
 
