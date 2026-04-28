@@ -1,0 +1,8 @@
+{
+  "name": "door-access-quote-builder",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "node server.js"
+  }
+}
