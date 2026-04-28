@@ -137,6 +137,7 @@ button {
   background: var(--accent-soft);
   border-radius: 7px;
   font-weight: 800;
+  font-size: 12px;
 }
 
 .panel-body {
@@ -147,6 +148,18 @@ button {
   display: grid;
   gap: 10px;
   margin-bottom: 14px;
+}
+
+.data-banner {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 14px;
+  padding: 12px;
+  color: #244945;
+  background: var(--accent-soft);
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .search-row {
@@ -225,6 +238,16 @@ button {
   border-radius: 8px;
 }
 
+.item-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.item-meta {
+  color: var(--muted-2) !important;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+}
+
 .item-main {
   display: flex;
   justify-content: space-between;
@@ -295,6 +318,11 @@ button {
   width: 36px;
   min-height: 36px;
   padding: 0;
+}
+
+.button.compact {
+  min-height: 32px;
+  padding: 6px 9px;
 }
 
 .quote-form {
@@ -431,6 +459,11 @@ tr:last-child td {
   display: flex;
   gap: 8px;
   margin: 14px 0;
+}
+
+.subhead {
+  margin: 18px 0 10px;
+  font-size: 14px;
 }
 
 .preview {
