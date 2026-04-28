@@ -40,6 +40,7 @@ let lines = ["honeywell-netaxs", "honeywell-reader", "assa-9600", "install-labor
   .map((id) => makeLine(items.find((item) => item.id === id)))
   .filter(Boolean);
 let quote = {
+  id: null,
   customer: "Customer Name",
   project: "Main entrance access control",
   quoteNumber: "Q-1001",
@@ -208,7 +209,7 @@ function renderInputs() {
   el.margin.value = quote.margin;
   el.tax.value = quote.taxRate;
   el.terms.value = quote.terms;
-  el.templateName.value ||= "Single door access package";
+  el.templateName.value ||= "Standard quote package";
   syncLaborInputs();
 }
 
@@ -359,12 +360,14 @@ function renderTemplates() {
 
 function renderQuotes() {
   el.quoteList.innerHTML = quotes
-    .slice(0, 5)
     .map(
       (saved) => `
         <article class="template-item">
           <div class="item-main"><div><h3>${html(saved.quoteNumber)} - ${html(saved.customer)}</h3><p>${html(saved.project)} - ${money.format(saved.totals?.total || 0)}</p></div></div>
-          <button class="button secondary" type="button" data-load-quote="${saved.id}">Open</button>
+          <div class="top-actions">
+            <button class="button secondary" type="button" data-load-quote="${saved.id}">Open</button>
+            <button class="button ghost icon" type="button" data-delete-quote="${saved.id}">x</button>
+          </div>
         </article>`,
     )
     .join("");
@@ -441,12 +444,27 @@ function saveSettings() {
 
 function currentQuote() {
   return {
-    id: crypto.randomUUID(),
     ...quote,
+    id: quote.id || crypto.randomUUID(),
     lines: clone(lines),
     totals: totals(),
-    createdAt: new Date().toISOString(),
+    createdAt: quote.createdAt || new Date().toISOString(),
   };
+}
+
+async function deleteQuote(id) {
+  quotes = quotes.filter((saved) => saved.id !== id);
+  save(keys.quotes, quotes);
+  if (quote.id === id) quote.id = null;
+  try {
+    const data = await api("/api/quotes", { method: "DELETE", body: JSON.stringify({ id }) });
+    quotes = data.quotes || quotes;
+    save(keys.quotes, quotes);
+    el.dataStatus.textContent = "Quote removed from backend.";
+  } catch {
+    el.dataStatus.textContent = "Quote removed locally. Configure database API for shared storage.";
+  }
+  renderQuotes();
 }
 
 function generatePdf() {
@@ -604,11 +622,23 @@ el.templateList.addEventListener("click", (event) => {
 });
 el.quoteList.addEventListener("click", (event) => {
   const button = event.target.closest("[data-load-quote]");
-  if (!button) return;
-  const saved = quotes.find((item) => item.id === button.dataset.loadQuote);
-  quote = { customer: saved.customer, project: saved.project, quoteNumber: saved.quoteNumber, taxRate: saved.taxRate, margin: saved.margin, terms: saved.terms };
-  lines = clone(saved.lines);
-  render();
+  const deleteButton = event.target.closest("[data-delete-quote]");
+  if (button) {
+    const saved = quotes.find((item) => item.id === button.dataset.loadQuote);
+    quote = {
+      id: saved.id,
+      createdAt: saved.createdAt,
+      customer: saved.customer,
+      project: saved.project,
+      quoteNumber: saved.quoteNumber,
+      taxRate: saved.taxRate,
+      margin: saved.margin,
+      terms: saved.terms,
+    };
+    lines = clone(saved.lines);
+    render();
+  }
+  if (deleteButton) deleteQuote(deleteButton.dataset.deleteQuote);
 });
 el.copySummary.addEventListener("click", async () => {
   const quoteTotals = totals();
