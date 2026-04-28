@@ -24,6 +24,12 @@
           <button class="button secondary" type="button" id="copy-summary" title="Copy quote summary">
             <span aria-hidden="true">[]</span> Copy summary
           </button>
+          <button class="button secondary" type="button" id="save-quote" title="Save quote">
+            <span aria-hidden="true">S</span> Save quote
+          </button>
+          <button class="button secondary" type="button" id="generate-pdf" title="Generate PDF">
+            <span aria-hidden="true">PDF</span> Generate PDF
+          </button>
           <button class="button" type="button" id="print-quote" title="Print quote">
             <span aria-hidden="true">P</span> Print quote
           </button>
@@ -37,9 +43,13 @@
               <h2>Item Catalog</h2>
               <p>Start with common Axis, Honeywell, and ASSA ABLOY door access parts.</p>
             </div>
-            <span class="panel-icon" aria-hidden="true">OK</span>
+            <button class="button secondary compact" type="button" id="sync-items">Sync</button>
           </div>
           <div class="panel-body">
+            <div class="data-banner">
+              <strong id="data-mode">Checking storage</strong>
+              <span id="data-status">Loading items, templates, and quotes.</span>
+            </div>
             <div class="catalog-controls">
               <div class="search-row">
                 <span aria-hidden="true">?</span>
@@ -133,6 +143,9 @@
             </div>
 
             <div class="template-list" id="template-list"></div>
+
+            <h2 class="subhead">Saved Quotes</h2>
+            <div class="template-list" id="quote-list"></div>
 
             <section class="preview" aria-label="Quote preview">
               <h3 id="preview-project"></h3>
