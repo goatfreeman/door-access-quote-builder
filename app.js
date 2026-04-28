@@ -18,15 +18,24 @@ const seedItems = [
 }));
 
 const categories = ["All", "Cameras", "Access Panels", "Door Hardware", "Labor"];
-const keys = { items: "door-access-items", templates: "door-access-quote-templates", quotes: "door-access-quotes" };
+const keys = {
+  items: "door-access-items",
+  templates: "door-access-quote-templates",
+  quotes: "door-access-quotes",
+  settings: "door-access-settings",
+  lastSync: "door-access-last-sync",
+};
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const $ = (id) => document.querySelector(id);
 
 let items = load(keys.items, seedItems);
 let templates = load(keys.templates, []);
 let quotes = load(keys.quotes, []);
+let settings = load(keys.settings, { serviceTitan: { baseUrl: "", tenantId: "", clientId: "", clientSecret: "" } });
 let category = "All";
+let itemCategory = "All";
 let query = "";
+let itemQuery = "";
 let lines = ["honeywell-netaxs", "honeywell-reader", "assa-9600", "install-labor"]
   .map((id) => makeLine(items.find((item) => item.id === id)))
   .filter(Boolean);
@@ -41,9 +50,13 @@ let quote = {
 };
 
 const el = {
+  viewButtons: document.querySelectorAll("[data-view]"),
   search: $("#search"),
+  itemSearch: $("#item-search"),
   categoryTabs: $("#category-tabs"),
+  itemCategoryTabs: $("#item-category-tabs"),
   catalogList: $("#catalog-list"),
+  itemsTable: $("#items-table"),
   quoteLines: $("#quote-lines"),
   customer: $("#customer"),
   quoteNumber: $("#quote-number"),
@@ -66,7 +79,20 @@ const el = {
   saveTemplate: $("#save-template"),
   saveQuote: $("#save-quote"),
   generatePdf: $("#generate-pdf"),
-  syncItems: $("#sync-items"),
+  addItem: $("#add-item"),
+  openSettings: $("#open-settings"),
+  closeSettings: $("#close-settings"),
+  settingsDialog: $("#settings-dialog"),
+  settingsSync: $("#settings-sync"),
+  saveSettings: $("#save-settings"),
+  lastSyncTime: $("#last-sync-time"),
+  stBaseUrl: $("#st-base-url"),
+  stTenantId: $("#st-tenant-id"),
+  stClientId: $("#st-client-id"),
+  stClientSecret: $("#st-client-secret"),
+  includeLabor: $("#include-labor"),
+  laborQty: $("#labor-qty"),
+  laborRate: $("#labor-rate"),
   copySummary: $("#copy-summary"),
   printQuote: $("#print-quote"),
   dataMode: $("#data-mode"),
@@ -85,6 +111,11 @@ function save(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
 }
 
+function lastSyncLabel() {
+  const value = localStorage.getItem(keys.lastSync);
+  return value ? new Date(value).toLocaleString() : "Never";
+}
+
 function html(value) {
   return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 }
@@ -92,6 +123,31 @@ function html(value) {
 function makeLine(item) {
   if (!item) return null;
   return { ...item, lineId: crypto.randomUUID(), quantity: item.category === "Labor" ? 4 : 1, notes: item.description };
+}
+
+function laborLine() {
+  return lines.find((line) => line.category === "Labor");
+}
+
+function syncLaborInputs() {
+  const labor = laborLine();
+  el.includeLabor.checked = Boolean(labor);
+  el.laborQty.disabled = !labor;
+  el.laborRate.disabled = !labor;
+  el.laborQty.value = labor?.quantity ?? 0;
+  el.laborRate.value = labor?.unitPrice ?? items.find((item) => item.category === "Labor")?.unitPrice ?? 0;
+}
+
+function setLabor(enabled) {
+  const labor = laborLine();
+  if (!enabled) {
+    lines = lines.filter((line) => line.category !== "Labor");
+  } else if (!labor) {
+    lines = [...lines, makeLine(items.find((item) => item.category === "Labor"))].filter(Boolean);
+  }
+  syncLaborInputs();
+  renderLines();
+  renderPreview();
 }
 
 function clone(currentLines) {
@@ -135,11 +191,14 @@ async function hydrate() {
 function render() {
   renderInputs();
   renderCategories();
+  renderItemCategories();
   renderCatalog();
+  renderItemsTable();
   renderLines();
   renderPreview();
   renderTemplates();
   renderQuotes();
+  renderSettings();
 }
 
 function renderInputs() {
@@ -150,11 +209,18 @@ function renderInputs() {
   el.tax.value = quote.taxRate;
   el.terms.value = quote.terms;
   el.templateName.value ||= "Single door access package";
+  syncLaborInputs();
 }
 
 function renderCategories() {
   el.categoryTabs.innerHTML = categories
     .map((name) => `<button class="tab-button ${name === category ? "active" : ""}" type="button" data-category="${name}">${name}</button>`)
+    .join("");
+}
+
+function renderItemCategories() {
+  el.itemCategoryTabs.innerHTML = categories
+    .map((name) => `<button class="tab-button ${name === itemCategory ? "active" : ""}" type="button" data-item-category="${name}">${name}</button>`)
     .join("");
 }
 
@@ -185,6 +251,46 @@ function renderCatalog() {
         </article>`,
     )
     .join("");
+}
+
+function renderItemsTable() {
+  const needle = itemQuery.trim().toLowerCase();
+  el.itemsTable.innerHTML = items
+    .filter((item) => {
+      const haystack = `${item.name} ${item.description} ${item.category} ${item.sourceId || ""}`.toLowerCase();
+      return (itemCategory === "All" || item.category === itemCategory) && (!needle || haystack.includes(needle));
+    })
+    .map(
+      (item) => `
+        <tr data-item-row="${item.id}">
+          <td><input class="input" data-item-field="name" value="${html(item.name)}" /></td>
+          <td>
+            <select class="input" data-item-field="category">
+              ${categories
+                .filter((name) => name !== "All")
+                .map((name) => `<option value="${name}" ${item.category === name ? "selected" : ""}>${name}</option>`)
+                .join("")}
+            </select>
+          </td>
+          <td><input class="input money-input" type="number" min="0" step="0.01" data-item-field="unitPrice" value="${item.unitPrice}" /></td>
+          <td><input class="input number-input" type="number" min="0" step="1" data-item-field="inventory" value="${item.inventory ?? ""}" /></td>
+          <td><input class="input" data-item-field="sourceId" value="${html(item.sourceId || "")}" /></td>
+          <td class="description-cell"><textarea class="textarea" data-item-field="description">${html(item.description)}</textarea></td>
+          <td>
+            <button class="button secondary compact" type="button" data-save-item="${item.id}">Save</button>
+            <button class="button ghost icon" type="button" data-delete-item="${item.id}">x</button>
+          </td>
+        </tr>`,
+    )
+    .join("");
+}
+
+function renderSettings() {
+  el.stBaseUrl.value = settings.serviceTitan?.baseUrl || "";
+  el.stTenantId.value = settings.serviceTitan?.tenantId || "";
+  el.stClientId.value = settings.serviceTitan?.clientId || "";
+  el.stClientSecret.value = settings.serviceTitan?.clientSecret || "";
+  el.lastSyncTime.textContent = lastSyncLabel();
 }
 
 function renderLines() {
@@ -287,6 +393,52 @@ async function persist(collection, item) {
   render();
 }
 
+async function saveItemFromRow(itemId) {
+  const row = document.querySelector(`[data-item-row="${itemId}"]`);
+  const existing = items.find((item) => item.id === itemId);
+  const next = { ...existing };
+  row.querySelectorAll("[data-item-field]").forEach((input) => {
+    const field = input.dataset.itemField;
+    if (field === "unitPrice") next[field] = Number(input.value);
+    else if (field === "inventory") next[field] = input.value === "" ? null : Number(input.value);
+    else next[field] = input.value;
+  });
+  next.source = next.source || "Manual override";
+  await persist("items", next);
+}
+
+function addBlankItem() {
+  const item = {
+    id: `item-${crypto.randomUUID()}`,
+    sourceId: "",
+    name: "New item",
+    category: "Door Hardware",
+    description: "",
+    unitPrice: 0,
+    inventory: 0,
+    source: "Manual",
+    lastSyncedAt: null,
+  };
+  items = [item, ...items];
+  save(keys.items, items);
+  itemCategory = "All";
+  render();
+}
+
+function saveSettings() {
+  settings = {
+    serviceTitan: {
+      baseUrl: el.stBaseUrl.value.trim(),
+      tenantId: el.stTenantId.value.trim(),
+      clientId: el.stClientId.value.trim(),
+      clientSecret: el.stClientSecret.value,
+    },
+  };
+  save(keys.settings, settings);
+  el.dataStatus.textContent = "Settings saved locally for this browser.";
+  renderSettings();
+}
+
 function currentQuote() {
   return {
     id: crypto.randomUUID(),
@@ -318,6 +470,29 @@ el.categoryTabs.addEventListener("click", (event) => {
   renderCategories();
   renderCatalog();
 });
+el.itemSearch.addEventListener("input", (event) => {
+  itemQuery = event.target.value;
+  renderItemsTable();
+});
+el.itemCategoryTabs.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-item-category]");
+  if (!button) return;
+  itemCategory = button.dataset.itemCategory;
+  renderItemCategories();
+  renderItemsTable();
+});
+el.itemsTable.addEventListener("click", async (event) => {
+  const saveButton = event.target.closest("[data-save-item]");
+  const deleteButton = event.target.closest("[data-delete-item]");
+  if (saveButton) await saveItemFromRow(saveButton.dataset.saveItem);
+  if (deleteButton) {
+    items = items.filter((item) => item.id !== deleteButton.dataset.deleteItem);
+    lines = lines.filter((line) => line.id !== deleteButton.dataset.deleteItem);
+    save(keys.items, items);
+    render();
+  }
+});
+el.addItem.addEventListener("click", addBlankItem);
 el.catalogList.addEventListener("click", async (event) => {
   const add = event.target.closest("[data-add]");
   const edit = event.target.closest("[data-edit]");
@@ -370,17 +545,46 @@ el.saveTemplate.addEventListener("click", () => {
 });
 el.saveQuote.addEventListener("click", () => lines.length && persist("quotes", currentQuote()));
 el.generatePdf.addEventListener("click", generatePdf);
-el.syncItems.addEventListener("click", async () => {
+el.settingsSync.addEventListener("click", async () => {
   el.dataStatus.textContent = "Checking ServiceTitan sync endpoint...";
   try {
-    const data = await api("/api/sync-servicetitan", { method: "POST" });
+    const data = await api("/api/sync-servicetitan", {
+      method: "POST",
+      body: JSON.stringify(settings.serviceTitan || {}),
+    });
     items = data.items?.length ? data.items : items;
     save(keys.items, items);
+    localStorage.setItem(keys.lastSync, new Date().toISOString());
+    el.lastSyncTime.textContent = lastSyncLabel();
     el.dataStatus.textContent = data.message || "ServiceTitan sync completed.";
-    renderCatalog();
+    render();
   } catch {
     el.dataStatus.textContent = "ServiceTitan is not configured yet. Add credentials in Vercel.";
   }
+});
+el.saveSettings.addEventListener("click", saveSettings);
+el.openSettings.addEventListener("click", () => el.settingsDialog.showModal());
+el.closeSettings.addEventListener("click", () => el.settingsDialog.close());
+el.viewButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    document.querySelectorAll(".page-view").forEach((view) => view.classList.remove("active"));
+    $(`#${button.dataset.view}`).classList.add("active");
+  });
+});
+el.includeLabor.addEventListener("change", (event) => setLabor(event.target.checked));
+el.laborQty.addEventListener("input", (event) => {
+  const labor = laborLine();
+  if (!labor) return;
+  labor.quantity = Number(event.target.value);
+  renderLines();
+  renderPreview();
+});
+el.laborRate.addEventListener("input", (event) => {
+  const labor = laborLine();
+  if (!labor) return;
+  labor.unitPrice = Number(event.target.value);
+  renderLines();
+  renderPreview();
 });
 el.templateList.addEventListener("click", (event) => {
   const loadButton = event.target.closest("[data-load-template]");
