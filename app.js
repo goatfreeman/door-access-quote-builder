@@ -37,6 +37,8 @@ let category = "All";
 let itemCategory = "All";
 let query = "";
 let itemQuery = "";
+let activeView = "quote-view";
+let notifications = [];
 let lines = ["honeywell-netaxs", "honeywell-reader", "assa-9600", "install-labor"]
   .map((id) => makeLine(items.find((item) => item.id === id)))
   .filter(Boolean);
@@ -50,6 +52,7 @@ let quote = {
   terms:
     "Includes standard installation during normal business hours. Final pricing subject to site survey, cable pathways, door condition, and authority requirements.",
 };
+let cleanQuoteState = "";
 
 const el = {
   viewButtons: document.querySelectorAll("[data-view]"),
@@ -98,6 +101,20 @@ const el = {
   laborRate: $("#labor-rate"),
   copySummary: $("#copy-summary"),
   printQuote: $("#print-quote"),
+  openNotifications: $("#open-notifications"),
+  closeNotifications: $("#close-notifications"),
+  notificationsDialog: $("#notifications-dialog"),
+  notificationList: $("#notification-list"),
+  notificationDot: $("#notification-dot"),
+  confirmDialog: $("#confirm-dialog"),
+  confirmTitle: $("#confirm-title"),
+  confirmMessage: $("#confirm-message"),
+  confirmOk: $("#confirm-ok"),
+  confirmCancel: $("#confirm-cancel"),
+  promptDialog: $("#prompt-dialog"),
+  promptTitle: $("#prompt-title"),
+  promptMessage: $("#prompt-message"),
+  promptInput: $("#prompt-input"),
   openMenu: $("#open-menu"),
   closeMenu: $("#close-menu"),
   drawerBackdrop: $("#drawer-backdrop"),
@@ -106,8 +123,6 @@ const el = {
   bottomSaveQuote: $("#bottom-save-quote"),
   bottomGeneratePdf: $("#bottom-generate-pdf"),
   bottomPrintQuote: $("#bottom-print-quote"),
-  dataMode: $("#data-mode"),
-  dataStatus: $("#data-status"),
 };
 
 function load(key, fallback) {
@@ -136,10 +151,86 @@ function makeLine(item) {
   return { ...item, lineId: crypto.randomUUID(), quantity: item.category === "Labor" ? 4 : 1, notes: item.description };
 }
 
-function switchView(viewId) {
+function quoteState() {
+  return JSON.stringify({ quote, lines });
+}
+
+function markClean() {
+  cleanQuoteState = quoteState();
+}
+
+function isQuoteDirty() {
+  return quoteState() !== cleanQuoteState;
+}
+
+function restoreCleanQuote() {
+  if (!cleanQuoteState) return;
+  const snapshot = JSON.parse(cleanQuoteState);
+  quote = snapshot.quote;
+  lines = snapshot.lines;
+  markClean();
+}
+
+function addNotification(message, type = "info") {
+  notifications = [{ id: crypto.randomUUID(), message, type, createdAt: new Date().toISOString() }, ...notifications].slice(0, 12);
+  renderNotifications();
+}
+
+function renderNotifications() {
+  if (!notifications.length) {
+    el.notificationList.innerHTML = '<div class="empty-state compact-empty"><div>No notifications yet.</div></div>';
+    el.notificationDot.hidden = true;
+    return;
+  }
+  el.notificationDot.hidden = false;
+  el.notificationList.innerHTML = notifications
+    .map((note) => `<article class="notification-item ${note.type}"><strong>${html(new Date(note.createdAt).toLocaleTimeString())}</strong><p>${html(note.message)}</p></article>`)
+    .join("");
+}
+
+function showConfirm({ title = "Confirm", message = "", confirmLabel = "Continue", cancelLabel = "Cancel" }) {
+  return new Promise((resolve) => {
+    el.confirmTitle.textContent = title;
+    el.confirmMessage.textContent = message;
+    el.confirmOk.textContent = confirmLabel;
+    el.confirmCancel.textContent = cancelLabel;
+    el.confirmDialog.addEventListener("close", () => resolve(el.confirmDialog.returnValue === "confirm"), { once: true });
+    el.confirmDialog.showModal();
+  });
+}
+
+function showPrompt({ title = "Input", message = "", value = "", inputType = "text" }) {
+  return new Promise((resolve) => {
+    el.promptTitle.textContent = title;
+    el.promptMessage.textContent = message;
+    el.promptInput.type = inputType;
+    el.promptInput.value = value;
+    el.promptDialog.addEventListener("close", () => {
+      resolve(el.promptDialog.returnValue === "confirm" ? el.promptInput.value : null);
+    }, { once: true });
+    el.promptDialog.showModal();
+    setTimeout(() => el.promptInput.focus(), 0);
+  });
+}
+
+async function switchView(viewId) {
+  if (activeView === "quote-view" && viewId !== "quote-view" && isQuoteDirty()) {
+    const discard = await showConfirm({
+      title: "Discard quote edits?",
+      message: "You have unsaved quote changes. Discard them and switch pages?",
+      confirmLabel: "Discard",
+    });
+    if (!discard) {
+      closeMobileMenu();
+      return;
+    }
+    restoreCleanQuote();
+    render();
+  }
   document.querySelectorAll(".page-view").forEach((view) => view.classList.remove("active"));
   const next = $(`#${viewId}`);
   if (next) next.classList.add("active");
+  activeView = viewId;
   closeMobileMenu();
 }
 
@@ -211,15 +302,16 @@ async function hydrate() {
     save(keys.items, items);
     save(keys.templates, templates);
     save(keys.quotes, quotes);
-    el.dataMode.textContent = itemData.mode === "database" ? "Database connected" : "Local fallback";
-    el.dataStatus.textContent =
+    addNotification(
       itemData.mode === "database"
-        ? "Items, templates, and quotes are using the configured database API."
-        : "Using browser/server fallback until a database API is configured.";
+        ? "Database connected. Items, templates, and quotes are using shared storage."
+        : "Using local fallback storage until a shared database API is configured.",
+      itemData.mode === "database" ? "success" : "info",
+    );
   } catch {
-    el.dataMode.textContent = "Browser storage";
-    el.dataStatus.textContent = "API unavailable locally. Changes are saved in this browser.";
+    addNotification("API unavailable locally. Changes are saved in this browser.", "info");
   }
+  markClean();
   render();
 }
 
@@ -235,6 +327,7 @@ function render() {
   renderQuotes();
   renderPreviousQuotes();
   renderSettings();
+  renderNotifications();
 }
 
 function renderInputs() {
@@ -385,7 +478,7 @@ function renderTemplates() {
       (template) => `
         <article class="template-item">
           <div class="item-main"><div><h3>${html(template.name)}</h3><p>${template.lines.length} quote lines</p></div></div>
-          <div class="top-actions">
+          <div class="item-actions">
             <button class="button secondary" type="button" data-load-template="${template.id}">Load</button>
             <button class="button ghost icon" type="button" data-delete-template="${template.id}">x</button>
           </div>
@@ -400,7 +493,7 @@ function renderQuotes() {
       (saved) => `
         <article class="template-item">
           <div class="item-main"><div><h3>${html(saved.quoteNumber)} - ${html(saved.customer)}</h3><p>${html(saved.project)} - ${money.format(saved.totals?.total || 0)}</p></div></div>
-          <div class="top-actions">
+          <div class="item-actions">
             <button class="button secondary" type="button" data-load-quote="${saved.id}">Open</button>
             <button class="button ghost icon" type="button" data-delete-quote="${saved.id}">x</button>
           </div>
@@ -451,10 +544,11 @@ async function persist(collection, item) {
       if (collection === "quotes") quotes = data[collection];
       save(key, data[collection]);
     }
-    el.dataStatus.textContent = `${collection.slice(0, -1)} saved to backend.`;
+    addNotification(`${collection.slice(0, -1)} saved to backend.`, "success");
   } catch {
-    el.dataStatus.textContent = `${collection.slice(0, -1)} saved locally. Configure database API for shared storage.`;
+    addNotification(`${collection.slice(0, -1)} saved locally. Configure database API for shared storage.`, "info");
   }
+  if (collection === "quotes") markClean();
   render();
 }
 
@@ -501,7 +595,7 @@ function saveSettings() {
     },
   };
   save(keys.settings, settings);
-  el.dataStatus.textContent = "Settings saved locally for this browser.";
+  addNotification("Settings saved locally for this browser.", "success");
   renderSettings();
 }
 
@@ -524,9 +618,9 @@ async function deleteQuote(id) {
     const data = await api("/api/quotes", { method: "DELETE", body: JSON.stringify({ id }) });
     quotes = data.quotes || quotes;
     save(keys.quotes, quotes);
-    el.dataStatus.textContent = "Quote removed from backend.";
+    addNotification("Quote removed from backend.", "success");
   } catch {
-    el.dataStatus.textContent = "Quote removed locally. Configure database API for shared storage.";
+    addNotification("Quote removed locally. Configure database API for shared storage.", "info");
   }
   renderQuotes();
   renderPreviousQuotes();
@@ -539,8 +633,13 @@ async function saveCurrentQuote() {
   await persist("quotes", saved);
 }
 
-function customerEmailPrompt() {
-  const email = prompt("Customer email for this quote PDF", quote.email || "");
+async function customerEmailPrompt() {
+  const email = await showPrompt({
+    title: "Customer email",
+    message: "Enter the customer email for this quote PDF.",
+    value: quote.email || "",
+    inputType: "email",
+  });
   if (email === null) return null;
   quote.email = email.trim();
   return quote.email;
@@ -556,8 +655,8 @@ function generatePdf(customerEmail = "") {
   doc.document.close();
 }
 
-function emailQuotePdf() {
-  const email = customerEmailPrompt();
+async function emailQuotePdf() {
+  const email = await customerEmailPrompt();
   if (email === null) return;
   generatePdf(email);
   if (email) {
@@ -611,9 +710,22 @@ el.catalogList.addEventListener("click", async (event) => {
   }
   if (edit) {
     const item = items.find((candidate) => candidate.id === edit.dataset.edit);
-    const unitPrice = Number(prompt("Unit price", item.unitPrice));
+    const unitPriceValue = await showPrompt({
+      title: "Edit price",
+      message: `Unit price for ${item.name}`,
+      value: item.unitPrice,
+      inputType: "number",
+    });
+    if (unitPriceValue === null) return;
+    const unitPrice = Number(unitPriceValue);
     if (Number.isNaN(unitPrice)) return;
-    const inventoryValue = prompt("Inventory count, leave blank for labor or unknown", item.inventory ?? "");
+    const inventoryValue = await showPrompt({
+      title: "Edit inventory",
+      message: "Inventory count, leave blank for labor or unknown.",
+      value: item.inventory ?? "",
+      inputType: "number",
+    });
+    if (inventoryValue === null) return;
     await persist("items", { ...item, unitPrice, inventory: inventoryValue === "" ? null : Number(inventoryValue), source: item.source || "Manual override" });
   }
 });
@@ -654,7 +766,7 @@ el.saveTemplate.addEventListener("click", () => {
 el.saveQuote.addEventListener("click", () => lines.length && saveCurrentQuote());
 el.generatePdf.addEventListener("click", emailQuotePdf);
 el.settingsSync.addEventListener("click", async () => {
-  el.dataStatus.textContent = "Checking ServiceTitan sync endpoint...";
+  addNotification("Checking ServiceTitan sync endpoint...", "info");
   try {
     const data = await api("/api/sync-servicetitan", {
       method: "POST",
@@ -664,15 +776,21 @@ el.settingsSync.addEventListener("click", async () => {
     save(keys.items, items);
     localStorage.setItem(keys.lastSync, new Date().toISOString());
     el.lastSyncTime.textContent = lastSyncLabel();
-    el.dataStatus.textContent = data.message || "ServiceTitan sync completed.";
+    addNotification(data.message || "ServiceTitan sync completed.", "success");
     render();
   } catch {
-    el.dataStatus.textContent = "ServiceTitan is not configured yet. Add credentials in Vercel.";
+    addNotification("ServiceTitan is not configured yet. Add credentials in Vercel.", "info");
   }
 });
 el.saveSettings.addEventListener("click", saveSettings);
 el.openSettings.addEventListener("click", () => el.settingsDialog.showModal());
 el.closeSettings.addEventListener("click", () => el.settingsDialog.close());
+el.openNotifications.addEventListener("click", () => {
+  renderNotifications();
+  el.notificationsDialog.showModal();
+  el.notificationDot.hidden = true;
+});
+el.closeNotifications.addEventListener("click", () => el.notificationsDialog.close());
 el.viewButtons.forEach((button) => {
   button.addEventListener("click", () => switchView(button.dataset.view));
 });
@@ -730,6 +848,7 @@ function handleSavedQuoteClick(event) {
       terms: saved.terms,
     };
     lines = clone(saved.lines);
+    markClean();
     render();
     switchView("quote-view");
   }
