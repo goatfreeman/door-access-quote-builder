@@ -38,6 +38,7 @@ let itemCategory = "All";
 let query = "";
 let itemQuery = "";
 let activeView = "quote-view";
+let mobileStep = "pick";
 let notifications = [];
 let lines = ["honeywell-netaxs", "honeywell-reader", "assa-9600", "install-labor"]
   .map((id) => makeLine(items.find((item) => item.id === id)))
@@ -73,12 +74,14 @@ const el = {
   marginAmount: $("#margin-amount"),
   taxAmount: $("#tax-amount"),
   total: $("#total"),
+  mobileFlow: $(".mobile-flow"),
   bottomTotalToggle: $("#bottom-total-toggle"),
   bottomTotalDetails: $("#bottom-total-details"),
   bottomTotal: $("#bottom-total"),
   bottomSubtotal: $("#bottom-subtotal"),
   bottomMarginAmount: $("#bottom-margin-amount"),
   bottomTaxAmount: $("#bottom-tax-amount"),
+  bottomCartList: $("#bottom-cart-list"),
   templateName: $("#template-name"),
   templateList: $("#template-list"),
   quoteList: $("#quote-list"),
@@ -322,6 +325,7 @@ async function hydrate() {
 }
 
 function render() {
+  renderMobileStep();
   renderInputs();
   renderCategories();
   renderItemCategories();
@@ -334,6 +338,18 @@ function render() {
   renderPreviousQuotes();
   renderSettings();
   renderNotifications();
+}
+
+function renderMobileStep() {
+  const quoteView = $("#quote-view");
+  quoteView.classList.remove("mobile-step-pick", "mobile-step-customize", "mobile-step-review");
+  quoteView.classList.add(`mobile-step-${mobileStep}`);
+  el.mobileFlow.querySelectorAll("[data-mobile-step]").forEach((button) => {
+    const isActive = button.dataset.mobileStep === mobileStep;
+    button.classList.toggle("active", isActive);
+    if (isActive) button.setAttribute("aria-current", "step");
+    else button.removeAttribute("aria-current");
+  });
 }
 
 function renderInputs() {
@@ -467,6 +483,7 @@ function renderPreview() {
   el.bottomMarginAmount.textContent = money.format(quoteTotals.marginAmount);
   el.bottomTaxAmount.textContent = money.format(quoteTotals.taxAmount);
   el.bottomTotal.textContent = money.format(quoteTotals.total);
+  renderBottomCart();
   el.previewProject.textContent = quote.project;
   el.previewCustomer.textContent = quote.customer;
   el.previewQuote.textContent = quote.quoteNumber;
@@ -478,6 +495,25 @@ function renderPreview() {
           <div><h4>${line.quantity} x ${html(line.name)}</h4><p>${html(line.notes)}</p></div>
           <strong>${money.format(line.quantity * line.unitPrice)}</strong>
         </div>`,
+    )
+    .join("");
+}
+
+function renderBottomCart() {
+  if (!lines.length) {
+    el.bottomCartList.innerHTML = '<div class="bottom-cart-empty">No items selected.</div>';
+    return;
+  }
+  el.bottomCartList.innerHTML = lines
+    .map(
+      (line) => `
+        <article class="bottom-cart-item">
+          <div>
+            <strong>${html(line.name)}</strong>
+            <span>${line.quantity} x ${money.format(line.unitPrice)}</span>
+          </div>
+          <span>${money.format(line.quantity * line.unitPrice)}</span>
+        </article>`,
     )
     .join("");
 }
@@ -717,6 +753,7 @@ el.catalogList.addEventListener("click", async (event) => {
     lines = [...lines, makeLine(items.find((item) => item.id === add.dataset.add))].filter(Boolean);
     renderLines();
     renderPreview();
+    openBottomTotal();
   }
   if (edit) {
     const item = items.find((candidate) => candidate.id === edit.dataset.edit);
@@ -882,10 +919,21 @@ el.copySummary.addEventListener("click", async () => {
   ].join("\n"));
 });
 el.printQuote.addEventListener("click", () => window.print());
+function openBottomTotal() {
+  el.bottomTotalToggle.setAttribute("aria-expanded", "true");
+  el.bottomTotalDetails.hidden = false;
+}
+
 el.bottomTotalToggle.addEventListener("click", () => {
   const isOpen = el.bottomTotalToggle.getAttribute("aria-expanded") === "true";
   el.bottomTotalToggle.setAttribute("aria-expanded", String(!isOpen));
   el.bottomTotalDetails.hidden = isOpen;
+});
+el.mobileFlow.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-mobile-step]");
+  if (!button) return;
+  mobileStep = button.dataset.mobileStep;
+  renderMobileStep();
 });
 el.bottomSaveQuote.addEventListener("click", () => lines.length && saveCurrentQuote());
 el.bottomGeneratePdf.addEventListener("click", emailQuotePdf);
