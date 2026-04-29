@@ -65,20 +65,20 @@
 
       <div class="layout-grid page-view active" id="quote-view">
         <section class="mobile-flow" aria-label="Quote flow">
-          <div class="flow-step active">
+          <button class="flow-step active" type="button" data-mobile-step="pick" aria-current="step">
             <span>1</span>
             <strong>Pick items</strong>
-          </div>
+          </button>
           <div class="flow-line" aria-hidden="true"></div>
-          <div class="flow-step">
+          <button class="flow-step" type="button" data-mobile-step="customize">
             <span>2</span>
             <strong>Customize</strong>
-          </div>
+          </button>
           <div class="flow-line" aria-hidden="true"></div>
-          <div class="flow-step">
+          <button class="flow-step" type="button" data-mobile-step="review">
             <span>3</span>
             <strong>Review</strong>
-          </div>
+          </button>
         </section>
 
         <section class="panel catalog-panel">
@@ -272,6 +272,7 @@
           <span aria-hidden="true" class="total-chevron">^</span>
         </button>
         <div class="bottom-total-details" id="bottom-total-details" hidden>
+          <div class="bottom-cart-list" id="bottom-cart-list"></div>
           <div class="summary-row">
             <span>Subtotal</span>
             <strong id="bottom-subtotal">$0.00</strong>
