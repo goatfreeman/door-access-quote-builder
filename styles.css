@@ -103,6 +103,28 @@ button {
   justify-content: flex-end;
 }
 
+.utility-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.notification-button {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.notification-dot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 9px;
+  height: 9px;
+  background: var(--danger);
+  border: 2px solid #fff;
+  border-radius: 999px;
+}
+
 .drawer-backdrop {
   position: fixed;
   inset: 0;
@@ -655,14 +677,64 @@ tr:last-child td {
   box-shadow: var(--shadow);
 }
 
-.settings-dialog::backdrop {
+.settings-dialog::backdrop,
+.app-dialog::backdrop {
   background: rgba(23, 23, 23, 0.45);
 }
 
-.settings-panel {
+.settings-panel,
+.dialog-panel {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
+}
+
+.app-dialog {
+  width: min(560px, calc(100vw - 28px));
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 18px 18px;
+}
+
+.notification-list {
+  display: grid;
+  gap: 8px;
+}
+
+.notification-item {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  background: var(--panel-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.notification-item.success {
+  border-color: #9bd2c9;
+}
+
+.notification-item p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.notification-item strong {
+  font-size: 12px;
+}
+
+.compact-empty {
+  min-height: 96px;
 }
 
 .preview {
@@ -738,6 +810,8 @@ tr:last-child td {
   }
 
   .topbar {
+    display: grid;
+    grid-template-columns: 1fr auto;
     align-items: center;
     gap: 10px;
     margin-bottom: 10px;
@@ -931,8 +1005,19 @@ tr:last-child td {
     max-height: calc(100dvh - 16px);
   }
 
+  .app-dialog {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+  }
+
   .settings-dialog .quote-form {
     grid-template-columns: 1fr;
+  }
+
+  .dialog-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    padding: 12px 14px 14px;
   }
 
   .bottom-print-bar {
@@ -965,6 +1050,8 @@ tr:last-child td {
   .catalog-panel,
   .quote-editor,
   .topbar,
+  .utility-actions,
+  .app-dialog,
   .mobile-drawer,
   .drawer-backdrop,
   .bottom-print-bar,
