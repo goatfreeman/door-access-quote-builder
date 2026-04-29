@@ -38,15 +38,7 @@
           <button class="button secondary" type="button" id="copy-summary" title="Copy quote summary">
             <span aria-hidden="true">[]</span> Copy summary
           </button>
-          <button class="button secondary" type="button" id="save-quote" title="Save quote">
-            <span aria-hidden="true">S</span> Save quote
-          </button>
-          <button class="button secondary" type="button" id="generate-pdf" title="Generate PDF">
-            <span aria-hidden="true">PDF</span> Generate PDF
-          </button>
-          <button class="button" type="button" id="print-quote" title="Print quote">
-            <span aria-hidden="true">P</span> Print quote
-          </button>
+          <button class="button" type="button" id="header-next-quote" title="Finalize quote">Next</button>
           <button class="button secondary" type="button" id="open-settings" title="Settings">Settings</button>
         </div>
       </header>
@@ -170,6 +162,12 @@
               </div>
             </div>
 
+            <div class="desktop-cart-block">
+              <h2 class="subhead">Shopping Cart</h2>
+              <div class="cart-list desktop-cart-list" id="desktop-cart-list"></div>
+              <button class="button desktop-next-button" type="button" id="desktop-next-quote">Next</button>
+            </div>
+
             <div class="labor-control">
               <label class="check-row">
                 <input type="checkbox" id="include-labor" checked />
@@ -265,6 +263,46 @@
         </div>
       </section>
 
+      <section class="page-view" id="finalize-view">
+        <div class="wide-panel panel finalize-panel">
+          <div class="panel-header">
+            <div>
+              <h2>Finalize Quote</h2>
+              <p>Review cart quantities, totals, and final quote output.</p>
+            </div>
+            <button class="button secondary" type="button" data-view="quote-view">Back to quote</button>
+          </div>
+          <div class="panel-body finalize-layout">
+            <div class="cart-list final-cart-list" id="final-cart-list"></div>
+            <div class="final-summary">
+              <div class="summary-grid" aria-label="Final quote totals">
+                <div class="summary-row">
+                  <span>Subtotal</span>
+                  <strong id="final-subtotal">$0.00</strong>
+                </div>
+                <div class="summary-row">
+                  <span>Margin</span>
+                  <strong id="final-margin-amount">$0.00</strong>
+                </div>
+                <div class="summary-row">
+                  <span>Tax</span>
+                  <strong id="final-tax-amount">$0.00</strong>
+                </div>
+                <div class="summary-row summary-total">
+                  <span>Total</span>
+                  <strong id="final-total">$0.00</strong>
+                </div>
+              </div>
+              <div class="final-actions">
+                <button class="button secondary" type="button" id="final-save-quote">Save quote</button>
+                <button class="button secondary" type="button" id="final-generate-pdf">PDF</button>
+                <button class="button" type="button" id="final-print-quote">Print</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <div class="bottom-total-bar" id="bottom-total-bar" aria-label="Quote total">
         <button class="total-toggle" type="button" id="bottom-total-toggle" aria-expanded="false">
           <span>Total</span>
@@ -286,9 +324,7 @@
             <strong id="bottom-tax-amount">$0.00</strong>
           </div>
           <div class="bottom-actions">
-            <button class="button secondary" type="button" id="bottom-save-quote">Save</button>
-            <button class="button secondary" type="button" id="bottom-generate-pdf">PDF</button>
-            <button class="button" type="button" id="bottom-print-quote">Print</button>
+            <button class="button" type="button" id="bottom-next-quote">Next</button>
           </div>
         </div>
       </div>
