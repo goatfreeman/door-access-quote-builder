@@ -73,6 +73,12 @@ const el = {
   marginAmount: $("#margin-amount"),
   taxAmount: $("#tax-amount"),
   total: $("#total"),
+  bottomTotalToggle: $("#bottom-total-toggle"),
+  bottomTotalDetails: $("#bottom-total-details"),
+  bottomTotal: $("#bottom-total"),
+  bottomSubtotal: $("#bottom-subtotal"),
+  bottomMarginAmount: $("#bottom-margin-amount"),
+  bottomTaxAmount: $("#bottom-tax-amount"),
   templateName: $("#template-name"),
   templateList: $("#template-list"),
   quoteList: $("#quote-list"),
@@ -457,6 +463,10 @@ function renderPreview() {
   el.marginAmount.textContent = money.format(quoteTotals.marginAmount);
   el.taxAmount.textContent = money.format(quoteTotals.taxAmount);
   el.total.textContent = money.format(quoteTotals.total);
+  el.bottomSubtotal.textContent = money.format(quoteTotals.subtotal);
+  el.bottomMarginAmount.textContent = money.format(quoteTotals.marginAmount);
+  el.bottomTaxAmount.textContent = money.format(quoteTotals.taxAmount);
+  el.bottomTotal.textContent = money.format(quoteTotals.total);
   el.previewProject.textContent = quote.project;
   el.previewCustomer.textContent = quote.customer;
   el.previewQuote.textContent = quote.quoteNumber;
@@ -478,7 +488,7 @@ function renderTemplates() {
       (template) => `
         <article class="template-item">
           <div class="item-main"><div><h3>${html(template.name)}</h3><p>${template.lines.length} quote lines</p></div></div>
-          <div class="item-actions">
+          <div class="top-actions">
             <button class="button secondary" type="button" data-load-template="${template.id}">Load</button>
             <button class="button ghost icon" type="button" data-delete-template="${template.id}">x</button>
           </div>
@@ -493,7 +503,7 @@ function renderQuotes() {
       (saved) => `
         <article class="template-item">
           <div class="item-main"><div><h3>${html(saved.quoteNumber)} - ${html(saved.customer)}</h3><p>${html(saved.project)} - ${money.format(saved.totals?.total || 0)}</p></div></div>
-          <div class="item-actions">
+          <div class="top-actions">
             <button class="button secondary" type="button" data-load-quote="${saved.id}">Open</button>
             <button class="button ghost icon" type="button" data-delete-quote="${saved.id}">x</button>
           </div>
@@ -872,6 +882,11 @@ el.copySummary.addEventListener("click", async () => {
   ].join("\n"));
 });
 el.printQuote.addEventListener("click", () => window.print());
+el.bottomTotalToggle.addEventListener("click", () => {
+  const isOpen = el.bottomTotalToggle.getAttribute("aria-expanded") === "true";
+  el.bottomTotalToggle.setAttribute("aria-expanded", String(!isOpen));
+  el.bottomTotalDetails.hidden = isOpen;
+});
 el.bottomSaveQuote.addEventListener("click", () => lines.length && saveCurrentQuote());
 el.bottomGeneratePdf.addEventListener("click", emailQuotePdf);
 el.bottomPrintQuote.addEventListener("click", () => window.print());
