@@ -64,6 +64,23 @@
       </nav>
 
       <div class="layout-grid page-view active" id="quote-view">
+        <section class="mobile-flow" aria-label="Quote flow">
+          <div class="flow-step active">
+            <span>1</span>
+            <strong>Pick items</strong>
+          </div>
+          <div class="flow-line" aria-hidden="true"></div>
+          <div class="flow-step">
+            <span>2</span>
+            <strong>Customize</strong>
+          </div>
+          <div class="flow-line" aria-hidden="true"></div>
+          <div class="flow-step">
+            <span>3</span>
+            <strong>Review</strong>
+          </div>
+        </section>
+
         <section class="panel catalog-panel">
           <div class="panel-header">
             <div>
@@ -248,11 +265,31 @@
         </div>
       </section>
 
-      <div class="bottom-print-bar" aria-label="Print actions">
-        <strong>Print</strong>
-        <button class="button secondary" type="button" id="bottom-save-quote">Save</button>
-        <button class="button secondary" type="button" id="bottom-generate-pdf">PDF</button>
-        <button class="button" type="button" id="bottom-print-quote">Print</button>
+      <div class="bottom-total-bar" id="bottom-total-bar" aria-label="Quote total">
+        <button class="total-toggle" type="button" id="bottom-total-toggle" aria-expanded="false">
+          <span>Total</span>
+          <strong id="bottom-total">$0.00</strong>
+          <span aria-hidden="true" class="total-chevron">^</span>
+        </button>
+        <div class="bottom-total-details" id="bottom-total-details" hidden>
+          <div class="summary-row">
+            <span>Subtotal</span>
+            <strong id="bottom-subtotal">$0.00</strong>
+          </div>
+          <div class="summary-row">
+            <span>Margin</span>
+            <strong id="bottom-margin-amount">$0.00</strong>
+          </div>
+          <div class="summary-row">
+            <span>Tax</span>
+            <strong id="bottom-tax-amount">$0.00</strong>
+          </div>
+          <div class="bottom-actions">
+            <button class="button secondary" type="button" id="bottom-save-quote">Save</button>
+            <button class="button secondary" type="button" id="bottom-generate-pdf">PDF</button>
+            <button class="button" type="button" id="bottom-print-quote">Print</button>
+          </div>
+        </div>
       </div>
 
       <dialog class="settings-dialog" id="settings-dialog">
