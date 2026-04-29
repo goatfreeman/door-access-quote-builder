@@ -25,6 +25,12 @@
             <p>Build fast quotes from repeatable item and labor packages.</p>
           </div>
         </div>
+        <div class="utility-actions">
+          <button class="button secondary icon notification-button" type="button" id="open-notifications" aria-label="Notifications">
+            <span aria-hidden="true">!</span>
+            <span class="notification-dot" id="notification-dot" hidden></span>
+          </button>
+        </div>
         <div class="top-actions">
           <button class="button secondary" type="button" data-view="quote-view">Quote</button>
           <button class="button secondary" type="button" data-view="items-view">Items</button>
@@ -67,10 +73,6 @@
             <span class="panel-icon" aria-hidden="true">I</span>
           </div>
           <div class="panel-body">
-            <div class="data-banner">
-              <strong id="data-mode">Checking storage</strong>
-              <span id="data-status">Loading items, templates, and quotes.</span>
-            </div>
             <div class="catalog-controls">
               <div class="search-row">
                 <span aria-hidden="true">?</span>
@@ -166,11 +168,6 @@
                   <input class="input" id="labor-rate" type="number" min="0" step="0.01" />
                 </label>
               </div>
-            </div>
-
-            <div class="status-note">
-              <span aria-hidden="true">OK</span>
-              <span>Templates are saved in this browser, so you can reuse your standard packages without a database.</span>
             </div>
 
             <div class="template-form">
@@ -297,6 +294,54 @@
             <button class="button secondary" type="button" id="save-settings">Save settings locally</button>
           </div>
         </div>
+      </dialog>
+
+      <dialog class="app-dialog" id="notifications-dialog">
+        <div class="dialog-panel">
+          <div class="panel-header">
+            <div>
+              <h2>Notifications</h2>
+              <p>Storage, sync, and quote activity.</p>
+            </div>
+            <button class="button ghost icon" type="button" id="close-notifications">x</button>
+          </div>
+          <div class="panel-body">
+            <div class="notification-list" id="notification-list"></div>
+          </div>
+        </div>
+      </dialog>
+
+      <dialog class="app-dialog" id="confirm-dialog">
+        <form class="dialog-panel" method="dialog">
+          <div class="panel-header">
+            <div>
+              <h2 id="confirm-title">Confirm</h2>
+              <p id="confirm-message"></p>
+            </div>
+          </div>
+          <div class="dialog-actions">
+            <button class="button secondary" value="cancel" type="submit" id="confirm-cancel">Cancel</button>
+            <button class="button" value="confirm" type="submit" id="confirm-ok">Discard</button>
+          </div>
+        </form>
+      </dialog>
+
+      <dialog class="app-dialog" id="prompt-dialog">
+        <form class="dialog-panel" method="dialog">
+          <div class="panel-header">
+            <div>
+              <h2 id="prompt-title">Input</h2>
+              <p id="prompt-message"></p>
+            </div>
+          </div>
+          <div class="panel-body">
+            <input class="input" id="prompt-input" />
+          </div>
+          <div class="dialog-actions">
+            <button class="button secondary" value="cancel" type="submit">Cancel</button>
+            <button class="button" value="confirm" type="submit">Continue</button>
+          </div>
+        </form>
       </dialog>
     </main>
     <script src="app.js"></script>
