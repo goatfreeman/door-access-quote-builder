@@ -706,7 +706,16 @@ function SummaryRow({ label, value }: { label: string; value: number }) {
 function ItemsPage({ items, setItems }: { items: CatalogItem[]; setItems: Dispatch<SetStateAction<CatalogItem[]>> }) {
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [sortMode, setSortMode] = useState<"category" | "name" | "price">("category");
-  const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
+  const [draftItem, setDraftItem] = useState<Omit<CatalogItem, "id">>({
+    sku: "",
+    name: "",
+    category: "Other",
+    unitPrice: 0,
+    msrp: 0,
+    vendor: "Manual",
+    inventory: 0,
+    notes: "",
+  });
   const categories = useMemo(() => ["All", ...Array.from(new Set(items.map((item) => item.category))).sort((a, b) => a.localeCompare(b))], [items]);
   const sortedItems = useMemo(() => {
     return items
@@ -721,7 +730,28 @@ function ItemsPage({ items, setItems }: { items: CatalogItem[]; setItems: Dispat
   const updateItem = (id: string, patch: Partial<CatalogItem>) => setItems((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
   const deleteItem = (id: string) => {
     setItems((current) => current.filter((item) => item.id !== id));
-    setDeleteItemId(null);
+  };
+  const addDraftItem = () => {
+    setItems((current) => [
+      ...current,
+      {
+        ...draftItem,
+        id: makeId("item"),
+        sku: draftItem.sku || "NEW-SKU",
+        name: draftItem.name || "New Item",
+        category: draftItem.category || "Other",
+      },
+    ]);
+    setDraftItem({
+      sku: "",
+      name: "",
+      category: "Other",
+      unitPrice: 0,
+      msrp: 0,
+      vendor: "Manual",
+      inventory: 0,
+      notes: "",
+    });
   };
   return (
     <section className="panel lg:col-span-2">
@@ -730,20 +760,53 @@ function ItemsPage({ items, setItems }: { items: CatalogItem[]; setItems: Dispat
           <h2>Items</h2>
           <p>Full catalog view with editable pricing, MSRP, inventory, and notes.</p>
         </div>
-        <button
-          className="button-primary"
-          onClick={() =>
-            setItems((current) => [
-              ...current,
-              { id: makeId("item"), sku: "NEW-SKU", name: "New Item", category: "Other", unitPrice: 0, msrp: 0, vendor: "Manual", inventory: 0 },
-            ])
-          }
-        >
-          <PackagePlus size={17} />
-          Add Item
-        </button>
       </div>
       <div className="grid gap-3 p-4">
+        <details className="rounded-lg border border-stone-200 bg-stone-50">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 [&::-webkit-details-marker]:hidden">
+            <span className="flex items-center gap-2 font-black">
+              <PackagePlus size={17} />
+              Add Item
+            </span>
+            <ChevronDown size={17} className="text-stone-500" />
+          </summary>
+          <div className="grid gap-3 border-t border-stone-200 p-4 md:grid-cols-3">
+            <label className="field">
+              <span>Name</span>
+              <input className="input" value={draftItem.name} onChange={(event) => setDraftItem((current) => ({ ...current, name: event.target.value }))} placeholder="Item name" />
+            </label>
+            <label className="field">
+              <span>SKU</span>
+              <input className="input" value={draftItem.sku} onChange={(event) => setDraftItem((current) => ({ ...current, sku: event.target.value }))} placeholder="SKU" />
+            </label>
+            <label className="field">
+              <span>Category</span>
+              <input className="input" list="item-category-options" value={draftItem.category} onChange={(event) => setDraftItem((current) => ({ ...current, category: event.target.value }))} placeholder="Type or choose a category" />
+            </label>
+            <label className="field">
+              <span>Unit price</span>
+              <input className="input" type="number" value={draftItem.unitPrice} onChange={(event) => setDraftItem((current) => ({ ...current, unitPrice: Number(event.target.value) }))} />
+            </label>
+            <label className="field">
+              <span>ADI MSRP</span>
+              <input className="input" type="number" value={draftItem.msrp ?? 0} onChange={(event) => setDraftItem((current) => ({ ...current, msrp: Number(event.target.value) }))} />
+            </label>
+            <label className="field">
+              <span>Inventory</span>
+              <input className="input" type="number" value={draftItem.inventory ?? 0} onChange={(event) => setDraftItem((current) => ({ ...current, inventory: Number(event.target.value) }))} />
+            </label>
+            <label className="field md:col-span-3">
+              <span>Notes</span>
+              <textarea className="textarea" value={draftItem.notes ?? ""} onChange={(event) => setDraftItem((current) => ({ ...current, notes: event.target.value }))} placeholder="Optional item notes" />
+            </label>
+            <div className="flex justify-end md:col-span-3">
+              <button className="button-primary" onClick={addDraftItem}>
+                <PackagePlus size={17} />
+                Add item
+              </button>
+            </div>
+          </div>
+        </details>
         <div className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3 md:grid-cols-[minmax(0,1fr)_220px]">
           <label className="field">
             <span>Filter by category</span>
@@ -796,29 +859,29 @@ function ItemsPage({ items, setItems }: { items: CatalogItem[]; setItems: Dispat
                 <span>Inventory</span>
                 <input className="input" type="number" value={item.inventory ?? 0} onChange={(event) => updateItem(item.id, { inventory: Number(event.target.value) })} />
               </label>
-              <div className="rounded-lg border border-red-200 bg-red-50 p-3 md:col-span-3">
-                {deleteItemId === item.id ? (
+              <details className="md:col-span-3">
+                <summary className="ml-auto flex w-fit cursor-pointer list-none items-center gap-2 rounded-md px-3 py-2 text-sm font-black text-red-800 hover:bg-red-100 [&::-webkit-details-marker]:hidden">
+                  <Trash2 size={16} />
+                  Delete item
+                </summary>
+                <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <p className="font-black text-red-900">Delete this item?</p>
                       <p className="text-sm text-red-800">This removes it from the editable item database in this browser.</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <button className="button-ghost bg-white" onClick={() => setDeleteItemId(null)}>
+                      <button className="button-ghost bg-white" onClick={(event) => event.currentTarget.closest("details")?.removeAttribute("open")}>
                         Cancel
                       </button>
                       <button className="button-primary bg-red-700 hover:bg-red-800" onClick={() => deleteItem(item.id)}>
+                        <Trash2 size={16} />
                         Confirm delete
                       </button>
                     </div>
                   </div>
-                ) : (
-                  <button className="button-ghost text-red-800 hover:bg-red-100" onClick={() => setDeleteItemId(item.id)}>
-                    <Trash2 size={16} />
-                    Delete item
-                  </button>
-                )}
-              </div>
+                </div>
+              </details>
             </div>
           </details>
         ))}
