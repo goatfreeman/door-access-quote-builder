@@ -706,6 +706,7 @@ function SummaryRow({ label, value }: { label: string; value: number }) {
 function ItemsPage({ items, setItems }: { items: CatalogItem[]; setItems: Dispatch<SetStateAction<CatalogItem[]>> }) {
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [sortMode, setSortMode] = useState<"category" | "name" | "price">("category");
+  const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
   const categories = useMemo(() => ["All", ...Array.from(new Set(items.map((item) => item.category))).sort((a, b) => a.localeCompare(b))], [items]);
   const sortedItems = useMemo(() => {
     return items
@@ -718,6 +719,10 @@ function ItemsPage({ items, setItems }: { items: CatalogItem[]; setItems: Dispat
       });
   }, [categoryFilter, items, sortMode]);
   const updateItem = (id: string, patch: Partial<CatalogItem>) => setItems((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  const deleteItem = (id: string) => {
+    setItems((current) => current.filter((item) => item.id !== id));
+    setDeleteItemId(null);
+  };
   return (
     <section className="panel lg:col-span-2">
       <div className="panel-header">
@@ -791,6 +796,29 @@ function ItemsPage({ items, setItems }: { items: CatalogItem[]; setItems: Dispat
                 <span>Inventory</span>
                 <input className="input" type="number" value={item.inventory ?? 0} onChange={(event) => updateItem(item.id, { inventory: Number(event.target.value) })} />
               </label>
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3 md:col-span-3">
+                {deleteItemId === item.id ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="font-black text-red-900">Delete this item?</p>
+                      <p className="text-sm text-red-800">This removes it from the editable item database in this browser.</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button className="button-ghost bg-white" onClick={() => setDeleteItemId(null)}>
+                        Cancel
+                      </button>
+                      <button className="button-primary bg-red-700 hover:bg-red-800" onClick={() => deleteItem(item.id)}>
+                        Confirm delete
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button className="button-ghost text-red-800 hover:bg-red-100" onClick={() => setDeleteItemId(item.id)}>
+                    <Trash2 size={16} />
+                    Delete item
+                  </button>
+                )}
+              </div>
             </div>
           </details>
         ))}
