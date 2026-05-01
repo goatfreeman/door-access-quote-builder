@@ -217,15 +217,6 @@ export function QuickQuoteBuilder() {
             <button className="icon-button md:hidden" onClick={() => setMenuOpen(true)} aria-label="Open menu">
               <Menu size={19} />
             </button>
-            <details className="group relative">
-              <summary className="icon-button relative list-none bg-teal-700 text-white [&::-webkit-details-marker]:hidden" aria-label="Shopping cart">
-                <ShoppingCart size={19} />
-                <span className="absolute -right-2 -top-2 grid min-w-6 place-items-center rounded-full border-2 border-white bg-red-700 px-1 text-xs font-black">
-                  {cartCount}
-                </span>
-              </summary>
-              <CartDropdown lines={activeLines} totals={totals} onNext={() => setQuoteStep("finalize")} />
-            </details>
             <div className="grid size-10 place-items-center rounded-lg bg-stone-900 text-xl font-black text-white">Q</div>
             <div className="min-w-0">
               <h1 className="truncate text-lg font-black leading-tight sm:text-2xl">Quick Quote Builder</h1>
@@ -241,6 +232,15 @@ export function QuickQuoteBuilder() {
             ))}
           </nav>
           <div className="flex items-center gap-2">
+            <details className="group relative">
+              <summary className="icon-button relative list-none bg-teal-700 text-white [&::-webkit-details-marker]:hidden" aria-label="Shopping cart">
+                <ShoppingCart size={19} />
+                <span className="absolute -right-2 -top-2 grid min-w-6 place-items-center rounded-full border-2 border-white bg-red-700 px-1 text-xs font-black">
+                  {cartCount}
+                </span>
+              </summary>
+              <CartDropdown lines={activeLines} totals={totals} onNext={() => setQuoteStep("finalize")} />
+            </details>
             <button className="icon-button relative" onClick={() => setNotificationOpen((open) => !open)} aria-label="Notifications">
               <Bell size={18} />
               <span className="absolute right-2 top-2 size-2 rounded-full bg-red-700" />
@@ -337,7 +337,7 @@ function CartDropdown({
   onNext: () => void;
 }) {
   return (
-    <div className="absolute left-0 top-12 z-50 grid max-h-[calc(100vh-7rem)] w-[min(390px,calc(100vw-1.5rem))] gap-3 overflow-auto rounded-lg border border-stone-200 bg-white p-4 shadow-2xl">
+    <div className="absolute right-0 top-12 z-50 grid max-h-[calc(100vh-7rem)] w-[min(390px,calc(100vw-1.5rem))] gap-3 overflow-auto rounded-lg border border-stone-200 bg-white p-4 shadow-2xl">
       <div className="flex items-center justify-between">
         <p className="font-black">Shopping cart</p>
         <p className="text-sm text-stone-500">{lines.length} lines</p>
