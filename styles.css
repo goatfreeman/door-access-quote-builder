@@ -73,6 +73,71 @@ button {
   border-radius: 999px;
 }
 
+.top-cart-dropdown {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.top-cart-button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  color: #fff;
+  background: var(--accent);
+  border-radius: 8px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.top-cart-button::-webkit-details-marker {
+  display: none;
+}
+
+.top-cart-button span {
+  font-size: 0;
+}
+
+.top-cart-button span::before {
+  content: "\1F6D2";
+  font-size: 18px;
+  line-height: 1;
+}
+
+.top-cart-button strong {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  color: #fff;
+  background: var(--danger);
+  border: 2px solid #fff;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.top-cart-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  z-index: 80;
+  display: grid;
+  gap: 12px;
+  width: min(390px, calc(100vw - 24px));
+  max-height: min(620px, calc(100vh - 120px));
+  padding: 14px;
+  overflow: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
 .brand-mark {
   display: grid;
   place-items: center;
@@ -180,10 +245,14 @@ button {
 
 .layout-grid {
   display: grid;
-  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr) minmax(320px, 430px);
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
   gap: 16px;
   max-width: 1440px;
   margin: 0 auto;
+}
+
+.side-panel {
+  display: none;
 }
 
 .page-view {
@@ -610,17 +679,55 @@ tr:last-child td {
 }
 
 .quote-line-card {
-  padding: 12px;
   background: var(--panel-soft);
   border: 1px solid var(--line);
   border-radius: 8px;
+  overflow: hidden;
 }
 
 .quote-line-summary {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) 90px auto auto auto;
-  gap: 10px;
-  align-items: start;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.quote-line-summary::-webkit-details-marker {
+  display: none;
+}
+
+.quote-line-summary::after {
+  content: "\25BE";
+  color: var(--muted);
+  font-size: 13px;
+  transition: transform 150ms ease;
+}
+
+.quote-line-card[open] .quote-line-summary::after {
+  transform: rotate(180deg);
+}
+
+.quote-line-name {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.quote-line-name strong {
+  overflow: hidden;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quote-line-qty {
+  color: var(--foreground);
+  font-size: 14px;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 .line-name-input {
@@ -667,8 +774,18 @@ tr:last-child td {
 
 .line-detail-grid {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
-  margin-top: 10px;
+  padding: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.line-detail-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .package-pill {
@@ -1344,8 +1461,11 @@ tr:last-child td {
     grid-template-columns: 1fr;
   }
 
-  .settings-layout,
-  .quote-line-summary {
+  .settings-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .line-detail-grid {
     grid-template-columns: 1fr;
   }
 

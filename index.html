@@ -19,6 +19,34 @@
             <span aria-hidden="true"></span>
             <span aria-hidden="true"></span>
           </button>
+          <details class="top-cart-dropdown">
+            <summary class="top-cart-button" aria-label="Shopping cart">
+              <span aria-hidden="true">Cart</span>
+              <strong id="cart-count-badge">0</strong>
+            </summary>
+            <div class="top-cart-menu">
+              <div class="cart-list desktop-cart-list" id="desktop-cart-list"></div>
+              <div class="summary-grid cart-dropdown-totals" aria-label="Quote totals">
+                <div class="summary-row">
+                  <span>Equipment and labor</span>
+                  <strong id="subtotal">$0.00</strong>
+                </div>
+                <div class="summary-row">
+                  <span>Margin</span>
+                  <strong id="margin-amount">$0.00</strong>
+                </div>
+                <div class="summary-row">
+                  <span>Tax</span>
+                  <strong id="tax-amount">$0.00</strong>
+                </div>
+                <div class="summary-row summary-total">
+                  <span>Total</span>
+                  <strong id="total">$0.00</strong>
+                </div>
+              </div>
+              <button class="button desktop-next-button" type="button" id="desktop-next-quote">Next</button>
+            </div>
+          </details>
           <div class="brand-mark" aria-hidden="true">Q</div>
           <div>
             <h1>Quick Quote Builder</h1>
@@ -127,28 +155,28 @@
             <details class="desktop-cart-dropdown">
               <summary class="cart-summary-button">
                 <span>Cart</span>
-                <strong id="cart-count-badge">0</strong>
+                <strong>0</strong>
               </summary>
-              <div class="cart-list desktop-cart-list" id="desktop-cart-list"></div>
+              <div class="cart-list desktop-cart-list"></div>
               <div class="summary-grid cart-dropdown-totals" aria-label="Quote totals">
                 <div class="summary-row">
                   <span>Equipment and labor</span>
-                  <strong id="subtotal">$0.00</strong>
+                  <strong>$0.00</strong>
                 </div>
                 <div class="summary-row">
                   <span>Margin</span>
-                  <strong id="margin-amount">$0.00</strong>
+                  <strong>$0.00</strong>
                 </div>
                 <div class="summary-row">
                   <span>Tax</span>
-                  <strong id="tax-amount">$0.00</strong>
+                  <strong>$0.00</strong>
                 </div>
                 <div class="summary-row summary-total">
                   <span>Total</span>
-                  <strong id="total">$0.00</strong>
+                  <strong>$0.00</strong>
                 </div>
               </div>
-              <button class="button desktop-next-button" type="button" id="desktop-next-quote">Next</button>
+              <button class="button desktop-next-button" type="button">Next</button>
             </details>
 
             <div class="labor-control desktop-hidden-controls">

@@ -528,38 +528,41 @@ function renderLines() {
     ${lines
       .map(
         (line) => `
-          <article class="quote-line-card">
-            <div class="quote-line-summary">
-              <div>
+          <details class="quote-line-card">
+            <summary class="quote-line-summary">
+              <div class="quote-line-name">
                 ${line.packageName ? `<span class="package-pill">${html(line.packageName)}</span>` : ""}
-                <input class="input line-name-input" data-line="${line.lineId}" data-field="name" value="${html(line.name)}" />
+                <strong>${html(line.name)}</strong>
               </div>
-              <label class="compact-field">
-                <span>Qty</span>
+              <span class="quote-line-qty">Qty ${line.quantity}</span>
+            </summary>
+            <div class="line-detail-grid">
+              <label class="field full">
+                <span>Item name</span>
+                <input class="input line-name-input" data-line="${line.lineId}" data-field="name" value="${html(line.name)}" />
+              </label>
+              <label class="field">
+                <span>Quantity</span>
                 <input class="input number-input" type="number" min="0" step="1" data-line="${line.lineId}" data-field="quantity" value="${line.quantity}" />
               </label>
-              <strong class="line-total">${money.format(line.quantity * line.unitPrice)}</strong>
-              <details class="line-details">
-                <summary aria-label="Edit item details"><span aria-hidden="true">⌄</span></summary>
-                <div class="line-detail-grid">
-                  <label class="field">
-                    <span>Unit price</span>
-                    <input class="input money-input" type="number" min="0" step="0.01" data-line="${line.lineId}" data-field="unitPrice" value="${line.unitPrice}" />
-                  </label>
-                  <label class="field full">
-                    <span>Notes</span>
-                    <textarea class="textarea" data-line="${line.lineId}" data-field="notes">${html(line.notes)}</textarea>
-                  </label>
-                </div>
-              </details>
-              <button class="button ghost icon" type="button" data-remove="${line.lineId}" aria-label="Remove item">x</button>
+              <label class="field">
+                <span>Unit price</span>
+                <input class="input money-input" type="number" min="0" step="0.01" data-line="${line.lineId}" data-field="unitPrice" value="${line.unitPrice}" />
+              </label>
+              <label class="field full">
+                <span>Notes</span>
+                <textarea class="textarea" data-line="${line.lineId}" data-field="notes">${html(line.notes)}</textarea>
+              </label>
+              <div class="line-detail-actions">
+                <strong class="line-total">${money.format(line.quantity * line.unitPrice)}</strong>
+                <button class="button ghost" type="button" data-remove="${line.lineId}">Remove</button>
+              </div>
             </div>
-          </article>`,
+          </details>`,
       )
       .join("")}
     </div>`;
 }
-
 function renderPreview() {
   const quoteTotals = totals();
   el.subtotal.textContent = money.format(quoteTotals.subtotal);
