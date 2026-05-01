@@ -336,10 +336,10 @@ export function QuickQuoteBuilder() {
 
       {menuOpen ? <MobileMenu nav={nav} view={view} setView={setView} goToQuote={goToQuote} close={() => setMenuOpen(false)} /> : null}
 
-      <section className="mx-auto grid max-w-7xl gap-4 px-4 py-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+      <section className={`mx-auto grid max-w-7xl gap-4 px-4 py-4 ${view === "quote" && quoteStep !== "finalize" ? "lg:grid-cols-[320px_minmax(0,1fr)]" : ""}`}>
         {view === "quote" ? (
           <>
-            <CatalogPanel items={visibleItems} category={category} search={search} setSearch={setSearch} setCategory={setCategory} onAdd={addItem} />
+            {quoteStep !== "finalize" ? <CatalogPanel items={visibleItems} category={category} search={search} setSearch={setSearch} setCategory={setCategory} onAdd={addItem} /> : null}
             <QuoteWorkspace
               step={quoteStep}
               setStep={setQuoteStep}
@@ -433,7 +433,7 @@ function CartDropdown({
       </div>
       <TotalsCard totals={totals} />
       <button className="button-primary" onClick={onNext}>
-        Next
+        Go to cart
       </button>
     </div>
   );
