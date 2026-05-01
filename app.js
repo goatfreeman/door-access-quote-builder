@@ -19,6 +19,45 @@ const seedItems = [
 }));
 
 const categories = ["All", "Cameras", "Access Panels", "Door Hardware", "Labor"];
+const packageDefinitions = [
+  {
+    id: "one-door",
+    name: "One Door Setup",
+    description: "Card reader, panel allowance, door strike, contact, and install labor.",
+    lines: [
+      ["honeywell-netaxs", 1],
+      ["honeywell-reader", 1],
+      ["assa-9600", 1],
+      ["door-contact", 1],
+      ["install-labor", 4],
+    ],
+  },
+  {
+    id: "two-door",
+    name: "Two Door Setup",
+    description: "Two openings with readers, strikes, contacts, panel allowance, and labor.",
+    lines: [
+      ["honeywell-netaxs", 1],
+      ["honeywell-reader", 2],
+      ["assa-9600", 2],
+      ["door-contact", 2],
+      ["install-labor", 8],
+    ],
+  },
+  {
+    id: "site",
+    name: "Whole Site Setup",
+    description: "Starter site package with access control, camera coverage, and labor allowance.",
+    lines: [
+      ["honeywell-netaxs", 2],
+      ["honeywell-reader", 4],
+      ["assa-9600", 4],
+      ["door-contact", 4],
+      ["axis-p3265", 4],
+      ["install-labor", 20],
+    ],
+  },
+];
 const keys = {
   items: "door-access-items",
   templates: "door-access-quote-templates",
@@ -40,6 +79,7 @@ let itemQuery = "";
 let activeView = "quote-view";
 let mobileStep = "pick";
 let notifications = [];
+let selectedPreviousQuoteId = null;
 let lines = ["honeywell-netaxs", "honeywell-reader", "assa-9600", "install-labor"]
   .map((id) => makeLine(items.find((item) => item.id === id)))
   .filter(Boolean);
@@ -82,6 +122,12 @@ const el = {
   bottomMarginAmount: $("#bottom-margin-amount"),
   bottomTaxAmount: $("#bottom-tax-amount"),
   bottomCartList: $("#bottom-cart-list"),
+  desktopCartList: $("#desktop-cart-list"),
+  finalCartList: $("#final-cart-list"),
+  finalSubtotal: $("#final-subtotal"),
+  finalMarginAmount: $("#final-margin-amount"),
+  finalTaxAmount: $("#final-tax-amount"),
+  finalTotal: $("#final-total"),
   templateName: $("#template-name"),
   templateList: $("#template-list"),
   quoteList: $("#quote-list"),
@@ -92,8 +138,7 @@ const el = {
   previewLines: $("#preview-lines"),
   previewTerms: $("#preview-terms"),
   saveTemplate: $("#save-template"),
-  saveQuote: $("#save-quote"),
-  generatePdf: $("#generate-pdf"),
+  headerNextQuote: $("#header-next-quote"),
   addItem: $("#add-item"),
   openSettings: $("#open-settings"),
   closeSettings: $("#close-settings"),
@@ -109,7 +154,6 @@ const el = {
   laborQty: $("#labor-qty"),
   laborRate: $("#labor-rate"),
   copySummary: $("#copy-summary"),
-  printQuote: $("#print-quote"),
   openNotifications: $("#open-notifications"),
   closeNotifications: $("#close-notifications"),
   notificationsDialog: $("#notifications-dialog"),
@@ -129,10 +173,14 @@ const el = {
   drawerBackdrop: $("#drawer-backdrop"),
   mobileDrawer: $("#mobile-drawer"),
   drawerSettings: $("#drawer-settings"),
-  bottomSaveQuote: $("#bottom-save-quote"),
-  bottomGeneratePdf: $("#bottom-generate-pdf"),
-  bottomPrintQuote: $("#bottom-print-quote"),
+  bottomNextQuote: $("#bottom-next-quote"),
+  desktopNextQuote: $("#desktop-next-quote"),
+  finalSaveQuote: $("#final-save-quote"),
+  finalGeneratePdf: $("#final-generate-pdf"),
+  finalPrintQuote: $("#final-print-quote"),
 };
+
+document.body.dataset.activeView = activeView;
 
 function load(key, fallback) {
   try {
@@ -158,6 +206,12 @@ function html(value) {
 function makeLine(item) {
   if (!item) return null;
   return { ...item, lineId: crypto.randomUUID(), quantity: item.category === "Labor" ? 4 : 1, notes: item.description };
+}
+
+function makePackageLine(item, quantity, packageName) {
+  const line = makeLine(item);
+  if (!line) return null;
+  return { ...line, quantity, packageName };
 }
 
 function quoteState() {
@@ -223,7 +277,7 @@ function showPrompt({ title = "Input", message = "", value = "", inputType = "te
 }
 
 async function switchView(viewId) {
-  if (activeView === "quote-view" && viewId !== "quote-view" && isQuoteDirty()) {
+  if (["quote-view", "finalize-view"].includes(activeView) && !["quote-view", "finalize-view", "settings-view"].includes(viewId) && isQuoteDirty()) {
     const discard = await showConfirm({
       title: "Discard quote edits?",
       message: "You have unsaved quote changes. Discard them and switch pages?",
@@ -240,6 +294,7 @@ async function switchView(viewId) {
   const next = $(`#${viewId}`);
   if (next) next.classList.add("active");
   activeView = viewId;
+  document.body.dataset.activeView = viewId;
   closeMobileMenu();
 }
 
@@ -377,7 +432,24 @@ function renderItemCategories() {
 
 function renderCatalog() {
   const needle = query.trim().toLowerCase();
-  el.catalogList.innerHTML = items
+  const setupCards = packageDefinitions
+    .map(
+      (setup) => `
+        <article class="catalog-item setup-card">
+          <div class="item-main">
+            <div>
+              <h3>${html(setup.name)}</h3>
+              <p>${html(setup.description)}</p>
+              <p class="item-meta">${setup.lines.length} pre-canned quote items</p>
+            </div>
+          </div>
+          <div class="item-actions">
+            <button class="button" type="button" data-add-package="${setup.id}">Use setup</button>
+          </div>
+        </article>`,
+    )
+    .join("");
+  const itemCards = items
     .filter((item) => {
       const haystack = `${item.name} ${item.description} ${item.category} ${item.sourceId || ""}`.toLowerCase();
       return (category === "All" || item.category === category) && (!needle || haystack.includes(needle));
@@ -402,6 +474,7 @@ function renderCatalog() {
         </article>`,
     )
     .join("");
+  el.catalogList.innerHTML = `${setupCards}${itemCards}`;
 }
 
 function renderItemsTable() {
@@ -450,26 +523,39 @@ function renderLines() {
     el.quoteLines.innerHTML = '<div class="empty-state"><div>Add catalog items to start a quote.</div></div>';
     return;
   }
-  el.quoteLines.innerHTML = `
-    <div class="quote-table">
-      <table>
-        <thead><tr><th>Item</th><th>Qty</th><th>Unit</th><th>Notes</th><th>Total</th><th></th></tr></thead>
-        <tbody>
-          ${lines
-            .map(
-              (line) => `
-                <tr>
-                  <td class="cell-name" data-label="Item"><input class="input" data-line="${line.lineId}" data-field="name" value="${html(line.name)}" /></td>
-                  <td data-label="Qty"><input class="input number-input" type="number" min="0" step="1" data-line="${line.lineId}" data-field="quantity" value="${line.quantity}" /></td>
-                  <td data-label="Unit"><input class="input money-input" type="number" min="0" step="0.01" data-line="${line.lineId}" data-field="unitPrice" value="${line.unitPrice}" /></td>
-                  <td class="cell-notes" data-label="Notes"><textarea class="textarea" data-line="${line.lineId}" data-field="notes">${html(line.notes)}</textarea></td>
-                  <td class="line-total" data-label="Total">${money.format(line.quantity * line.unitPrice)}</td>
-                  <td data-label="Remove"><button class="button ghost icon" type="button" data-remove="${line.lineId}">x</button></td>
-                </tr>`,
-            )
-            .join("")}
-        </tbody>
-      </table>
+  el.quoteLines.innerHTML = `<div class="quote-line-cards">
+    ${lines
+      .map(
+        (line) => `
+          <article class="quote-line-card">
+            <div class="quote-line-summary">
+              <div>
+                ${line.packageName ? `<span class="package-pill">${html(line.packageName)}</span>` : ""}
+                <input class="input line-name-input" data-line="${line.lineId}" data-field="name" value="${html(line.name)}" />
+              </div>
+              <label class="compact-field">
+                <span>Qty</span>
+                <input class="input number-input" type="number" min="0" step="1" data-line="${line.lineId}" data-field="quantity" value="${line.quantity}" />
+              </label>
+              <strong class="line-total">${money.format(line.quantity * line.unitPrice)}</strong>
+              <details class="line-details">
+                <summary>Edit</summary>
+                <div class="line-detail-grid">
+                  <label class="field">
+                    <span>Unit price</span>
+                    <input class="input money-input" type="number" min="0" step="0.01" data-line="${line.lineId}" data-field="unitPrice" value="${line.unitPrice}" />
+                  </label>
+                  <label class="field full">
+                    <span>Notes</span>
+                    <textarea class="textarea" data-line="${line.lineId}" data-field="notes">${html(line.notes)}</textarea>
+                  </label>
+                </div>
+              </details>
+              <button class="button ghost icon" type="button" data-remove="${line.lineId}" aria-label="Remove item">x</button>
+            </div>
+          </article>`,
+      )
+      .join("")}
     </div>`;
 }
 
@@ -483,7 +569,11 @@ function renderPreview() {
   el.bottomMarginAmount.textContent = money.format(quoteTotals.marginAmount);
   el.bottomTaxAmount.textContent = money.format(quoteTotals.taxAmount);
   el.bottomTotal.textContent = money.format(quoteTotals.total);
-  renderBottomCart();
+  el.finalSubtotal.textContent = money.format(quoteTotals.subtotal);
+  el.finalMarginAmount.textContent = money.format(quoteTotals.marginAmount);
+  el.finalTaxAmount.textContent = money.format(quoteTotals.taxAmount);
+  el.finalTotal.textContent = money.format(quoteTotals.total);
+  renderCartLists();
   el.previewProject.textContent = quote.project;
   el.previewCustomer.textContent = quote.customer;
   el.previewQuote.textContent = quote.quoteNumber;
@@ -499,23 +589,52 @@ function renderPreview() {
     .join("");
 }
 
-function renderBottomCart() {
+function cartMarkup() {
   if (!lines.length) {
-    el.bottomCartList.innerHTML = '<div class="bottom-cart-empty">No items selected.</div>';
-    return;
+    return '<div class="cart-empty">No items selected.</div>';
   }
-  el.bottomCartList.innerHTML = lines
+  const groups = lines.reduce((acc, line) => {
+    const name = line.packageName || "Custom Items";
+    if (!acc.has(name)) acc.set(name, []);
+    acc.get(name).push(line);
+    return acc;
+  }, new Map());
+  return [...groups.entries()]
     .map(
-      (line) => `
-        <article class="bottom-cart-item">
-          <div>
-            <strong>${html(line.name)}</strong>
-            <span>${line.quantity} x ${money.format(line.unitPrice)}</span>
+      ([groupName, groupLines]) => {
+        const groupTotal = groupLines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);
+        return `
+        <article class="cart-item cart-group">
+          <div class="cart-item-main">
+            <strong>${html(groupName)}</strong>
+            <span>${groupLines.length} items needed</span>
+            <div class="cart-group-lines">
+              ${groupLines
+                .map(
+                  (line) => `
+                    <div class="cart-group-line">
+                      <span>${html(line.name)}</span>
+                      <input class="input cart-qty-input" type="number" min="0" step="1" data-cart-qty="${line.lineId}" value="${line.quantity}" aria-label="Quantity for ${html(line.name)}" />
+                      <button class="button ghost icon cart-remove" type="button" data-cart-remove="${line.lineId}" aria-label="Remove ${html(line.name)}">x</button>
+                    </div>`,
+                )
+                .join("")}
+            </div>
           </div>
-          <span>${money.format(line.quantity * line.unitPrice)}</span>
-        </article>`,
+          <div class="cart-controls">
+            <strong class="cart-line-total">${money.format(groupTotal)}</strong>
+          </div>
+        </article>`;
+      },
     )
     .join("");
+}
+
+function renderCartLists() {
+  const markup = cartMarkup();
+  el.bottomCartList.innerHTML = markup;
+  el.desktopCartList.innerHTML = markup;
+  el.finalCartList.innerHTML = markup;
 }
 
 function renderTemplates() {
@@ -566,9 +685,31 @@ function renderPreviousQuotes() {
             <strong>${money.format(saved.totals?.total || 0)}</strong>
           </div>
           <div class="history-actions">
-            <button class="button secondary" type="button" data-load-quote="${saved.id}">View / Edit</button>
+            <button class="button secondary" type="button" data-preview-quote="${saved.id}">Summary</button>
             <button class="button ghost icon" type="button" data-delete-quote="${saved.id}">x</button>
           </div>
+          ${
+            selectedPreviousQuoteId === saved.id
+              ? `<div class="history-summary">
+                  <div class="cart-list">
+                    ${saved.lines
+                      .map(
+                        (line) => `
+                          <article class="cart-item">
+                            <div class="cart-item-main">
+                              <strong>${html(line.packageName || line.name)}</strong>
+                              <span>${line.quantity} x ${html(line.name)} at ${money.format(line.unitPrice)}</span>
+                            </div>
+                            <strong>${money.format(line.quantity * line.unitPrice)}</strong>
+                          </article>`,
+                      )
+                      .join("")}
+                  </div>
+                  <div class="summary-row summary-total"><span>Quoted total</span><strong>${money.format(saved.totals?.total || 0)}</strong></div>
+                  <button class="button secondary" type="button" data-load-quote="${saved.id}">Edit this quote</button>
+                </div>`
+              : ""
+          }
         </article>`,
     )
     .join("");
@@ -748,7 +889,19 @@ el.itemsTable.addEventListener("click", async (event) => {
 el.addItem.addEventListener("click", addBlankItem);
 el.catalogList.addEventListener("click", async (event) => {
   const add = event.target.closest("[data-add]");
+  const addPackage = event.target.closest("[data-add-package]");
   const edit = event.target.closest("[data-edit]");
+  if (addPackage) {
+    const setup = packageDefinitions.find((candidate) => candidate.id === addPackage.dataset.addPackage);
+    if (!setup) return;
+    const packageLines = setup.lines
+      .map(([itemId, quantity]) => makePackageLine(items.find((item) => item.id === itemId), quantity, setup.name))
+      .filter(Boolean);
+    lines = [...lines, ...packageLines];
+    renderLines();
+    renderPreview();
+    openBottomTotal();
+  }
   if (add) {
     lines = [...lines, makeLine(items.find((item) => item.id === add.dataset.add))].filter(Boolean);
     renderLines();
@@ -810,8 +963,6 @@ el.saveTemplate.addEventListener("click", () => {
   const name = el.templateName.value.trim();
   if (name && lines.length) persist("templates", { id: crypto.randomUUID(), name, lines: clone(lines), createdAt: new Date().toISOString() });
 });
-el.saveQuote.addEventListener("click", () => lines.length && saveCurrentQuote());
-el.generatePdf.addEventListener("click", emailQuotePdf);
 el.settingsSync.addEventListener("click", async () => {
   addNotification("Checking ServiceTitan sync endpoint...", "info");
   try {
@@ -881,7 +1032,13 @@ el.templateList.addEventListener("click", (event) => {
 });
 function handleSavedQuoteClick(event) {
   const button = event.target.closest("[data-load-quote]");
+  const previewButton = event.target.closest("[data-preview-quote]");
   const deleteButton = event.target.closest("[data-delete-quote]");
+  if (previewButton) {
+    selectedPreviousQuoteId = selectedPreviousQuoteId === previewButton.dataset.previewQuote ? null : previewButton.dataset.previewQuote;
+    renderPreviousQuotes();
+    return;
+  }
   if (button) {
     const saved = quotes.find((item) => item.id === button.dataset.loadQuote);
     quote = {
@@ -918,10 +1075,51 @@ el.copySummary.addEventListener("click", async () => {
     `Total: ${money.format(quoteTotals.total)}`,
   ].join("\n"));
 });
-el.printQuote.addEventListener("click", () => window.print());
 function openBottomTotal() {
   el.bottomTotalToggle.setAttribute("aria-expanded", "true");
   el.bottomTotalDetails.hidden = false;
+}
+
+function updateCartQuantity(lineId, value) {
+  const quantity = Number(value);
+  if (!Number.isFinite(quantity)) return;
+  if (quantity <= 0) {
+    lines = lines.filter((line) => line.lineId !== lineId);
+  } else {
+    lines = lines.map((line) => (line.lineId === lineId ? { ...line, quantity } : line));
+  }
+  syncLaborInputs();
+  renderLines();
+  renderPreview();
+}
+
+function removeCartLine(lineId) {
+  lines = lines.filter((line) => line.lineId !== lineId);
+  syncLaborInputs();
+  renderLines();
+  renderPreview();
+}
+
+function handleCartInput(event) {
+  const input = event.target.closest("[data-cart-qty]");
+  if (!input) return;
+  updateCartQuantity(input.dataset.cartQty, input.value);
+}
+
+function handleCartClick(event) {
+  const remove = event.target.closest("[data-cart-remove]");
+  if (!remove) return;
+  removeCartLine(remove.dataset.cartRemove);
+}
+
+function goToFinalize() {
+  if (!lines.length) {
+    openBottomTotal();
+    return;
+  }
+  el.bottomTotalToggle.setAttribute("aria-expanded", "false");
+  el.bottomTotalDetails.hidden = true;
+  switchView("finalize-view");
 }
 
 el.bottomTotalToggle.addEventListener("click", () => {
@@ -935,9 +1133,18 @@ el.mobileFlow.addEventListener("click", (event) => {
   mobileStep = button.dataset.mobileStep;
   renderMobileStep();
 });
-el.bottomSaveQuote.addEventListener("click", () => lines.length && saveCurrentQuote());
-el.bottomGeneratePdf.addEventListener("click", emailQuotePdf);
-el.bottomPrintQuote.addEventListener("click", () => window.print());
+el.bottomCartList.addEventListener("change", handleCartInput);
+el.bottomCartList.addEventListener("click", handleCartClick);
+el.desktopCartList.addEventListener("change", handleCartInput);
+el.desktopCartList.addEventListener("click", handleCartClick);
+el.finalCartList.addEventListener("change", handleCartInput);
+el.finalCartList.addEventListener("click", handleCartClick);
+el.bottomNextQuote.addEventListener("click", goToFinalize);
+el.desktopNextQuote.addEventListener("click", goToFinalize);
+el.headerNextQuote.addEventListener("click", goToFinalize);
+el.finalSaveQuote.addEventListener("click", () => lines.length && saveCurrentQuote());
+el.finalGeneratePdf.addEventListener("click", emailQuotePdf);
+el.finalPrintQuote.addEventListener("click", () => window.print());
 
 render();
 hydrate();
