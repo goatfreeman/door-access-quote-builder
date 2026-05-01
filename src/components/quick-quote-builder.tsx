@@ -716,6 +716,8 @@ function ItemsPage({ items, setItems }: { items: CatalogItem[]; setItems: Dispat
     inventory: 0,
     notes: "",
   });
+  const [addItemOpen, setAddItemOpen] = useState(false);
+  const [deleteItem, setDeleteItem] = useState<CatalogItem | null>(null);
   const categories = useMemo(() => ["All", ...Array.from(new Set(items.map((item) => item.category))).sort((a, b) => a.localeCompare(b))], [items]);
   const sortedItems = useMemo(() => {
     return items
@@ -728,8 +730,9 @@ function ItemsPage({ items, setItems }: { items: CatalogItem[]; setItems: Dispat
       });
   }, [categoryFilter, items, sortMode]);
   const updateItem = (id: string, patch: Partial<CatalogItem>) => setItems((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
-  const deleteItem = (id: string) => {
+  const confirmDeleteItem = (id: string) => {
     setItems((current) => current.filter((item) => item.id !== id));
+    setDeleteItem(null);
   };
   const addDraftItem = () => {
     setItems((current) => [
@@ -752,6 +755,7 @@ function ItemsPage({ items, setItems }: { items: CatalogItem[]; setItems: Dispat
       inventory: 0,
       notes: "",
     });
+    setAddItemOpen(false);
   };
   return (
     <section className="panel lg:col-span-2">
@@ -760,53 +764,12 @@ function ItemsPage({ items, setItems }: { items: CatalogItem[]; setItems: Dispat
           <h2>Items</h2>
           <p>Full catalog view with editable pricing, MSRP, inventory, and notes.</p>
         </div>
+        <button className="button-primary" onClick={() => setAddItemOpen(true)}>
+          <PackagePlus size={17} />
+          Add Item
+        </button>
       </div>
       <div className="grid gap-3 p-4">
-        <details className="rounded-lg border border-stone-200 bg-stone-50">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 [&::-webkit-details-marker]:hidden">
-            <span className="flex items-center gap-2 font-black">
-              <PackagePlus size={17} />
-              Add Item
-            </span>
-            <ChevronDown size={17} className="text-stone-500" />
-          </summary>
-          <div className="grid gap-3 border-t border-stone-200 p-4 md:grid-cols-3">
-            <label className="field">
-              <span>Name</span>
-              <input className="input" value={draftItem.name} onChange={(event) => setDraftItem((current) => ({ ...current, name: event.target.value }))} placeholder="Item name" />
-            </label>
-            <label className="field">
-              <span>SKU</span>
-              <input className="input" value={draftItem.sku} onChange={(event) => setDraftItem((current) => ({ ...current, sku: event.target.value }))} placeholder="SKU" />
-            </label>
-            <label className="field">
-              <span>Category</span>
-              <input className="input" list="item-category-options" value={draftItem.category} onChange={(event) => setDraftItem((current) => ({ ...current, category: event.target.value }))} placeholder="Type or choose a category" />
-            </label>
-            <label className="field">
-              <span>Unit price</span>
-              <input className="input" type="number" value={draftItem.unitPrice} onChange={(event) => setDraftItem((current) => ({ ...current, unitPrice: Number(event.target.value) }))} />
-            </label>
-            <label className="field">
-              <span>ADI MSRP</span>
-              <input className="input" type="number" value={draftItem.msrp ?? 0} onChange={(event) => setDraftItem((current) => ({ ...current, msrp: Number(event.target.value) }))} />
-            </label>
-            <label className="field">
-              <span>Inventory</span>
-              <input className="input" type="number" value={draftItem.inventory ?? 0} onChange={(event) => setDraftItem((current) => ({ ...current, inventory: Number(event.target.value) }))} />
-            </label>
-            <label className="field md:col-span-3">
-              <span>Notes</span>
-              <textarea className="textarea" value={draftItem.notes ?? ""} onChange={(event) => setDraftItem((current) => ({ ...current, notes: event.target.value }))} placeholder="Optional item notes" />
-            </label>
-            <div className="flex justify-end md:col-span-3">
-              <button className="button-primary" onClick={addDraftItem}>
-                <PackagePlus size={17} />
-                Add item
-              </button>
-            </div>
-          </div>
-        </details>
         <div className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3 md:grid-cols-[minmax(0,1fr)_220px]">
           <label className="field">
             <span>Filter by category</span>
@@ -859,29 +822,12 @@ function ItemsPage({ items, setItems }: { items: CatalogItem[]; setItems: Dispat
                 <span>Inventory</span>
                 <input className="input" type="number" value={item.inventory ?? 0} onChange={(event) => updateItem(item.id, { inventory: Number(event.target.value) })} />
               </label>
-              <details className="md:col-span-3">
-                <summary className="ml-auto flex w-fit cursor-pointer list-none items-center gap-2 rounded-md px-3 py-2 text-sm font-black text-red-800 hover:bg-red-100 [&::-webkit-details-marker]:hidden">
+              <div className="flex justify-end md:col-span-3">
+                <button className="button-ghost text-red-800 hover:bg-red-100" onClick={() => setDeleteItem(item)}>
                   <Trash2 size={16} />
                   Delete item
-                </summary>
-                <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="font-black text-red-900">Delete this item?</p>
-                      <p className="text-sm text-red-800">This removes it from the editable item database in this browser.</p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button className="button-ghost bg-white" onClick={(event) => event.currentTarget.closest("details")?.removeAttribute("open")}>
-                        Cancel
-                      </button>
-                      <button className="button-primary bg-red-700 hover:bg-red-800" onClick={() => deleteItem(item.id)}>
-                        <Trash2 size={16} />
-                        Confirm delete
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </details>
+                </button>
+              </div>
             </div>
           </details>
         ))}
@@ -893,6 +839,84 @@ function ItemsPage({ items, setItems }: { items: CatalogItem[]; setItems: Dispat
             ))}
         </datalist>
       </div>
+      {addItemOpen ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onClick={() => setAddItemOpen(false)}>
+          <div className="w-full max-w-3xl rounded-lg bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-2xl font-black">Add Item</h3>
+                <p className="mt-1 text-sm text-stone-600">Create a new catalog item for quoting.</p>
+              </div>
+              <button className="icon-button" onClick={() => setAddItemOpen(false)} aria-label="Close add item">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="mt-5 grid gap-3 md:grid-cols-3">
+              <label className="field">
+                <span>Name</span>
+                <input className="input" value={draftItem.name} onChange={(event) => setDraftItem((current) => ({ ...current, name: event.target.value }))} placeholder="Item name" />
+              </label>
+              <label className="field">
+                <span>SKU</span>
+                <input className="input" value={draftItem.sku} onChange={(event) => setDraftItem((current) => ({ ...current, sku: event.target.value }))} placeholder="SKU" />
+              </label>
+              <label className="field">
+                <span>Category</span>
+                <input className="input" list="item-category-options" value={draftItem.category} onChange={(event) => setDraftItem((current) => ({ ...current, category: event.target.value }))} placeholder="Type or choose a category" />
+              </label>
+              <label className="field">
+                <span>Unit price</span>
+                <input className="input" type="number" value={draftItem.unitPrice} onChange={(event) => setDraftItem((current) => ({ ...current, unitPrice: Number(event.target.value) }))} />
+              </label>
+              <label className="field">
+                <span>ADI MSRP</span>
+                <input className="input" type="number" value={draftItem.msrp ?? 0} onChange={(event) => setDraftItem((current) => ({ ...current, msrp: Number(event.target.value) }))} />
+              </label>
+              <label className="field">
+                <span>Inventory</span>
+                <input className="input" type="number" value={draftItem.inventory ?? 0} onChange={(event) => setDraftItem((current) => ({ ...current, inventory: Number(event.target.value) }))} />
+              </label>
+              <label className="field md:col-span-3">
+                <span>Notes</span>
+                <textarea className="textarea" value={draftItem.notes ?? ""} onChange={(event) => setDraftItem((current) => ({ ...current, notes: event.target.value }))} placeholder="Optional item notes" />
+              </label>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button className="button-ghost" onClick={() => setAddItemOpen(false)}>
+                Cancel
+              </button>
+              <button className="button-primary" onClick={addDraftItem}>
+                <PackagePlus size={17} />
+                Add item
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {deleteItem ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onClick={() => setDeleteItem(null)}>
+          <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-2xl font-black text-red-900">Delete item?</h3>
+                <p className="mt-2 text-sm text-stone-600">This removes {deleteItem.name} from the editable item database in this browser.</p>
+              </div>
+              <button className="icon-button" onClick={() => setDeleteItem(null)} aria-label="Cancel delete">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button className="button-ghost" onClick={() => setDeleteItem(null)}>
+                Cancel
+              </button>
+              <button className="button-primary bg-red-700 hover:bg-red-800" onClick={() => confirmDeleteItem(deleteItem.id)}>
+                <Trash2 size={16} />
+                Confirm delete
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
