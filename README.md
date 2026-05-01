@@ -6,6 +6,7 @@ Next.js, React, TypeScript, and Tailwind CSS app for building quick equipment, l
 
 - Quote flow for picking items, customizing cart lines, reviewing, and finalizing
 - Editable item catalog with unit price, ADI MSRP, vendor, category, and inventory fields
+- Item catalog lives in `src/data/item-database.ts` so UI rewrites can leave item data alone
 - One-door, two-door, and whole-site starter templates
 - Expandable quote rows that show item name and quantity first, with price and notes inside the dropdown
 - Saved previous quote summaries with original quote date and edit/remove actions

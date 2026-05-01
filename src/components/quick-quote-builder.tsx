@@ -18,7 +18,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { Dispatch, SetStateAction } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { seedItems, seedTemplates } from "@/lib/seed-data";
 import type { CatalogItem, QuoteLine, QuoteMeta, QuoteTemplate, SavedQuote, ServiceTitanSettings } from "@/lib/types";
 
@@ -70,6 +70,7 @@ export function QuickQuoteBuilder() {
   const [view, setView] = useState<View>("quote");
   const [quoteStep, setQuoteStep] = useState<QuoteStep>("pick");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [cartOpen, setCartOpen] = useState(false);
   const [items, setItems] = useState<CatalogItem[]>(seedItems);
   const [templates, setTemplates] = useState<QuoteTemplate[]>(seedTemplates);
   const [quotes, setQuotes] = useState<SavedQuote[]>([]);
@@ -88,6 +89,8 @@ export function QuickQuoteBuilder() {
   const [pendingEmail, setPendingEmail] = useState("");
   const [selectedQuote, setSelectedQuote] = useState<SavedQuote | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  const cartRef = useRef<HTMLDetailsElement>(null);
+  const notificationRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setItems(readStorage(STORAGE_KEYS.items, seedItems));
@@ -112,6 +115,29 @@ export function QuickQuoteBuilder() {
   useEffect(() => {
     if (hydrated) writeStorage(STORAGE_KEYS.settings, settings);
   }, [hydrated, settings]);
+
+  useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent | TouchEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+
+      if (cartOpen && cartRef.current && !cartRef.current.contains(target)) {
+        setCartOpen(false);
+      }
+
+      if (notificationOpen && notificationRef.current && !notificationRef.current.contains(target)) {
+        setNotificationOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener("touchstart", handleOutsideClick);
+
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("touchstart", handleOutsideClick);
+    };
+  }, [cartOpen, notificationOpen]);
 
   const visibleItems = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -209,6 +235,13 @@ export function QuickQuoteBuilder() {
     { id: "settings" as const, label: "Settings", icon: Settings },
   ];
 
+  const goToQuote = () => {
+    setView("quote");
+    setMenuOpen(false);
+    setCartOpen(false);
+    setNotificationOpen(false);
+  };
+
   return (
     <main className="min-h-screen bg-stone-100 text-stone-950">
       <header className="sticky top-0 z-40 border-b border-stone-200 bg-stone-100/95 px-4 py-3 backdrop-blur">
@@ -217,11 +250,13 @@ export function QuickQuoteBuilder() {
             <button className="icon-button md:hidden" onClick={() => setMenuOpen(true)} aria-label="Open menu">
               <Menu size={19} />
             </button>
-            <div className="grid size-10 place-items-center rounded-lg bg-stone-900 text-xl font-black text-white">Q</div>
-            <div className="min-w-0">
+            <button className="grid size-10 place-items-center rounded-lg bg-stone-900 text-xl font-black text-white" onClick={goToQuote} aria-label="Go to quote page">
+              Q
+            </button>
+            <button className="min-w-0 text-left" onClick={goToQuote} aria-label="Go to quote page">
               <h1 className="truncate text-lg font-black leading-tight sm:text-2xl">Quick Quote Builder</h1>
               <p className="hidden text-sm text-stone-600 sm:block">Quote equipment, labor, templates, and saved jobs.</p>
-            </div>
+            </button>
           </div>
           <nav className="hidden items-center gap-2 md:flex">
             {nav.map((item) => (
@@ -232,33 +267,57 @@ export function QuickQuoteBuilder() {
             ))}
           </nav>
           <div className="flex items-center gap-2">
-            <details className="group relative">
-              <summary className="icon-button relative list-none bg-teal-700 text-white [&::-webkit-details-marker]:hidden" aria-label="Shopping cart">
+            <details ref={cartRef} className="group relative" open={cartOpen}>
+              <summary
+                className="icon-button relative list-none bg-teal-700 text-white [&::-webkit-details-marker]:hidden"
+                aria-label="Shopping cart"
+                onClick={(event) => {
+                  event.preventDefault();
+                  setCartOpen((open) => !open);
+                  setNotificationOpen(false);
+                }}
+              >
                 <ShoppingCart size={19} />
                 <span className="absolute -right-2 -top-2 grid min-w-6 place-items-center rounded-full border-2 border-white bg-red-700 px-1 text-xs font-black">
                   {cartCount}
                 </span>
               </summary>
-              <CartDropdown lines={activeLines} totals={totals} onNext={() => setQuoteStep("finalize")} />
+              <CartDropdown
+                lines={activeLines}
+                totals={totals}
+                onNext={() => {
+                  setQuoteStep("finalize");
+                  setCartOpen(false);
+                }}
+              />
             </details>
-            <button className="icon-button relative" onClick={() => setNotificationOpen((open) => !open)} aria-label="Notifications">
-              <Bell size={18} />
-              <span className="absolute right-2 top-2 size-2 rounded-full bg-red-700" />
-            </button>
+            <div ref={notificationRef} className="relative">
+              <button
+                className="icon-button relative"
+                onClick={() => {
+                  setNotificationOpen((open) => !open);
+                  setCartOpen(false);
+                }}
+                aria-label="Notifications"
+              >
+                <Bell size={18} />
+                <span className="absolute right-2 top-2 size-2 rounded-full bg-red-700" />
+              </button>
+              {notificationOpen ? (
+                <div className="absolute right-0 top-12 z-50 w-80 rounded-lg border border-stone-200 bg-white p-4 shadow-xl">
+                  <p className="font-bold">Notifications</p>
+                  <p className="mt-2 text-sm text-stone-600">Database connection and ServiceTitan sync are in local placeholder mode until production credentials are connected.</p>
+                </div>
+              ) : null}
+            </div>
             <button className="icon-button" onClick={() => setView("settings")} aria-label="Settings">
               <Settings size={18} />
             </button>
           </div>
         </div>
-        {notificationOpen ? (
-          <div className="absolute right-4 top-16 z-50 w-80 rounded-lg border border-stone-200 bg-white p-4 shadow-xl">
-            <p className="font-bold">Notifications</p>
-            <p className="mt-2 text-sm text-stone-600">Database connection and ServiceTitan sync are in local placeholder mode until production credentials are connected.</p>
-          </div>
-        ) : null}
       </header>
 
-      {menuOpen ? <MobileMenu nav={nav} view={view} setView={setView} close={() => setMenuOpen(false)} /> : null}
+      {menuOpen ? <MobileMenu nav={nav} view={view} setView={setView} goToQuote={goToQuote} close={() => setMenuOpen(false)} /> : null}
 
       <section className="mx-auto grid max-w-7xl gap-4 px-4 py-4 lg:grid-cols-[320px_minmax(0,1fr)]">
         {view === "quote" ? (
@@ -887,18 +946,23 @@ function MobileMenu({
   nav,
   view,
   setView,
+  goToQuote,
   close,
 }: {
   nav: { id: View; label: string; icon: LucideIcon }[];
   view: View;
   setView: (view: View) => void;
+  goToQuote: () => void;
   close: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 bg-black/35 md:hidden">
-      <div className="h-full w-80 max-w-[85vw] bg-white p-4 shadow-2xl">
+    <div className="fixed inset-0 z-50 bg-black/35 md:hidden" onClick={close}>
+      <div className="h-full w-80 max-w-[85vw] bg-white p-4 shadow-2xl" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <p className="font-black">Quick Quote Builder</p>
+          <button className="flex items-center gap-3 text-left" onClick={goToQuote}>
+            <span className="grid size-9 place-items-center rounded-lg bg-stone-900 text-lg font-black text-white">Q</span>
+            <span className="font-black">Quick Quote Builder</span>
+          </button>
           <button className="icon-button" onClick={close} aria-label="Close menu">
             <X size={18} />
           </button>
