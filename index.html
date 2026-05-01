@@ -111,73 +111,47 @@
             <span class="panel-icon" aria-hidden="true">Q</span>
           </div>
           <div class="panel-body">
-            <div class="quote-form">
-              <label class="field">
-                <span>Customer</span>
-                <input class="input" id="customer" />
-              </label>
-              <label class="field">
-                <span>Quote #</span>
-                <input class="input" id="quote-number" />
-              </label>
-              <label class="field full">
-                <span>Project</span>
-                <input class="input" id="project" />
-              </label>
-              <label class="field">
-                <span>Margin %</span>
-                <input class="input" id="margin" type="number" min="0" step="0.5" />
-              </label>
-              <label class="field">
-                <span>Tax %</span>
-                <input class="input" id="tax" type="number" min="0" step="0.01" />
-              </label>
-            </div>
-
             <div id="quote-lines"></div>
-
-            <label class="field full terms-field">
-              <span>Quote terms</span>
-              <textarea class="textarea" id="terms"></textarea>
-            </label>
           </div>
         </section>
 
         <aside class="panel side-panel">
           <div class="panel-header">
             <div>
-              <h2>Templates and Preview</h2>
-              <p>Save repeatable packages, then print or copy a clean quote summary.</p>
+              <h2>Shopping Cart</h2>
+              <p>Quick view of what is currently selected.</p>
             </div>
-            <span class="panel-icon" aria-hidden="true">T</span>
+            <span class="panel-icon" aria-hidden="true">C</span>
           </div>
           <div class="panel-body">
-            <div class="summary-grid" aria-label="Quote totals">
-              <div class="summary-row">
-                <span>Equipment and labor</span>
-                <strong id="subtotal">$0.00</strong>
-              </div>
-              <div class="summary-row">
-                <span>Margin</span>
-                <strong id="margin-amount">$0.00</strong>
-              </div>
-              <div class="summary-row">
-                <span>Tax</span>
-                <strong id="tax-amount">$0.00</strong>
-              </div>
-              <div class="summary-row summary-total">
-                <span>Total</span>
-                <strong id="total">$0.00</strong>
-              </div>
-            </div>
-
-            <div class="desktop-cart-block">
-              <h2 class="subhead">Shopping Cart</h2>
+            <details class="desktop-cart-dropdown">
+              <summary class="cart-summary-button">
+                <span>Cart</span>
+                <strong id="cart-count-badge">0</strong>
+              </summary>
               <div class="cart-list desktop-cart-list" id="desktop-cart-list"></div>
+              <div class="summary-grid cart-dropdown-totals" aria-label="Quote totals">
+                <div class="summary-row">
+                  <span>Equipment and labor</span>
+                  <strong id="subtotal">$0.00</strong>
+                </div>
+                <div class="summary-row">
+                  <span>Margin</span>
+                  <strong id="margin-amount">$0.00</strong>
+                </div>
+                <div class="summary-row">
+                  <span>Tax</span>
+                  <strong id="tax-amount">$0.00</strong>
+                </div>
+                <div class="summary-row summary-total">
+                  <span>Total</span>
+                  <strong id="total">$0.00</strong>
+                </div>
+              </div>
               <button class="button desktop-next-button" type="button" id="desktop-next-quote">Next</button>
-            </div>
+            </details>
 
-            <div class="labor-control">
+            <div class="labor-control desktop-hidden-controls">
               <label class="check-row">
                 <input type="checkbox" id="include-labor" checked />
                 <span>Include labor</span>
@@ -194,19 +168,19 @@
               </div>
             </div>
 
-            <div class="template-form">
+            <div class="template-form desktop-hidden-controls">
               <input class="input" id="template-name" placeholder="Template name" aria-label="Template name" />
               <button class="button" type="button" id="save-template" title="Save template">
                 <span aria-hidden="true">+</span> Save
               </button>
             </div>
 
-            <div class="template-list" id="template-list"></div>
+            <div class="template-list desktop-hidden-controls" id="template-list"></div>
 
-            <h2 class="subhead">Saved Quotes</h2>
-            <div class="template-list" id="quote-list"></div>
+            <h2 class="subhead desktop-hidden-controls">Saved Quotes</h2>
+            <div class="template-list desktop-hidden-controls" id="quote-list"></div>
 
-            <section class="preview" aria-label="Quote preview">
+            <section class="preview desktop-hidden-controls" aria-label="Quote preview">
               <h3 id="preview-project"></h3>
               <div class="preview-meta">
                 <span id="preview-customer"></span>
@@ -284,6 +258,32 @@
           <div class="panel-body finalize-layout">
             <div class="cart-list final-cart-list" id="final-cart-list"></div>
             <div class="final-summary">
+              <div class="quote-form finalize-quote-form">
+                <label class="field">
+                  <span>Customer</span>
+                  <input class="input" id="customer" />
+                </label>
+                <label class="field">
+                  <span>Quote #</span>
+                  <input class="input" id="quote-number" />
+                </label>
+                <label class="field full">
+                  <span>Project</span>
+                  <input class="input" id="project" />
+                </label>
+                <label class="field">
+                  <span>Margin %</span>
+                  <input class="input" id="margin" type="number" min="0" step="0.5" />
+                </label>
+                <label class="field">
+                  <span>Tax %</span>
+                  <input class="input" id="tax" type="number" min="0" step="0.01" />
+                </label>
+                <label class="field full terms-field">
+                  <span>Quote terms</span>
+                  <textarea class="textarea" id="terms"></textarea>
+                </label>
+              </div>
               <div class="summary-grid" aria-label="Final quote totals">
                 <div class="summary-row">
                   <span>Subtotal</span>

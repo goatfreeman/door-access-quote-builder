@@ -639,15 +639,26 @@ tr:last-child td {
 }
 
 .line-details summary {
+  display: grid;
+  place-items: center;
+  width: 38px;
   min-height: 38px;
-  padding: 9px 10px;
+  padding: 0;
   color: var(--foreground);
   background: #fff;
   border: 1px solid var(--line);
   border-radius: 7px;
-  font-size: 13px;
+  font-size: 18px;
   font-weight: 700;
   list-style: none;
+}
+
+.line-details[open] summary span {
+  transform: rotate(180deg);
+}
+
+.line-details summary span {
+  transition: transform 150ms ease;
 }
 
 .line-details summary::-webkit-details-marker {
@@ -802,6 +813,59 @@ tr:last-child td {
   display: grid;
   gap: 10px;
   margin-top: 14px;
+}
+
+.desktop-hidden-controls {
+  display: none !important;
+}
+
+.desktop-cart-dropdown {
+  display: grid;
+  gap: 10px;
+}
+
+.cart-summary-button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 10px 12px;
+  color: #fff;
+  background: var(--accent);
+  border-radius: 7px;
+  font-weight: 800;
+  list-style: none;
+  cursor: pointer;
+}
+
+.cart-summary-button::-webkit-details-marker {
+  display: none;
+}
+
+.cart-summary-button strong {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  display: grid;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  color: #fff;
+  background: var(--danger);
+  border: 2px solid #fff;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.cart-dropdown-totals {
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.finalize-quote-form {
+  margin-bottom: 0;
 }
 
 .cart-list {

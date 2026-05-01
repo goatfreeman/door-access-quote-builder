@@ -123,6 +123,7 @@ const el = {
   bottomTaxAmount: $("#bottom-tax-amount"),
   bottomCartList: $("#bottom-cart-list"),
   desktopCartList: $("#desktop-cart-list"),
+  cartCountBadge: $("#cart-count-badge"),
   finalCartList: $("#final-cart-list"),
   finalSubtotal: $("#final-subtotal"),
   finalMarginAmount: $("#final-margin-amount"),
@@ -539,7 +540,7 @@ function renderLines() {
               </label>
               <strong class="line-total">${money.format(line.quantity * line.unitPrice)}</strong>
               <details class="line-details">
-                <summary>Edit</summary>
+                <summary aria-label="Edit item details"><span aria-hidden="true">⌄</span></summary>
                 <div class="line-detail-grid">
                   <label class="field">
                     <span>Unit price</span>
@@ -573,6 +574,7 @@ function renderPreview() {
   el.finalMarginAmount.textContent = money.format(quoteTotals.marginAmount);
   el.finalTaxAmount.textContent = money.format(quoteTotals.taxAmount);
   el.finalTotal.textContent = money.format(quoteTotals.total);
+  el.cartCountBadge.textContent = lines.reduce((sum, line) => sum + Number(line.quantity || 0), 0);
   renderCartLists();
   el.previewProject.textContent = quote.project;
   el.previewCustomer.textContent = quote.customer;
