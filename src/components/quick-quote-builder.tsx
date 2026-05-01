@@ -687,6 +687,19 @@ function SummaryRow({ label, value }: { label: string; value: number }) {
 }
 
 function ItemsPage({ items, setItems }: { items: CatalogItem[]; setItems: Dispatch<SetStateAction<CatalogItem[]>> }) {
+  const [categoryFilter, setCategoryFilter] = useState("All");
+  const [sortMode, setSortMode] = useState<"category" | "name" | "price">("category");
+  const categories = useMemo(() => ["All", ...Array.from(new Set(items.map((item) => item.category))).sort((a, b) => a.localeCompare(b))], [items]);
+  const sortedItems = useMemo(() => {
+    return items
+      .filter((item) => categoryFilter === "All" || item.category === categoryFilter)
+      .slice()
+      .sort((a, b) => {
+        if (sortMode === "price") return a.unitPrice - b.unitPrice;
+        if (sortMode === "name") return a.name.localeCompare(b.name);
+        return a.category.localeCompare(b.category) || a.name.localeCompare(b.name);
+      });
+  }, [categoryFilter, items, sortMode]);
   const updateItem = (id: string, patch: Partial<CatalogItem>) => setItems((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
   return (
     <section className="panel lg:col-span-2">
@@ -709,12 +722,30 @@ function ItemsPage({ items, setItems }: { items: CatalogItem[]; setItems: Dispat
         </button>
       </div>
       <div className="grid gap-3 p-4">
-        {items.map((item) => (
+        <div className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3 md:grid-cols-[minmax(0,1fr)_220px]">
+          <label className="field">
+            <span>Filter by category</span>
+            <select className="input" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
+              {categories.map((option) => (
+                <option key={option}>{option}</option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>Sort</span>
+            <select className="input" value={sortMode} onChange={(event) => setSortMode(event.target.value as "category" | "name" | "price")}>
+              <option value="category">Category</option>
+              <option value="name">Name</option>
+              <option value="price">Unit price</option>
+            </select>
+          </label>
+        </div>
+        {sortedItems.map((item) => (
           <details key={item.id} className="rounded-lg border border-stone-200 bg-stone-50">
             <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto] items-center gap-3 p-4 [&::-webkit-details-marker]:hidden">
               <div>
                 <p className="font-black">{item.name}</p>
-                <p className="font-mono text-xs text-stone-500">{item.sku}</p>
+                <p className="font-mono text-xs text-stone-500">{item.sku} / {item.category}</p>
               </div>
               <strong>{money.format(item.unitPrice)}</strong>
             </summary>
@@ -729,11 +760,7 @@ function ItemsPage({ items, setItems }: { items: CatalogItem[]; setItems: Dispat
               </label>
               <label className="field">
                 <span>Category</span>
-                <select className="input" value={item.category} onChange={(event) => updateItem(item.id, { category: event.target.value as CatalogItem["category"] })}>
-                  {["Camera", "Access Control", "Door Hardware", "Labor", "Network", "Other"].map((option) => (
-                    <option key={option}>{option}</option>
-                  ))}
-                </select>
+                <input className="input" list="item-category-options" value={item.category} onChange={(event) => updateItem(item.id, { category: event.target.value })} placeholder="Type or choose a category" />
               </label>
               <label className="field">
                 <span>Unit price</span>
@@ -750,6 +777,13 @@ function ItemsPage({ items, setItems }: { items: CatalogItem[]; setItems: Dispat
             </div>
           </details>
         ))}
+        <datalist id="item-category-options">
+          {categories
+            .filter((option) => option !== "All")
+            .map((option) => (
+              <option key={option} value={option} />
+            ))}
+        </datalist>
       </div>
     </section>
   );

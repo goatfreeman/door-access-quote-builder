@@ -2,7 +2,7 @@ export type CatalogItem = {
   id: string;
   sku: string;
   name: string;
-  category: "Camera" | "Access Control" | "Door Hardware" | "Labor" | "Network" | "Other";
+  category: string;
   unitPrice: number;
   msrp?: number;
   vendor?: string;
