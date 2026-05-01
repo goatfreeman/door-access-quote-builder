@@ -1,0 +1,120 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+  overflow-x: hidden;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-geist-sans);
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+summary {
+  outline: none;
+}
+
+@layer components {
+  .panel {
+    @apply min-w-0 rounded-lg border border-stone-200 bg-white shadow-sm;
+  }
+
+  .panel-header {
+    @apply flex items-start justify-between gap-4 border-b border-stone-200 p-4;
+  }
+
+  .panel-header h2 {
+    @apply text-xl font-black tracking-normal;
+  }
+
+  .panel-header p {
+    @apply mt-1 text-sm text-stone-600;
+  }
+
+  .input {
+    @apply min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium outline-none transition focus:border-teal-700 focus:ring-2 focus:ring-teal-700/20;
+  }
+
+  .textarea {
+    @apply min-h-24 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium outline-none transition focus:border-teal-700 focus:ring-2 focus:ring-teal-700/20;
+  }
+
+  .field {
+    @apply grid gap-2;
+  }
+
+  .field span:first-child {
+    @apply text-xs font-bold uppercase tracking-normal text-stone-500;
+  }
+
+  .icon-button {
+    @apply inline-grid size-10 place-items-center rounded-lg border border-stone-200 bg-white text-stone-900 transition hover:border-teal-700 hover:text-teal-800;
+  }
+
+  .button-primary {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-teal-700 px-4 py-2 text-sm font-black text-white transition hover:bg-teal-800;
+  }
+
+  .button-secondary {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-4 py-2 text-sm font-black text-stone-900 transition hover:border-teal-700 hover:text-teal-800;
+  }
+
+  .button-ghost {
+    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-black text-stone-700 transition hover:bg-stone-100 hover:text-red-800;
+  }
+
+  .nav-button {
+    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-transparent px-3 py-2 text-sm font-bold text-stone-700 transition hover:border-stone-200 hover:bg-white hover:text-stone-950;
+  }
+
+  .nav-button-active {
+    @apply border-teal-700 bg-teal-50 text-teal-900;
+  }
+
+  .chip {
+    @apply min-h-9 rounded-md border border-stone-200 bg-white px-3 py-2 text-sm font-bold text-stone-700 transition hover:border-teal-700 hover:text-teal-800;
+  }
+
+  .chip-active {
+    @apply border-teal-700 bg-teal-50 text-teal-900;
+  }
+}
+
+@media print {
+  header,
+  aside,
+  button,
+  .fixed {
+    display: none !important;
+  }
+
+  main {
+    background: white !important;
+  }
+
+  .panel {
+    box-shadow: none !important;
+    border-color: #d6d3d1 !important;
+  }
+}
