@@ -1,0 +1,11 @@
+id,sku,name,category,unitPrice,msrp,vendor,inventory,notes
+axis-p3265,AXIS-P3265-LVE,Axis P3265-LVE Dome Camera,Camera,679,769,ADI,12,Outdoor-ready camera for entry coverage.
+axis-a8105,AXIS-A8105-E,Axis Network Video Door Station,Camera,925,1099,ADI,4,
+honeywell-pro4200,PRO4200,Honeywell PRO4200 Access Panel,Access Control,1185,1360,ADI,7,
+honeywell-reader,OMNI-R10,Honeywell Mullion Card Reader,Access Control,142,180,ADI,24,
+assa-9600,9600-630,ASSA ABLOY 9600 Electric Strike,Door Hardware,398,455,ADI,9,
+rex-motion,REX-360,Request-to-Exit Motion Sensor,Door Hardware,86,112,ADI,16,
+door-contact,DPS-MAG,Door Position Switch,Door Hardware,38,55,ADI,38,
+poe-switch,POE-8-120W,8-Port PoE Network Switch,Network,289,349,ADI,11,
+labor-install,LAB-INSTALL,Installation Labor,Labor,125,,Internal,,Hourly labor rate.
+labor-program,LAB-PROGRAM,Programming and Commissioning,Labor,145,,Internal,,

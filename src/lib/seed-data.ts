@@ -1,7 +1,4 @@
-import { itemDatabase } from "../data/item-database";
 import type { QuoteTemplate } from "./types";
-
-export const seedItems = itemDatabase;
 
 export const seedTemplates: QuoteTemplate[] = [
   {

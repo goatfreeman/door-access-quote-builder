@@ -6,7 +6,7 @@ Next.js, React, TypeScript, and Tailwind CSS app for building quick equipment, l
 
 - Quote flow for picking items, customizing cart lines, reviewing, and finalizing
 - Editable item catalog with unit price, ADI MSRP, vendor, category, and inventory fields
-- Item catalog lives in `src/data/item-database.ts` so UI rewrites can leave item data alone
+- Item catalog lives in `public/data/item-database.csv` so UI rewrites can leave item data alone
 - One-door, two-door, and whole-site starter templates
 - Expandable quote rows that show item name and quantity first, with price and notes inside the dropdown
 - Saved previous quote summaries with original quote date and edit/remove actions
@@ -33,7 +33,7 @@ Import the GitHub repository into Vercel. Vercel will auto-detect Next.js and ru
 
 ## Future Database and Integrations
 
-Current data persists in browser storage while the app is being shaped. The TypeScript models are separated so a database layer can be added for:
+Current data persists in browser storage while the app is being shaped. The item catalog starts from `public/data/item-database.csv`, and the TypeScript models are separated so a database layer can be added for:
 
 - `items`
 - `templates`

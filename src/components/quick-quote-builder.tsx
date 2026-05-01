@@ -19,7 +19,8 @@ import {
 } from "lucide-react";
 import type { Dispatch, SetStateAction } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { seedItems, seedTemplates } from "@/lib/seed-data";
+import { loadCatalogItemsFromCsv } from "@/lib/item-csv";
+import { seedTemplates } from "@/lib/seed-data";
 import type { CatalogItem, QuoteLine, QuoteMeta, QuoteTemplate, SavedQuote, ServiceTitanSettings } from "@/lib/types";
 
 type View = "quote" | "items" | "templates" | "previous" | "settings";
@@ -27,7 +28,7 @@ type QuoteStep = "pick" | "customize" | "review" | "finalize";
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const STORAGE_KEYS = {
-  items: "qqb.items.v2",
+  items: "qqb.items.csv.v1",
   templates: "qqb.templates.v2",
   quotes: "qqb.quotes.v2",
   settings: "qqb.settings.v2",
@@ -71,7 +72,7 @@ export function QuickQuoteBuilder() {
   const [quoteStep, setQuoteStep] = useState<QuoteStep>("pick");
   const [menuOpen, setMenuOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
-  const [items, setItems] = useState<CatalogItem[]>(seedItems);
+  const [items, setItems] = useState<CatalogItem[]>([]);
   const [templates, setTemplates] = useState<QuoteTemplate[]>(seedTemplates);
   const [quotes, setQuotes] = useState<SavedQuote[]>([]);
   const [settings, setSettings] = useState<ServiceTitanSettings>({
@@ -93,11 +94,27 @@ export function QuickQuoteBuilder() {
   const notificationRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setItems(readStorage(STORAGE_KEYS.items, seedItems));
+    let cancelled = false;
+    const storedItems = readStorage<CatalogItem[]>(STORAGE_KEYS.items, []);
+    if (storedItems.length) {
+      setItems(storedItems);
+    } else {
+      loadCatalogItemsFromCsv()
+        .then((csvItems) => {
+          if (!cancelled) setItems(csvItems);
+        })
+        .catch(() => {
+          if (!cancelled) setItems([]);
+        });
+    }
     setTemplates(readStorage(STORAGE_KEYS.templates, seedTemplates));
     setQuotes(readStorage(STORAGE_KEYS.quotes, []));
     setSettings(readStorage(STORAGE_KEYS.settings, { baseUrl: "", tenantId: "", clientId: "", clientSecret: "" }));
     setHydrated(true);
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
