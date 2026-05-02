@@ -767,7 +767,7 @@ function ItemsPage({
   const [draftItem, setDraftItem] = useState<Omit<CatalogItem, "id">>({
     sku: "",
     name: "",
-    category: "Other",
+    category: "",
     unitPrice: 0,
     msrp: 0,
     vendor: "Manual",
@@ -776,9 +776,9 @@ function ItemsPage({
   });
   const [addItemOpen, setAddItemOpen] = useState(false);
   const [deleteItem, setDeleteItem] = useState<CatalogItem | null>(null);
-  const [draftCustomCategory, setDraftCustomCategory] = useState(false);
-  const [customCategoryItemId, setCustomCategoryItemId] = useState<string | null>(null);
-  const categories = useMemo(() => ["All", ...Array.from(new Set([...defaultCategories, ...items.map((item) => item.category).filter(Boolean)])).sort((a, b) => a.localeCompare(b))], [items]);
+  const [categoryEditor, setCategoryEditor] = useState<{ target: "draft" | "item"; itemId?: string } | null>(null);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const categories = useMemo(() => ["All", ...Array.from(new Set(items.map((item) => item.category).filter(Boolean))).sort((a, b) => a.localeCompare(b))], [items]);
   const itemCategoryOptions = categories.filter((option) => option !== "All");
   const sortedItems = useMemo(() => {
     return items
@@ -790,10 +790,33 @@ function ItemsPage({
         return a.category.localeCompare(b.category) || a.name.localeCompare(b.name);
       });
   }, [categoryFilter, items, sortMode]);
+  useEffect(() => {
+    if (categoryFilter !== "All" && !itemCategoryOptions.includes(categoryFilter)) {
+      setCategoryFilter("All");
+    }
+  }, [categoryFilter, itemCategoryOptions]);
   const updateItem = (id: string, patch: Partial<CatalogItem>) => setItems((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
   const confirmDeleteItem = (id: string) => {
     onDeleteItem(id);
     setDeleteItem(null);
+  };
+  const openCategoryEditor = (target: "draft" | "item", itemId?: string) => {
+    setCategoryEditor({ target, itemId });
+    setNewCategoryName("");
+  };
+  const closeCategoryEditor = () => {
+    setCategoryEditor(null);
+    setNewCategoryName("");
+  };
+  const saveCategoryName = () => {
+    const category = newCategoryName.trim();
+    if (!category || !categoryEditor) return;
+    if (categoryEditor.target === "draft") {
+      setDraftItem((current) => ({ ...current, category }));
+    } else if (categoryEditor.itemId) {
+      updateItem(categoryEditor.itemId, { category });
+    }
+    closeCategoryEditor();
   };
   const addDraftItem = () => {
     setItems((current) => [
@@ -803,20 +826,19 @@ function ItemsPage({
         id: makeId("item"),
         sku: draftItem.sku || "NEW-SKU",
         name: draftItem.name || "New Item",
-        category: draftItem.category || "Other",
+        category: draftItem.category,
       },
     ]);
     setDraftItem({
       sku: "",
       name: "",
-      category: "Other",
+      category: "",
       unitPrice: 0,
       msrp: 0,
       vendor: "Manual",
       inventory: 0,
       notes: "",
     });
-    setDraftCustomCategory(false);
     setAddItemOpen(false);
   };
   return (
@@ -871,18 +893,21 @@ function ItemsPage({
               <label className="field">
                 <span>Category</span>
                 <select
-                  className="input"
-                  value={customCategoryItemId === item.id ? "__new__" : item.category}
+                  className="input rounded-full"
+                  value={item.category || ""}
                   onChange={(event) => {
                     if (event.target.value === "__new__") {
-                      setCustomCategoryItemId(item.id);
-                      updateItem(item.id, { category: "" });
+                      openCategoryEditor("item", item.id);
                       return;
                     }
-                    setCustomCategoryItemId(null);
                     updateItem(item.id, { category: event.target.value });
                   }}
                 >
+                  {!item.category ? (
+                    <option value="" disabled>
+                      Add new category
+                    </option>
+                  ) : null}
                   {itemCategoryOptions.map((option) => (
                     <option key={option} value={option}>
                       {option}
@@ -890,7 +915,6 @@ function ItemsPage({
                   ))}
                   <option value="__new__">Add new category</option>
                 </select>
-                {customCategoryItemId === item.id ? <input className="input" value={item.category} onChange={(event) => updateItem(item.id, { category: event.target.value })} placeholder="New category name" /> : null}
               </label>
               <label className="field">
                 <span>Unit price</span>
@@ -937,19 +961,23 @@ function ItemsPage({
               </label>
               <label className="field">
                 <span>Category</span>
+                {itemCategoryOptions.length ? (
                 <select
-                  className="input"
-                  value={draftCustomCategory ? "__new__" : draftItem.category}
+                  className="input rounded-full"
+                  value={draftItem.category || ""}
                   onChange={(event) => {
                     if (event.target.value === "__new__") {
-                      setDraftCustomCategory(true);
-                      setDraftItem((current) => ({ ...current, category: "" }));
+                      openCategoryEditor("draft");
                       return;
                     }
-                    setDraftCustomCategory(false);
                     setDraftItem((current) => ({ ...current, category: event.target.value }));
                   }}
                 >
+                  {!draftItem.category ? (
+                    <option value="" disabled>
+                      Add new category
+                    </option>
+                  ) : null}
                   {itemCategoryOptions.map((option) => (
                     <option key={option} value={option}>
                       {option}
@@ -957,7 +985,11 @@ function ItemsPage({
                   ))}
                   <option value="__new__">Add new category</option>
                 </select>
-                {draftCustomCategory ? <input className="input" value={draftItem.category} onChange={(event) => setDraftItem((current) => ({ ...current, category: event.target.value }))} placeholder="New category name" /> : null}
+                ) : (
+                  <button type="button" className="button-secondary min-h-11 rounded-full justify-start" onClick={() => openCategoryEditor("draft")}>
+                    Add new category
+                  </button>
+                )}
               </label>
               <label className="field">
                 <span>Unit price</span>
@@ -983,6 +1015,33 @@ function ItemsPage({
               <button className="button-primary" onClick={addDraftItem}>
                 <PackagePlus size={17} />
                 Add item
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {categoryEditor ? (
+        <div className="fixed inset-0 z-[60] grid place-items-center bg-black/45 p-4" onClick={closeCategoryEditor}>
+          <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-2xl font-black">Add Category</h3>
+                <p className="mt-2 text-sm text-stone-600">Name the category you want to use for this item.</p>
+              </div>
+              <button className="icon-button" onClick={closeCategoryEditor} aria-label="Close category editor">
+                <X size={18} />
+              </button>
+            </div>
+            <label className="field mt-5">
+              <span>Category name</span>
+              <input className="input rounded-full" autoFocus value={newCategoryName} onChange={(event) => setNewCategoryName(event.target.value)} placeholder="Example: Door Hardware" />
+            </label>
+            <div className="mt-5 flex justify-end gap-2">
+              <button className="button-ghost" onClick={closeCategoryEditor}>
+                Cancel
+              </button>
+              <button className="button-primary" onClick={saveCategoryName} disabled={!newCategoryName.trim()}>
+                Save category
               </button>
             </div>
           </div>
