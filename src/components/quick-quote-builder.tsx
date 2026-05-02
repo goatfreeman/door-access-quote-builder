@@ -164,6 +164,7 @@ export function QuickQuoteBuilder() {
       return matchesCategory && matchesSearch;
     });
   }, [items, search, category]);
+  const catalogCategories = useMemo(() => ["All", ...Array.from(new Set(items.map((item) => item.category).filter(Boolean))).sort((a, b) => a.localeCompare(b))], [items]);
 
   const activeLines = useMemo(() => lines.filter((line) => meta.includeLabor || !isLabor(line)), [lines, meta.includeLabor]);
   const totals = useMemo(() => {
@@ -339,7 +340,9 @@ export function QuickQuoteBuilder() {
       <section className={`mx-auto grid max-w-7xl gap-4 px-4 py-4 ${view === "quote" && quoteStep !== "finalize" ? "lg:grid-cols-[320px_minmax(0,1fr)]" : ""}`}>
         {view === "quote" ? (
           <>
-            {quoteStep !== "finalize" ? <CatalogPanel items={visibleItems} category={category} search={search} setSearch={setSearch} setCategory={setCategory} onAdd={addItem} /> : null}
+            {quoteStep !== "finalize" ? (
+              <CatalogPanel items={visibleItems} categories={catalogCategories} category={category} search={search} setSearch={setSearch} setCategory={setCategory} onAdd={addItem} />
+            ) : null}
             <QuoteWorkspace
               step={quoteStep}
               setStep={setQuoteStep}
@@ -441,6 +444,7 @@ function CartDropdown({
 
 function CatalogPanel({
   items,
+  categories,
   category,
   search,
   setSearch,
@@ -448,6 +452,7 @@ function CatalogPanel({
   onAdd,
 }: {
   items: CatalogItem[];
+  categories: string[];
   category: string;
   search: string;
   setSearch: (value: string) => void;
@@ -455,7 +460,6 @@ function CatalogPanel({
   onAdd: (item: CatalogItem) => void;
 }) {
   const [filterOpen, setFilterOpen] = useState(false);
-  const categories = ["All", "Camera", "Access Control", "Door Hardware", "Labor", "Network", "Other"];
   return (
     <aside className="panel h-fit">
       <div className="panel-header">
