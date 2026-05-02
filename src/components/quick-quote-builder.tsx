@@ -26,6 +26,7 @@ type View = "quote" | "items" | "templates" | "previous" | "settings";
 type QuoteStep = "pick" | "customize" | "review" | "finalize";
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+const defaultCategories = ["Camera", "Access Control", "Door Hardware", "Labor", "Network", "Other"];
 const appStage = process.env.NEXT_PUBLIC_APP_STAGE ?? "development";
 const isProductionStage = appStage.toLowerCase() === "production";
 const STORAGE_KEYS = {
@@ -175,7 +176,7 @@ export function QuickQuoteBuilder() {
       return matchesCategory && matchesSearch;
     });
   }, [items, search, category]);
-  const catalogCategories = useMemo(() => ["All", ...Array.from(new Set(items.map((item) => item.category).filter(Boolean))).sort((a, b) => a.localeCompare(b))], [items]);
+  const catalogCategories = useMemo(() => ["All", ...Array.from(new Set([...defaultCategories, ...items.map((item) => item.category).filter(Boolean)])).sort((a, b) => a.localeCompare(b))], [items]);
 
   const activeLines = useMemo(() => lines.filter((line) => meta.includeLabor || !isLabor(line)), [lines, meta.includeLabor]);
   const totals = useMemo(() => {
@@ -775,7 +776,7 @@ function ItemsPage({
   });
   const [addItemOpen, setAddItemOpen] = useState(false);
   const [deleteItem, setDeleteItem] = useState<CatalogItem | null>(null);
-  const categories = useMemo(() => ["All", ...Array.from(new Set(items.map((item) => item.category))).sort((a, b) => a.localeCompare(b))], [items]);
+  const categories = useMemo(() => ["All", ...Array.from(new Set([...defaultCategories, ...items.map((item) => item.category).filter(Boolean)])).sort((a, b) => a.localeCompare(b))], [items]);
   const sortedItems = useMemo(() => {
     return items
       .filter((item) => categoryFilter === "All" || item.category === categoryFilter)
@@ -920,6 +921,7 @@ function ItemsPage({
               <label className="field">
                 <span>Category</span>
                 <input className="input" list="item-category-options" value={draftItem.category} onChange={(event) => setDraftItem((current) => ({ ...current, category: event.target.value }))} placeholder="Type or choose a category" />
+                <small className="text-xs font-medium text-stone-500">Choose a preset or type a new category.</small>
               </label>
               <label className="field">
                 <span>Unit price</span>
