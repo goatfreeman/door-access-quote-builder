@@ -1135,7 +1135,13 @@ function TemplateCard({
 }) {
   const [selectedItemId, setSelectedItemId] = useState(items[0]?.id ?? "");
   useEffect(() => {
-    if (!selectedItemId && items[0]?.id) setSelectedItemId(items[0].id);
+    if (!items.length) {
+      setSelectedItemId("");
+      return;
+    }
+    if (!selectedItemId || !items.some((item) => item.id === selectedItemId)) {
+      setSelectedItemId(items[0].id);
+    }
   }, [items, selectedItemId]);
   const updateTemplate = (patch: Partial<QuoteTemplate>) => {
     setTemplates((current) => current.map((candidate) => (candidate.id === template.id ? { ...candidate, ...patch } : candidate)));
@@ -1178,18 +1184,25 @@ function TemplateCard({
           );
         })}
       </div>
-      <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-        <select className="input" value={selectedItemId} onChange={(event) => setSelectedItemId(event.target.value)}>
-          {items.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.name}
-            </option>
-          ))}
-        </select>
-        <button className="button-secondary" onClick={addTemplateLine}>
-          Add
-        </button>
-      </div>
+      <label className="field mt-3">
+        <span>Item to add</span>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+          <select className="input rounded-full bg-white font-bold" value={selectedItemId} onChange={(event) => setSelectedItemId(event.target.value)} disabled={!items.length}>
+            {items.length ? (
+              items.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))
+            ) : (
+              <option value="">None</option>
+            )}
+          </select>
+          <button className="button-secondary rounded-full" onClick={addTemplateLine} disabled={!selectedItemId}>
+            Add
+          </button>
+        </div>
+      </label>
       <button className="button-primary mt-4 w-full" onClick={() => onAddTemplate(template)}>
         Add to Quote
       </button>
