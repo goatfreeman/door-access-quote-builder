@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { attachDatabasePool } from "@vercel/functions";
 import { MongoClient } from "mongodb";
 import { parseCatalogItemsCsv } from "@/lib/item-csv";
 
@@ -61,7 +62,12 @@ async function getMongoDatabase() {
   const uri = process.env.MONGODB_URI;
   if (!uri) return null;
 
-  memoryStore.quickQuoteMongoClient ??= new MongoClient(uri).connect();
+  if (!memoryStore.quickQuoteMongoClient) {
+    const client = new MongoClient(uri);
+    attachDatabasePool(client);
+    memoryStore.quickQuoteMongoClient = client.connect();
+  }
+
   const client = await memoryStore.quickQuoteMongoClient;
   return client.db(databaseName);
 }

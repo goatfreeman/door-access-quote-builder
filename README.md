@@ -43,6 +43,8 @@ Without `MONGODB_URI`, the app uses a temporary in-memory fallback for setup onl
 
 The UI shows a `Dev Build` badge unless `NEXT_PUBLIC_APP_STAGE` is set to `production`.
 
+MongoDB connections are managed with `attachDatabasePool` from `@vercel/functions` for Vercel Functions.
+
 ## Future Database and Integrations
 
 Current editable data is stored through the app API routes backed by MongoDB:
