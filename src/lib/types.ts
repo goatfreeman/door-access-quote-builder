@@ -57,5 +57,8 @@ export type ServiceTitanSettings = {
   tenantId: string;
   clientId: string;
   clientSecret: string;
+  adiBaseUrl?: string;
+  adiAccountNumber?: string;
+  adiApiKey?: string;
   lastSyncAt?: string;
 };

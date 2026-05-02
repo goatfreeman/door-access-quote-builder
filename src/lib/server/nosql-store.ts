@@ -27,6 +27,14 @@ export function isCollection(value: string): value is Collection {
   return collections.has(value as Collection);
 }
 
+export function getStoreStatus() {
+  return {
+    provider: process.env.MONGODB_URI ? "MongoDB" : "Local memory fallback",
+    databaseName: process.env.MONGODB_URI ? databaseName : "Not connected",
+    persistent: Boolean(process.env.MONGODB_URI),
+  };
+}
+
 export async function readCollection(collection: Collection) {
   const stored = await readStoredValue(collection);
   if (stored !== null) return stored;

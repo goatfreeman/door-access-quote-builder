@@ -24,10 +24,16 @@ import type { CatalogItem, QuoteLine, QuoteMeta, QuoteTemplate, SavedQuote, Serv
 
 type View = "quote" | "items" | "templates" | "previous" | "settings";
 type QuoteStep = "pick" | "customize" | "review" | "finalize";
+type SettingsSection = "account" | "database" | "serviceTitan" | "adi" | "sync";
 type AdiCatalogMatch = Omit<CatalogItem, "id"> & {
   imageUrl: string;
   manufacturerSku: string;
   matchScore?: number;
+};
+type DatabaseStatus = {
+  provider: string;
+  databaseName: string;
+  persistent: boolean;
 };
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
@@ -1487,6 +1493,38 @@ function PreviousQuotes({
 }
 
 function SettingsPage({ settings, setSettings, onSync }: { settings: ServiceTitanSettings; setSettings: Dispatch<SetStateAction<ServiceTitanSettings>>; onSync: () => void }) {
+  const [activeSection, setActiveSection] = useState<SettingsSection>("account");
+  const [databaseStatus, setDatabaseStatus] = useState<DatabaseStatus | null>(null);
+  const [syncConfirmOpen, setSyncConfirmOpen] = useState(false);
+  const sections: { id: SettingsSection; label: string }[] = [
+    { id: "account", label: "Account Info" },
+    { id: "database", label: "Database" },
+    { id: "serviceTitan", label: "ServiceTitan" },
+    { id: "adi", label: "ADI MSRP" },
+    { id: "sync", label: "Sync" },
+  ];
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/db/status", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((status: DatabaseStatus | null) => {
+        if (!cancelled) setDatabaseStatus(status);
+      })
+      .catch(() => {
+        if (!cancelled) setDatabaseStatus(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const confirmSync = () => {
+    onSync();
+    setSyncConfirmOpen(false);
+  };
+
   return (
     <section className="panel lg:col-span-2">
       <div className="panel-header">
@@ -1497,45 +1535,123 @@ function SettingsPage({ settings, setSettings, onSync }: { settings: ServiceTita
       </div>
       <div className="grid gap-4 p-4 lg:grid-cols-[260px_minmax(0,1fr)]">
         <div className="grid h-fit gap-2 rounded-lg bg-stone-50 p-3">
-          {["Account Info", "Database", "ServiceTitan", "ADI MSRP", "Sync"].map((item) => (
-            <button key={item} className="rounded-md px-3 py-2 text-left font-bold hover:bg-white">
-              {item}
+          {sections.map((item) => (
+            <button key={item.id} className={`rounded-md px-3 py-2 text-left font-bold transition ${activeSection === item.id ? "bg-white text-teal-800 shadow-sm" : "hover:bg-white"}`} onClick={() => setActiveSection(item.id)}>
+              {item.label}
             </button>
           ))}
         </div>
         <div className="grid gap-4">
-          <section className="rounded-lg border border-stone-200 bg-stone-50 p-4">
-            <h3 className="font-black">Account Info</h3>
-            <p className="mt-2 text-sm text-stone-600">User placeholder. Microsoft Azure SSO can be connected here later.</p>
-          </section>
-          <section className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-4 md:grid-cols-2">
-            <h3 className="font-black md:col-span-2">ServiceTitan Admin Panel</h3>
-            <label className="field md:col-span-2">
-              <span>Base URL</span>
-              <input className="input" value={settings.baseUrl} onChange={(event) => setSettings((current) => ({ ...current, baseUrl: event.target.value }))} />
-            </label>
-            <label className="field">
-              <span>Tenant ID</span>
-              <input className="input" value={settings.tenantId} onChange={(event) => setSettings((current) => ({ ...current, tenantId: event.target.value }))} />
-            </label>
-            <label className="field">
-              <span>Client ID</span>
-              <input className="input" value={settings.clientId} onChange={(event) => setSettings((current) => ({ ...current, clientId: event.target.value }))} />
-            </label>
-            <label className="field md:col-span-2">
-              <span>Client Secret</span>
-              <input className="input" type="password" value={settings.clientSecret} onChange={(event) => setSettings((current) => ({ ...current, clientSecret: event.target.value }))} />
-            </label>
-            <div className="flex flex-wrap items-center gap-3 md:col-span-2">
-              <button className="button-primary" onClick={onSync}>
-                Sync
-              </button>
-              <span className="text-sm text-stone-600">Last sync: {settings.lastSyncAt ? new Date(settings.lastSyncAt).toLocaleString() : "Never"}</span>
-            </div>
-          </section>
+          {activeSection === "account" ? (
+            <section className="rounded-lg border border-stone-200 bg-stone-50 p-4">
+              <h3 className="font-black">Account Info</h3>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <label className="field">
+                  <span>User</span>
+                  <input className="input" value="User" readOnly />
+                </label>
+                <label className="field">
+                  <span>Login provider</span>
+                  <input className="input" value="Microsoft Azure SSO placeholder" readOnly />
+                </label>
+              </div>
+            </section>
+          ) : null}
+          {activeSection === "database" ? (
+            <section className="rounded-lg border border-stone-200 bg-stone-50 p-4">
+              <h3 className="font-black">Database</h3>
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                <InfoTile label="Current database" value={databaseStatus?.provider ?? "Checking"} />
+                <InfoTile label="Database name" value={databaseStatus?.databaseName ?? "Checking"} />
+                <InfoTile label="Persistent storage" value={databaseStatus ? (databaseStatus.persistent ? "Yes" : "No") : "Checking"} />
+              </div>
+            </section>
+          ) : null}
+          {activeSection === "serviceTitan" ? (
+            <section className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-4 md:grid-cols-2">
+              <h3 className="font-black md:col-span-2">ServiceTitan Admin Panel</h3>
+              <label className="field md:col-span-2">
+                <span>Base URL</span>
+                <input className="input" value={settings.baseUrl} onChange={(event) => setSettings((current) => ({ ...current, baseUrl: event.target.value }))} />
+              </label>
+              <label className="field">
+                <span>Tenant ID</span>
+                <input className="input" value={settings.tenantId} onChange={(event) => setSettings((current) => ({ ...current, tenantId: event.target.value }))} />
+              </label>
+              <label className="field">
+                <span>Client ID</span>
+                <input className="input" value={settings.clientId} onChange={(event) => setSettings((current) => ({ ...current, clientId: event.target.value }))} />
+              </label>
+              <label className="field md:col-span-2">
+                <span>Client Secret</span>
+                <input className="input" type="password" value={settings.clientSecret} onChange={(event) => setSettings((current) => ({ ...current, clientSecret: event.target.value }))} />
+              </label>
+            </section>
+          ) : null}
+          {activeSection === "adi" ? (
+            <section className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-4 md:grid-cols-2">
+              <h3 className="font-black md:col-span-2">ADI MSRP Admin Panel</h3>
+              <label className="field md:col-span-2">
+                <span>ADI Base URL</span>
+                <input className="input" value={settings.adiBaseUrl ?? ""} onChange={(event) => setSettings((current) => ({ ...current, adiBaseUrl: event.target.value }))} placeholder="Future ADI API or feed URL" />
+              </label>
+              <label className="field">
+                <span>ADI Account Number</span>
+                <input className="input" value={settings.adiAccountNumber ?? ""} onChange={(event) => setSettings((current) => ({ ...current, adiAccountNumber: event.target.value }))} />
+              </label>
+              <label className="field">
+                <span>ADI API Key</span>
+                <input className="input" type="password" value={settings.adiApiKey ?? ""} onChange={(event) => setSettings((current) => ({ ...current, adiApiKey: event.target.value }))} />
+              </label>
+            </section>
+          ) : null}
+          {activeSection === "sync" ? (
+            <section className="rounded-lg border border-stone-200 bg-stone-50 p-4">
+              <h3 className="font-black">Sync Panel</h3>
+              <p className="mt-2 text-sm text-stone-600">Sync can later pull ServiceTitan items and ADI MSRP data into the database.</p>
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <button className="button-primary" onClick={() => setSyncConfirmOpen(true)}>
+                  Sync Now
+                </button>
+                <span className="text-sm text-stone-600">Last sync: {settings.lastSyncAt ? new Date(settings.lastSyncAt).toLocaleString() : "Never"}</span>
+              </div>
+            </section>
+          ) : null}
         </div>
       </div>
+      {syncConfirmOpen ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onClick={() => setSyncConfirmOpen(false)}>
+          <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-2xl font-black">Sync now?</h3>
+                <p className="mt-2 text-sm text-stone-600">This will update the saved last sync time and is ready for future ServiceTitan and ADI data pulls.</p>
+              </div>
+              <button className="icon-button" onClick={() => setSyncConfirmOpen(false)} aria-label="Cancel sync">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button className="button-ghost" onClick={() => setSyncConfirmOpen(false)}>
+                Cancel
+              </button>
+              <button className="button-primary" onClick={confirmSync}>
+                Sync Now
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
+  );
+}
+
+function InfoTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-stone-200 bg-white p-3">
+      <p className="text-xs font-bold uppercase tracking-normal text-stone-500">{label}</p>
+      <p className="mt-2 font-black text-stone-950">{value}</p>
+    </div>
   );
 }
 
