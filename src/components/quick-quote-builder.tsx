@@ -26,7 +26,6 @@ type View = "quote" | "items" | "templates" | "previous" | "settings";
 type QuoteStep = "pick" | "customize" | "review" | "finalize";
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
-const defaultCategories = ["Camera", "Access Control", "Door Hardware", "Labor", "Network", "Other"];
 const appStage = process.env.NEXT_PUBLIC_APP_STAGE ?? "development";
 const isProductionStage = appStage.toLowerCase() === "production";
 const STORAGE_KEYS = {
@@ -176,7 +175,13 @@ export function QuickQuoteBuilder() {
       return matchesCategory && matchesSearch;
     });
   }, [items, search, category]);
-  const catalogCategories = useMemo(() => ["All", ...Array.from(new Set([...defaultCategories, ...items.map((item) => item.category).filter(Boolean)])).sort((a, b) => a.localeCompare(b))], [items]);
+  const catalogCategories = useMemo(() => ["All", ...Array.from(new Set(items.map((item) => item.category).filter(Boolean))).sort((a, b) => a.localeCompare(b))], [items]);
+
+  useEffect(() => {
+    if (category !== "All" && !catalogCategories.includes(category)) {
+      setCategory("All");
+    }
+  }, [catalogCategories, category]);
 
   const activeLines = useMemo(() => lines.filter((line) => meta.includeLabor || !isLabor(line)), [lines, meta.includeLabor]);
   const totals = useMemo(() => {
@@ -486,6 +491,7 @@ function CatalogPanel({
   onAdd: (item: CatalogItem) => void;
 }) {
   const [filterOpen, setFilterOpen] = useState(false);
+  const hasCategories = categories.some((item) => item !== "All");
   return (
     <aside className="panel h-fit">
       <div className="panel-header">
@@ -504,23 +510,27 @@ function CatalogPanel({
         </div>
         {filterOpen ? (
           <div className="grid grid-cols-2 gap-2 rounded-lg border border-stone-200 bg-stone-50 p-2">
-            {categories.map((item) => (
-              <button
-                key={item}
-                className={`chip ${category === item ? "chip-active" : ""}`}
-                onClick={() => {
-                  setCategory(item);
-                  setFilterOpen(false);
-                }}
-              >
-                {item}
-              </button>
-            ))}
+            {hasCategories ? (
+              categories.map((item) => (
+                <button
+                  key={item}
+                  className={`chip ${category === item ? "chip-active" : ""}`}
+                  onClick={() => {
+                    setCategory(item);
+                    setFilterOpen(false);
+                  }}
+                >
+                  {item}
+                </button>
+              ))
+            ) : (
+              <p className="col-span-2 rounded-md border border-dashed border-stone-300 bg-white p-3 text-center text-sm font-bold text-stone-500">No categories</p>
+            )}
           </div>
         ) : (
           <div className="flex items-center justify-between rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm">
             <span className="font-bold text-stone-600">Category</span>
-            <strong>{category}</strong>
+            <strong>{hasCategories ? category : "None"}</strong>
           </div>
         )}
         <div className="grid max-h-[65vh] gap-2 overflow-auto pr-1">
