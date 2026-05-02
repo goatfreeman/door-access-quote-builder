@@ -31,11 +31,29 @@ http://localhost:3000
 
 Import the GitHub repository into Vercel. Vercel will auto-detect Next.js and run the standard build.
 
+Add these environment variables in Vercel for persistent NoSQL storage:
+
+```text
+UPSTASH_REDIS_REST_URL=...
+UPSTASH_REDIS_REST_TOKEN=...
+```
+
+Without those variables, the app uses a temporary in-memory fallback for setup only. Production persistence needs the NoSQL env vars.
+
 ## Future Database and Integrations
 
-Current editable data persists in browser storage while the app is being shaped. The item catalog starts from `public/data/item-database.csv`, but after first load, browser storage is the local database. Deleting an item also removes that item from templates and the active quote.
+Current editable data is stored through the app API routes:
 
-For production, use a NoSQL backend so item, template, and quote edits are shared across users/devices. A good structure is:
+```text
+/api/db/items
+/api/db/templates
+/api/db/quotes
+/api/db/settings
+```
+
+The item catalog starts from `public/data/item-database.csv` only when the NoSQL `items` collection is empty. After that, the NoSQL store is the database. Deleting an item also removes that item from templates and the active quote.
+
+The NoSQL structure is:
 
 - `items`
 - `templates`

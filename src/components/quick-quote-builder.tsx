@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import type { Dispatch, SetStateAction } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { loadCatalogItemsFromCsv } from "@/lib/item-csv";
+import { readDb, writeDb } from "@/lib/client-db";
 import type { CatalogItem, QuoteLine, QuoteMeta, QuoteTemplate, SavedQuote, ServiceTitanSettings } from "@/lib/types";
 
 type View = "quote" | "items" | "templates" | "previous" | "settings";
@@ -27,11 +27,10 @@ type QuoteStep = "pick" | "customize" | "review" | "finalize";
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const STORAGE_KEYS = {
-  items: "qqb.items.csv.v1",
-  itemsInitialized: "qqb.items.initialized.v1",
-  templates: "qqb.templates.empty.v1",
-  quotes: "qqb.quotes.v2",
-  settings: "qqb.settings.v2",
+  items: "qqb.cache.items.v1",
+  templates: "qqb.cache.templates.v1",
+  quotes: "qqb.cache.quotes.v1",
+  settings: "qqb.cache.settings.v1",
 };
 
 const emptyMeta: QuoteMeta = {
@@ -61,10 +60,6 @@ function readStorage<T>(key: string, fallback: T): T {
 
 function writeStorage<T>(key: string, value: T) {
   if (typeof window !== "undefined") window.localStorage.setItem(key, JSON.stringify(value));
-}
-
-function markStorageInitialized(key: string) {
-  if (typeof window !== "undefined") window.localStorage.setItem(key, "true");
 }
 
 function isLabor(line: QuoteLine) {
@@ -99,29 +94,20 @@ export function QuickQuoteBuilder() {
 
   useEffect(() => {
     let cancelled = false;
-    const itemsInitialized = readStorage(STORAGE_KEYS.itemsInitialized, false);
-    const storedItems = readStorage<CatalogItem[]>(STORAGE_KEYS.items, []);
-    if (itemsInitialized) {
-      setItems(storedItems);
-    } else {
-      loadCatalogItemsFromCsv()
-        .then((csvItems) => {
-          if (!cancelled) {
-            setItems(csvItems);
-            markStorageInitialized(STORAGE_KEYS.itemsInitialized);
-          }
-        })
-        .catch(() => {
-          if (!cancelled) {
-            setItems([]);
-            markStorageInitialized(STORAGE_KEYS.itemsInitialized);
-          }
-        });
-    }
-    setTemplates(readStorage(STORAGE_KEYS.templates, []));
-    setQuotes(readStorage(STORAGE_KEYS.quotes, []));
-    setSettings(readStorage(STORAGE_KEYS.settings, { baseUrl: "", tenantId: "", clientId: "", clientSecret: "" }));
-    setHydrated(true);
+
+    Promise.all([
+      readDb<CatalogItem[]>("items", readStorage(STORAGE_KEYS.items, [])),
+      readDb<QuoteTemplate[]>("templates", readStorage(STORAGE_KEYS.templates, [])),
+      readDb<SavedQuote[]>("quotes", readStorage(STORAGE_KEYS.quotes, [])),
+      readDb<ServiceTitanSettings>("settings", readStorage(STORAGE_KEYS.settings, { baseUrl: "", tenantId: "", clientId: "", clientSecret: "" })),
+    ]).then(([dbItems, dbTemplates, dbQuotes, dbSettings]) => {
+      if (cancelled) return;
+      setItems(dbItems);
+      setTemplates(dbTemplates);
+      setQuotes(dbQuotes);
+      setSettings(dbSettings);
+      setHydrated(true);
+    });
 
     return () => {
       cancelled = true;
@@ -129,19 +115,31 @@ export function QuickQuoteBuilder() {
   }, []);
 
   useEffect(() => {
-    if (hydrated) writeStorage(STORAGE_KEYS.items, items);
+    if (hydrated) {
+      writeStorage(STORAGE_KEYS.items, items);
+      void writeDb("items", items);
+    }
   }, [hydrated, items]);
 
   useEffect(() => {
-    if (hydrated) writeStorage(STORAGE_KEYS.templates, templates);
+    if (hydrated) {
+      writeStorage(STORAGE_KEYS.templates, templates);
+      void writeDb("templates", templates);
+    }
   }, [hydrated, templates]);
 
   useEffect(() => {
-    if (hydrated) writeStorage(STORAGE_KEYS.quotes, quotes);
+    if (hydrated) {
+      writeStorage(STORAGE_KEYS.quotes, quotes);
+      void writeDb("quotes", quotes);
+    }
   }, [hydrated, quotes]);
 
   useEffect(() => {
-    if (hydrated) writeStorage(STORAGE_KEYS.settings, settings);
+    if (hydrated) {
+      writeStorage(STORAGE_KEYS.settings, settings);
+      void writeDb("settings", settings);
+    }
   }, [hydrated, settings]);
 
   useEffect(() => {
@@ -991,40 +989,109 @@ function TemplatesPage({
       <div className="panel-header">
         <div>
           <h2>Templates</h2>
-          <p>Preset one-door, two-door, and site quote packages.</p>
+          <p>Build reusable quote packages from the live item database.</p>
         </div>
+        <button
+          className="button-primary"
+          onClick={() =>
+            setTemplates((current) => [
+              ...current,
+              {
+                id: makeId("template"),
+                name: "New Template",
+                description: "",
+                lines: [],
+              },
+            ])
+          }
+        >
+          <PackagePlus size={17} />
+          Add Template
+        </button>
       </div>
       <div className="grid gap-3 p-4 md:grid-cols-3">
-        {templates.map((template) => (
-          <article key={template.id} className="rounded-lg border border-stone-200 bg-stone-50 p-4">
-            <input
-              className="input font-black"
-              value={template.name}
-              onChange={(event) => setTemplates((current) => current.map((candidate) => (candidate.id === template.id ? { ...candidate, name: event.target.value } : candidate)))}
-            />
-            <textarea
-              className="textarea mt-3"
-              value={template.description}
-              onChange={(event) => setTemplates((current) => current.map((candidate) => (candidate.id === template.id ? { ...candidate, description: event.target.value } : candidate)))}
-            />
-            <div className="mt-3 grid gap-2">
-              {template.lines.map((line) => {
-                const item = items.find((candidate) => candidate.id === line.itemId);
-                return (
-                  <div key={`${template.id}-${line.itemId}`} className="flex items-center justify-between rounded-md bg-white p-2 text-sm">
-                    <span>{item?.name ?? line.itemId}</span>
-                    <strong>Qty {line.quantity}</strong>
-                  </div>
-                );
-              })}
-            </div>
-            <button className="button-primary mt-4 w-full" onClick={() => onAddTemplate(template)}>
-              Add to Quote
-            </button>
-          </article>
-        ))}
+        {templates.length ? (
+          templates.map((template) => <TemplateCard key={template.id} template={template} items={items} setTemplates={setTemplates} onAddTemplate={onAddTemplate} />)
+        ) : (
+          <div className="rounded-lg border border-dashed border-stone-300 bg-stone-50 p-8 text-center text-stone-500 md:col-span-3">No templates yet.</div>
+        )}
       </div>
     </section>
+  );
+}
+
+function TemplateCard({
+  template,
+  items,
+  setTemplates,
+  onAddTemplate,
+}: {
+  template: QuoteTemplate;
+  items: CatalogItem[];
+  setTemplates: Dispatch<SetStateAction<QuoteTemplate[]>>;
+  onAddTemplate: (template: QuoteTemplate) => void;
+}) {
+  const [selectedItemId, setSelectedItemId] = useState(items[0]?.id ?? "");
+  useEffect(() => {
+    if (!selectedItemId && items[0]?.id) setSelectedItemId(items[0].id);
+  }, [items, selectedItemId]);
+  const updateTemplate = (patch: Partial<QuoteTemplate>) => {
+    setTemplates((current) => current.map((candidate) => (candidate.id === template.id ? { ...candidate, ...patch } : candidate)));
+  };
+  const addTemplateLine = () => {
+    if (!selectedItemId) return;
+    updateTemplate({
+      lines: template.lines.some((line) => line.itemId === selectedItemId)
+        ? template.lines.map((line) => (line.itemId === selectedItemId ? { ...line, quantity: line.quantity + 1 } : line))
+        : [...template.lines, { itemId: selectedItemId, quantity: 1 }],
+    });
+  };
+
+  return (
+    <article className="rounded-lg border border-stone-200 bg-stone-50 p-4">
+      <input className="input font-black" value={template.name} onChange={(event) => updateTemplate({ name: event.target.value })} />
+      <textarea className="textarea mt-3" value={template.description} onChange={(event) => updateTemplate({ description: event.target.value })} placeholder="Template description" />
+      <div className="mt-3 grid gap-2">
+        {template.lines.map((line) => {
+          const item = items.find((candidate) => candidate.id === line.itemId);
+          if (!item) return null;
+          return (
+            <div key={`${template.id}-${line.itemId}`} className="grid grid-cols-[minmax(0,1fr)_76px_auto] items-center gap-2 rounded-md bg-white p-2 text-sm">
+              <span className="truncate font-bold">{item.name}</span>
+              <input
+                className="input min-h-9"
+                type="number"
+                min={1}
+                value={line.quantity}
+                onChange={(event) =>
+                  updateTemplate({
+                    lines: template.lines.map((candidate) => (candidate.itemId === line.itemId ? { ...candidate, quantity: Number(event.target.value) } : candidate)),
+                  })
+                }
+              />
+              <button className="button-ghost" onClick={() => updateTemplate({ lines: template.lines.filter((candidate) => candidate.itemId !== line.itemId) })} aria-label={`Remove ${item.name}`}>
+                <X size={16} />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+        <select className="input" value={selectedItemId} onChange={(event) => setSelectedItemId(event.target.value)}>
+          {items.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.name}
+            </option>
+          ))}
+        </select>
+        <button className="button-secondary" onClick={addTemplateLine}>
+          Add
+        </button>
+      </div>
+      <button className="button-primary mt-4 w-full" onClick={() => onAddTemplate(template)}>
+        Add to Quote
+      </button>
+    </article>
   );
 }
 
