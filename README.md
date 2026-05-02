@@ -31,21 +31,21 @@ http://localhost:3000
 
 Import the GitHub repository into Vercel. Vercel will auto-detect Next.js and run the standard build.
 
-Add these environment variables in Vercel for persistent NoSQL storage:
+Add these environment variables in Vercel for persistent MongoDB storage:
 
 ```text
-UPSTASH_REDIS_REST_URL=...
-UPSTASH_REDIS_REST_TOKEN=...
+MONGODB_URI=mongodb+srv://...
+MONGODB_DB=quick_quote_builder
 NEXT_PUBLIC_APP_STAGE=development
 ```
 
-Without those variables, the app uses a temporary in-memory fallback for setup only. Production persistence needs the NoSQL env vars.
+Without `MONGODB_URI`, the app uses a temporary in-memory fallback for setup only. Production persistence needs MongoDB.
 
 The UI shows a `Dev Build` badge unless `NEXT_PUBLIC_APP_STAGE` is set to `production`.
 
 ## Future Database and Integrations
 
-Current editable data is stored through the app API routes:
+Current editable data is stored through the app API routes backed by MongoDB:
 
 ```text
 /api/db/items
@@ -54,9 +54,9 @@ Current editable data is stored through the app API routes:
 /api/db/settings
 ```
 
-The item catalog starts from `public/data/item-database.csv` only when the NoSQL `items` collection is empty. After that, the NoSQL store is the database. Deleting an item also removes that item from templates and the active quote.
+The item catalog starts from `public/data/item-database.csv` only when the MongoDB `items` collection is empty. After that, MongoDB is the database. Deleting an item also removes that item from templates and the active quote.
 
-The NoSQL structure is:
+The MongoDB structure is:
 
 - `items`
 - `templates`

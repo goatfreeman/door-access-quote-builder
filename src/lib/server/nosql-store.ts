@@ -1,12 +1,15 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { MongoClient } from "mongodb";
 import { parseCatalogItemsCsv } from "@/lib/item-csv";
 
 type Collection = "items" | "templates" | "quotes" | "settings";
 
 const collections = new Set<Collection>(["items", "templates", "quotes", "settings"]);
+const databaseName = process.env.MONGODB_DB ?? "quick_quote_builder";
 const memoryStore = globalThis as typeof globalThis & {
   quickQuoteMemoryStore?: Partial<Record<Collection, unknown>>;
+  quickQuoteMongoClient?: Promise<MongoClient>;
 };
 
 function getMemoryStore() {
@@ -27,49 +30,26 @@ export async function readCollection(collection: Collection) {
 }
 
 export async function writeCollection(collection: Collection, value: unknown) {
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const database = await getMongoDatabase();
 
-  if (!url || !token) {
+  if (!database) {
     getMemoryStore()[collection] = value;
     return;
   }
 
-  const response = await fetch(`${url}/set/${storeKey(collection)}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(JSON.stringify(value)),
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    throw new Error(`NoSQL write failed for ${collection}`);
-  }
+  await database.collection(collection).updateOne({ _id: collection }, { $set: { value, updatedAt: new Date() } }, { upsert: true });
 }
 
 async function readStoredValue(collection: Collection) {
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const database = await getMongoDatabase();
 
-  if (!url || !token) {
+  if (!database) {
     const value = getMemoryStore()[collection];
     return value === undefined ? null : value;
   }
 
-  const response = await fetch(`${url}/get/${storeKey(collection)}`, {
-    headers: { Authorization: `Bearer ${token}` },
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    throw new Error(`NoSQL read failed for ${collection}`);
-  }
-
-  const payload = (await response.json()) as { result?: string | null };
-  return payload.result ? JSON.parse(payload.result) : null;
+  const document = await database.collection<{ _id: string; value?: unknown }>(collection).findOne({ _id: collection });
+  return document?.value ?? null;
 }
 
 async function readSeedItems() {
@@ -77,6 +57,11 @@ async function readSeedItems() {
   return parseCatalogItemsCsv(csv);
 }
 
-function storeKey(collection: Collection) {
-  return `quick-quote-builder:${collection}`;
+async function getMongoDatabase() {
+  const uri = process.env.MONGODB_URI;
+  if (!uri) return null;
+
+  memoryStore.quickQuoteMongoClient ??= new MongoClient(uri).connect();
+  const client = await memoryStore.quickQuoteMongoClient;
+  return client.db(databaseName);
 }
