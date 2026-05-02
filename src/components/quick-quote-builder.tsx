@@ -903,7 +903,7 @@ function ItemsPage({
               <label className="field">
                 <span>Category</span>
                 <select
-                  className="input rounded-full"
+                  className="input"
                   value={item.category || ""}
                   onChange={(event) => {
                     if (event.target.value === "__new__") {
@@ -973,7 +973,7 @@ function ItemsPage({
                 <span>Category</span>
                 {itemCategoryOptions.length ? (
                 <select
-                  className="input rounded-full"
+                  className="input"
                   value={draftItem.category || ""}
                   onChange={(event) => {
                     if (event.target.value === "__new__") {
@@ -996,7 +996,7 @@ function ItemsPage({
                   <option value="__new__">Add new category</option>
                 </select>
                 ) : (
-                  <button type="button" className="button-secondary min-h-11 rounded-full justify-start" onClick={() => openCategoryEditor("draft")}>
+                  <button type="button" className="button-secondary min-h-11 justify-start" onClick={() => openCategoryEditor("draft")}>
                     Add new category
                   </button>
                 )}
@@ -1044,7 +1044,7 @@ function ItemsPage({
             </div>
             <label className="field mt-5">
               <span>Category name</span>
-              <input className="input rounded-full" autoFocus value={newCategoryName} onChange={(event) => setNewCategoryName(event.target.value)} placeholder="Example: Door Hardware" />
+              <input className="input" autoFocus value={newCategoryName} onChange={(event) => setNewCategoryName(event.target.value)} placeholder="Example: Door Hardware" />
             </label>
             <div className="mt-5 flex justify-end gap-2">
               <button className="button-ghost" onClick={closeCategoryEditor}>
@@ -1201,15 +1201,17 @@ function TemplateCard({
   };
 
   return (
-    <article className="relative rounded-lg border border-stone-200 bg-stone-50 p-4 pt-12">
-      <button
-        className="absolute right-3 top-3 z-10 inline-grid size-8 place-items-center rounded-full border border-transparent bg-stone-50 text-stone-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-800"
-        onClick={() => onDeleteTemplate(template)}
-        aria-label={`Delete ${template.name || "template"}`}
-      >
-        <X size={16} />
-      </button>
-      <input className="input font-black" value={template.name} onChange={(event) => updateTemplate({ name: event.target.value })} />
+    <article className="rounded-lg border border-stone-200 bg-stone-50 p-4">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+        <input className="input font-black" value={template.name} onChange={(event) => updateTemplate({ name: event.target.value })} />
+        <button
+          className="icon-button hover:border-red-200 hover:bg-red-50 hover:text-red-800"
+          onClick={() => onDeleteTemplate(template)}
+          aria-label={`Delete ${template.name || "template"}`}
+        >
+          <X size={16} />
+        </button>
+      </div>
       <textarea className="textarea mt-3" value={template.description} onChange={(event) => updateTemplate({ description: event.target.value })} placeholder="Template description" />
       <div className="mt-3 grid gap-2">
         {template.lines.map((line) => {
@@ -1239,7 +1241,7 @@ function TemplateCard({
       <label className="field mt-3">
         <span>Item to add</span>
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-          <select className="input rounded-full bg-white font-bold" value={selectedItemId} onChange={(event) => setSelectedItemId(event.target.value)} disabled={!items.length}>
+          <select className="input bg-white font-bold" value={selectedItemId} onChange={(event) => setSelectedItemId(event.target.value)} disabled={!items.length}>
             {items.length ? (
               items.map((item) => (
                 <option key={item.id} value={item.id}>
@@ -1250,7 +1252,7 @@ function TemplateCard({
               <option value="">None</option>
             )}
           </select>
-          <button className="button-secondary rounded-full" onClick={addTemplateLine} disabled={!selectedItemId}>
+          <button className="button-secondary" onClick={addTemplateLine} disabled={!selectedItemId}>
             Add
           </button>
         </div>
