@@ -24,6 +24,11 @@ import type { CatalogItem, QuoteLine, QuoteMeta, QuoteTemplate, SavedQuote, Serv
 
 type View = "quote" | "items" | "templates" | "previous" | "settings";
 type QuoteStep = "pick" | "customize" | "review" | "finalize";
+type AdiCatalogMatch = Omit<CatalogItem, "id"> & {
+  imageUrl: string;
+  manufacturerSku: string;
+  matchScore?: number;
+};
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const appStage = process.env.NEXT_PUBLIC_APP_STAGE ?? "development";
@@ -44,6 +49,69 @@ const emptyMeta: QuoteMeta = {
   taxPercent: 8.875,
   includeLabor: true,
 };
+
+const adiCatalog: AdiCatalogMatch[] = [
+  {
+    sku: "AXIS-P3265-LVE",
+    manufacturerSku: "P3265-LVE",
+    name: "Axis P3265-LVE Outdoor Dome Network Camera",
+    category: "Camera",
+    unitPrice: 724,
+    msrp: 899,
+    vendor: "ADI",
+    inventory: 12,
+    notes: "ADI placeholder match. Replace with live ADI API data when credentials are connected.",
+    imageUrl: "https://placehold.co/180x135/e7f5f2/0f766e?text=Axis+Camera",
+  },
+  {
+    sku: "HON-PW6K1IC",
+    manufacturerSku: "PW6K1IC",
+    name: "Honeywell Pro-Watch Intelligent Controller",
+    category: "Access Control",
+    unitPrice: 930,
+    msrp: 1195,
+    vendor: "ADI",
+    inventory: 5,
+    notes: "ADI placeholder match. Replace with live ADI API data when credentials are connected.",
+    imageUrl: "https://placehold.co/180x135/f2f4f7/334155?text=Honeywell+Panel",
+  },
+  {
+    sku: "HID-920NTNNEK00000",
+    manufacturerSku: "920NTNNEK00000",
+    name: "HID Signo 20 Mullion Smart Card Reader",
+    category: "Access Control",
+    unitPrice: 185,
+    msrp: 245,
+    vendor: "ADI",
+    inventory: 28,
+    notes: "ADI placeholder match. Replace with live ADI API data when credentials are connected.",
+    imageUrl: "https://placehold.co/180x135/f8fafc/1f2937?text=HID+Reader",
+  },
+  {
+    sku: "ASSA-9600-LBM",
+    manufacturerSku: "9600-LBM",
+    name: "ASSA ABLOY HES 9600 Electric Strike",
+    category: "Door Hardware",
+    unitPrice: 318,
+    msrp: 415,
+    vendor: "ADI",
+    inventory: 18,
+    notes: "ADI placeholder match. Replace with live ADI API data when credentials are connected.",
+    imageUrl: "https://placehold.co/180x135/f4f4f5/525252?text=9600+Strike",
+  },
+  {
+    sku: "ALTRONIX-AL600ULACM",
+    manufacturerSku: "AL600ULACM",
+    name: "Altronix Access Power Controller with Power Supply",
+    category: "Power",
+    unitPrice: 265,
+    msrp: 349,
+    vendor: "ADI",
+    inventory: 9,
+    notes: "ADI placeholder match. Replace with live ADI API data when credentials are connected.",
+    imageUrl: "https://placehold.co/180x135/fff7ed/9a3412?text=Power+Supply",
+  },
+];
 
 const makeId = (prefix: string) => {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return `${prefix}-${crypto.randomUUID()}`;
@@ -66,6 +134,30 @@ function writeStorage<T>(key: string, value: T) {
 
 function isLabor(line: QuoteLine) {
   return line.sku.toLowerCase().startsWith("lab-") || line.name.toLowerCase().includes("labor");
+}
+
+function normalizeSearchValue(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function fuzzyScore(query: string, candidate: AdiCatalogMatch) {
+  const normalizedQuery = normalizeSearchValue(query);
+  if (normalizedQuery.length < 2) return 0;
+  const searchable = normalizeSearchValue(`${candidate.name} ${candidate.sku} ${candidate.manufacturerSku} ${candidate.category}`);
+  const compactSearchable = searchable.replace(/\s/g, "");
+  const compactQuery = normalizedQuery.replace(/\s/g, "");
+  let score = 0;
+
+  if (searchable.includes(normalizedQuery)) score += 70;
+  if (compactSearchable.includes(compactQuery)) score += 45;
+
+  const tokens = normalizedQuery.split(" ").filter(Boolean);
+  tokens.forEach((token) => {
+    if (searchable.includes(token)) score += token.length > 3 ? 16 : 8;
+  });
+
+  if (candidate.sku.toLowerCase().includes(compactQuery) || candidate.manufacturerSku.toLowerCase().includes(compactQuery)) score += 40;
+  return Math.min(score, 100);
 }
 
 export function QuickQuoteBuilder() {
@@ -790,6 +882,14 @@ function ItemsPage({
   const [newCategoryName, setNewCategoryName] = useState("");
   const categories = useMemo(() => ["All", ...Array.from(new Set(items.map((item) => item.category).filter(Boolean))).sort((a, b) => a.localeCompare(b))], [items]);
   const itemCategoryOptions = categories.filter((option) => option !== "All");
+  const adiQuery = `${draftItem.name} ${draftItem.sku}`.trim();
+  const adiMatches = useMemo(() => {
+    return adiCatalog
+      .map((match) => ({ ...match, matchScore: fuzzyScore(adiQuery, match) }))
+      .filter((match) => (match.matchScore ?? 0) >= 35)
+      .sort((a, b) => (b.matchScore ?? 0) - (a.matchScore ?? 0))
+      .slice(0, 3);
+  }, [adiQuery]);
   const sortedItems = useMemo(() => {
     return items
       .filter((item) => categoryFilter === "All" || item.category === categoryFilter)
@@ -827,6 +927,19 @@ function ItemsPage({
       updateItem(categoryEditor.itemId, { category });
     }
     closeCategoryEditor();
+  };
+  const applyAdiMatch = (match: AdiCatalogMatch) => {
+    setDraftItem((current) => ({
+      ...current,
+      sku: match.sku,
+      name: match.name,
+      category: match.category,
+      unitPrice: match.unitPrice,
+      msrp: match.msrp,
+      vendor: match.vendor,
+      inventory: match.inventory,
+      notes: match.notes,
+    }));
   };
   const addDraftItem = () => {
     setItems((current) => [
@@ -969,6 +1082,34 @@ function ItemsPage({
                 <span>SKU</span>
                 <input className="input" value={draftItem.sku} onChange={(event) => setDraftItem((current) => ({ ...current, sku: event.target.value }))} placeholder="SKU" />
               </label>
+              {adiMatches.length ? (
+                <div className="grid gap-2 rounded-lg border border-teal-200 bg-teal-50 p-3 md:col-span-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-black text-teal-950">Possible ADI match</p>
+                      <p className="text-xs font-medium text-teal-900">Trying to add one of these items?</p>
+                    </div>
+                    <span className="rounded-full bg-white px-2 py-1 text-xs font-black text-teal-900">Fuzzy search</span>
+                  </div>
+                  <div className="grid gap-2 md:grid-cols-3">
+                    {adiMatches.map((match) => (
+                      <button
+                        key={match.sku}
+                        type="button"
+                        className="grid grid-cols-[76px_minmax(0,1fr)] gap-3 rounded-lg border border-teal-100 bg-white p-2 text-left transition hover:border-teal-700 hover:shadow-sm"
+                        onClick={() => applyAdiMatch(match)}
+                      >
+                        <img className="h-16 w-20 rounded-md border border-stone-200 object-cover" src={match.imageUrl} alt={match.name} />
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-black text-stone-950">{match.name}</span>
+                          <span className="mt-1 block font-mono text-xs text-stone-500">{match.sku}</span>
+                          <span className="mt-1 block text-xs font-bold text-stone-700">MSRP {money.format(match.msrp ?? 0)} / {match.matchScore}% match</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
               <label className="field">
                 <span>Category</span>
                 {itemCategoryOptions.length ? (
