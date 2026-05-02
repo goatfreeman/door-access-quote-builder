@@ -776,7 +776,10 @@ function ItemsPage({
   });
   const [addItemOpen, setAddItemOpen] = useState(false);
   const [deleteItem, setDeleteItem] = useState<CatalogItem | null>(null);
+  const [draftCustomCategory, setDraftCustomCategory] = useState(false);
+  const [customCategoryItemId, setCustomCategoryItemId] = useState<string | null>(null);
   const categories = useMemo(() => ["All", ...Array.from(new Set([...defaultCategories, ...items.map((item) => item.category).filter(Boolean)])).sort((a, b) => a.localeCompare(b))], [items]);
+  const itemCategoryOptions = categories.filter((option) => option !== "All");
   const sortedItems = useMemo(() => {
     return items
       .filter((item) => categoryFilter === "All" || item.category === categoryFilter)
@@ -813,6 +816,7 @@ function ItemsPage({
       inventory: 0,
       notes: "",
     });
+    setDraftCustomCategory(false);
     setAddItemOpen(false);
   };
   return (
@@ -866,7 +870,27 @@ function ItemsPage({
               </label>
               <label className="field">
                 <span>Category</span>
-                <input className="input" list="item-category-options" value={item.category} onChange={(event) => updateItem(item.id, { category: event.target.value })} placeholder="Type or choose a category" />
+                <select
+                  className="input"
+                  value={customCategoryItemId === item.id ? "__new__" : item.category}
+                  onChange={(event) => {
+                    if (event.target.value === "__new__") {
+                      setCustomCategoryItemId(item.id);
+                      updateItem(item.id, { category: "" });
+                      return;
+                    }
+                    setCustomCategoryItemId(null);
+                    updateItem(item.id, { category: event.target.value });
+                  }}
+                >
+                  {itemCategoryOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                  <option value="__new__">Add new category</option>
+                </select>
+                {customCategoryItemId === item.id ? <input className="input" value={item.category} onChange={(event) => updateItem(item.id, { category: event.target.value })} placeholder="New category name" /> : null}
               </label>
               <label className="field">
                 <span>Unit price</span>
@@ -889,13 +913,6 @@ function ItemsPage({
             </div>
           </details>
         ))}
-        <datalist id="item-category-options">
-          {categories
-            .filter((option) => option !== "All")
-            .map((option) => (
-              <option key={option} value={option} />
-            ))}
-        </datalist>
       </div>
       {addItemOpen ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onClick={() => setAddItemOpen(false)}>
@@ -920,8 +937,27 @@ function ItemsPage({
               </label>
               <label className="field">
                 <span>Category</span>
-                <input className="input" list="item-category-options" value={draftItem.category} onChange={(event) => setDraftItem((current) => ({ ...current, category: event.target.value }))} placeholder="Type or choose a category" />
-                <small className="text-xs font-medium text-stone-500">Choose a preset or type a new category.</small>
+                <select
+                  className="input"
+                  value={draftCustomCategory ? "__new__" : draftItem.category}
+                  onChange={(event) => {
+                    if (event.target.value === "__new__") {
+                      setDraftCustomCategory(true);
+                      setDraftItem((current) => ({ ...current, category: "" }));
+                      return;
+                    }
+                    setDraftCustomCategory(false);
+                    setDraftItem((current) => ({ ...current, category: event.target.value }));
+                  }}
+                >
+                  {itemCategoryOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                  <option value="__new__">Add new category</option>
+                </select>
+                {draftCustomCategory ? <input className="input" value={draftItem.category} onChange={(event) => setDraftItem((current) => ({ ...current, category: event.target.value }))} placeholder="New category name" /> : null}
               </label>
               <label className="field">
                 <span>Unit price</span>
