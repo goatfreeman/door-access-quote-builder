@@ -1191,15 +1191,15 @@ function TemplateCard({
   };
 
   return (
-    <article className="relative rounded-lg border border-stone-200 bg-stone-50 p-4">
+    <article className="relative rounded-lg border border-stone-200 bg-stone-50 p-4 pt-12">
       <button
-        className="absolute right-3 top-3 inline-grid size-8 place-items-center rounded-full border border-transparent text-stone-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-800"
+        className="absolute right-3 top-3 z-10 inline-grid size-8 place-items-center rounded-full border border-transparent bg-stone-50 text-stone-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-800"
         onClick={() => onDeleteTemplate(template)}
         aria-label={`Delete ${template.name || "template"}`}
       >
         <X size={16} />
       </button>
-      <input className="input pr-10 font-black" value={template.name} onChange={(event) => updateTemplate({ name: event.target.value })} />
+      <input className="input font-black" value={template.name} onChange={(event) => updateTemplate({ name: event.target.value })} />
       <textarea className="textarea mt-3" value={template.description} onChange={(event) => updateTemplate({ description: event.target.value })} placeholder="Template description" />
       <div className="mt-3 grid gap-2">
         {template.lines.map((line) => {
