@@ -5,6 +5,11 @@ import { MongoClient } from "mongodb";
 import { parseCatalogItemsCsv } from "@/lib/item-csv";
 
 type Collection = "items" | "templates" | "quotes" | "settings";
+type StoreDocument = {
+  _id: Collection;
+  value?: unknown;
+  updatedAt?: Date;
+};
 
 const collections = new Set<Collection>(["items", "templates", "quotes", "settings"]);
 const databaseName = process.env.MONGODB_DB ?? "quick_quote_builder";
@@ -38,7 +43,7 @@ export async function writeCollection(collection: Collection, value: unknown) {
     return;
   }
 
-  await database.collection(collection).updateOne({ _id: collection }, { $set: { value, updatedAt: new Date() } }, { upsert: true });
+  await database.collection<StoreDocument>(collection).updateOne({ _id: collection }, { $set: { value, updatedAt: new Date() } }, { upsert: true });
 }
 
 async function readStoredValue(collection: Collection) {
@@ -49,7 +54,7 @@ async function readStoredValue(collection: Collection) {
     return value === undefined ? null : value;
   }
 
-  const document = await database.collection<{ _id: string; value?: unknown }>(collection).findOne({ _id: collection });
+  const document = await database.collection<StoreDocument>(collection).findOne({ _id: collection });
   return document?.value ?? null;
 }
 
