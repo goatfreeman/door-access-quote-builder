@@ -26,6 +26,8 @@ type View = "quote" | "items" | "templates" | "previous" | "settings";
 type QuoteStep = "pick" | "customize" | "review" | "finalize";
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+const appStage = process.env.NEXT_PUBLIC_APP_STAGE ?? "development";
+const isProductionStage = appStage.toLowerCase() === "production";
 const STORAGE_KEYS = {
   items: "qqb.cache.items.v1",
   templates: "qqb.cache.templates.v1",
@@ -292,7 +294,10 @@ export function QuickQuoteBuilder() {
               Q
             </button>
             <button className="min-w-0 text-left" onClick={goToQuote} aria-label="Go to quote page">
-              <h1 className="truncate text-lg font-black leading-tight sm:text-2xl">Quick Quote Builder</h1>
+              <span className="flex min-w-0 flex-wrap items-center gap-2">
+                <h1 className="truncate text-lg font-black leading-tight sm:text-2xl">Quick Quote Builder</h1>
+                {!isProductionStage ? <span className="rounded-full border border-amber-300 bg-amber-100 px-2 py-1 text-xs font-black uppercase tracking-normal text-amber-900">Dev Build</span> : null}
+              </span>
               <p className="hidden text-sm text-stone-600 sm:block">Quote equipment, labor, templates, and saved jobs.</p>
             </button>
           </div>

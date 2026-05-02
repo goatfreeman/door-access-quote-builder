@@ -36,9 +36,12 @@ Add these environment variables in Vercel for persistent NoSQL storage:
 ```text
 UPSTASH_REDIS_REST_URL=...
 UPSTASH_REDIS_REST_TOKEN=...
+NEXT_PUBLIC_APP_STAGE=development
 ```
 
 Without those variables, the app uses a temporary in-memory fallback for setup only. Production persistence needs the NoSQL env vars.
+
+The UI shows a `Dev Build` badge unless `NEXT_PUBLIC_APP_STAGE` is set to `production`.
 
 ## Future Database and Integrations
 
