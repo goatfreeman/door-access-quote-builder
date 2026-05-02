@@ -20,7 +20,6 @@ import {
 import type { Dispatch, SetStateAction } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { loadCatalogItemsFromCsv } from "@/lib/item-csv";
-import { seedTemplates } from "@/lib/seed-data";
 import type { CatalogItem, QuoteLine, QuoteMeta, QuoteTemplate, SavedQuote, ServiceTitanSettings } from "@/lib/types";
 
 type View = "quote" | "items" | "templates" | "previous" | "settings";
@@ -29,7 +28,8 @@ type QuoteStep = "pick" | "customize" | "review" | "finalize";
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const STORAGE_KEYS = {
   items: "qqb.items.csv.v1",
-  templates: "qqb.templates.v2",
+  itemsInitialized: "qqb.items.initialized.v1",
+  templates: "qqb.templates.empty.v1",
   quotes: "qqb.quotes.v2",
   settings: "qqb.settings.v2",
 };
@@ -63,6 +63,10 @@ function writeStorage<T>(key: string, value: T) {
   if (typeof window !== "undefined") window.localStorage.setItem(key, JSON.stringify(value));
 }
 
+function markStorageInitialized(key: string) {
+  if (typeof window !== "undefined") window.localStorage.setItem(key, "true");
+}
+
 function isLabor(line: QuoteLine) {
   return line.sku.toLowerCase().startsWith("lab-") || line.name.toLowerCase().includes("labor");
 }
@@ -73,7 +77,7 @@ export function QuickQuoteBuilder() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
   const [items, setItems] = useState<CatalogItem[]>([]);
-  const [templates, setTemplates] = useState<QuoteTemplate[]>(seedTemplates);
+  const [templates, setTemplates] = useState<QuoteTemplate[]>([]);
   const [quotes, setQuotes] = useState<SavedQuote[]>([]);
   const [settings, setSettings] = useState<ServiceTitanSettings>({
     baseUrl: "",
@@ -95,19 +99,26 @@ export function QuickQuoteBuilder() {
 
   useEffect(() => {
     let cancelled = false;
+    const itemsInitialized = readStorage(STORAGE_KEYS.itemsInitialized, false);
     const storedItems = readStorage<CatalogItem[]>(STORAGE_KEYS.items, []);
-    if (storedItems.length) {
+    if (itemsInitialized) {
       setItems(storedItems);
     } else {
       loadCatalogItemsFromCsv()
         .then((csvItems) => {
-          if (!cancelled) setItems(csvItems);
+          if (!cancelled) {
+            setItems(csvItems);
+            markStorageInitialized(STORAGE_KEYS.itemsInitialized);
+          }
         })
         .catch(() => {
-          if (!cancelled) setItems([]);
+          if (!cancelled) {
+            setItems([]);
+            markStorageInitialized(STORAGE_KEYS.itemsInitialized);
+          }
         });
     }
-    setTemplates(readStorage(STORAGE_KEYS.templates, seedTemplates));
+    setTemplates(readStorage(STORAGE_KEYS.templates, []));
     setQuotes(readStorage(STORAGE_KEYS.quotes, []));
     setSettings(readStorage(STORAGE_KEYS.settings, { baseUrl: "", tenantId: "", clientId: "", clientSecret: "" }));
     setHydrated(true);
@@ -208,6 +219,17 @@ export function QuickQuoteBuilder() {
 
   const updateLine = (lineId: string, patch: Partial<QuoteLine>) => {
     setLines((current) => current.map((line) => (line.lineId === lineId ? { ...line, ...patch } : line)));
+  };
+
+  const deleteItemEverywhere = (itemId: string) => {
+    setItems((current) => current.filter((item) => item.id !== itemId));
+    setTemplates((current) =>
+      current.map((template) => ({
+        ...template,
+        lines: template.lines.filter((line) => line.itemId !== itemId),
+      })),
+    );
+    setLines((current) => current.filter((line) => line.itemId !== itemId));
   };
 
   const saveQuote = () => {
@@ -365,7 +387,7 @@ export function QuickQuoteBuilder() {
           </>
         ) : null}
 
-        {view === "items" ? <ItemsPage items={items} setItems={setItems} /> : null}
+        {view === "items" ? <ItemsPage items={items} setItems={setItems} onDeleteItem={deleteItemEverywhere} /> : null}
         {view === "templates" ? <TemplatesPage templates={templates} items={items} setTemplates={setTemplates} onAddTemplate={addTemplate} /> : null}
         {view === "previous" ? <PreviousQuotes quotes={quotes} selectedQuote={selectedQuote} setSelectedQuote={setSelectedQuote} onEdit={loadQuoteForEdit} setQuotes={setQuotes} /> : null}
         {view === "settings" ? <SettingsPage settings={settings} setSettings={setSettings} onSync={syncServiceTitan} /> : null}
@@ -727,7 +749,15 @@ function SummaryRow({ label, value }: { label: string; value: number }) {
   );
 }
 
-function ItemsPage({ items, setItems }: { items: CatalogItem[]; setItems: Dispatch<SetStateAction<CatalogItem[]>> }) {
+function ItemsPage({
+  items,
+  setItems,
+  onDeleteItem,
+}: {
+  items: CatalogItem[];
+  setItems: Dispatch<SetStateAction<CatalogItem[]>>;
+  onDeleteItem: (itemId: string) => void;
+}) {
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [sortMode, setSortMode] = useState<"category" | "name" | "price">("category");
   const [draftItem, setDraftItem] = useState<Omit<CatalogItem, "id">>({
@@ -755,7 +785,7 @@ function ItemsPage({ items, setItems }: { items: CatalogItem[]; setItems: Dispat
   }, [categoryFilter, items, sortMode]);
   const updateItem = (id: string, patch: Partial<CatalogItem>) => setItems((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
   const confirmDeleteItem = (id: string) => {
-    setItems((current) => current.filter((item) => item.id !== id));
+    onDeleteItem(id);
     setDeleteItem(null);
   };
   const addDraftItem = () => {
