@@ -1086,6 +1086,13 @@ function TemplatesPage({
   setTemplates: Dispatch<SetStateAction<QuoteTemplate[]>>;
   onAddTemplate: (template: QuoteTemplate) => void;
 }) {
+  const [deleteTemplate, setDeleteTemplate] = useState<QuoteTemplate | null>(null);
+  const confirmDeleteTemplate = () => {
+    if (!deleteTemplate) return;
+    setTemplates((current) => current.filter((template) => template.id !== deleteTemplate.id));
+    setDeleteTemplate(null);
+  };
+
   return (
     <section className="panel lg:col-span-2">
       <div className="panel-header">
@@ -1113,11 +1120,37 @@ function TemplatesPage({
       </div>
       <div className="grid gap-3 p-4 md:grid-cols-3">
         {templates.length ? (
-          templates.map((template) => <TemplateCard key={template.id} template={template} items={items} setTemplates={setTemplates} onAddTemplate={onAddTemplate} />)
+          templates.map((template) => (
+            <TemplateCard key={template.id} template={template} items={items} setTemplates={setTemplates} onAddTemplate={onAddTemplate} onDeleteTemplate={setDeleteTemplate} />
+          ))
         ) : (
           <div className="rounded-lg border border-dashed border-stone-300 bg-stone-50 p-8 text-center text-stone-500 md:col-span-3">No templates yet.</div>
         )}
       </div>
+      {deleteTemplate ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onClick={() => setDeleteTemplate(null)}>
+          <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-2xl font-black text-red-900">Delete template?</h3>
+                <p className="mt-2 text-sm text-stone-600">This removes {deleteTemplate.name || "this template"} from the template list.</p>
+              </div>
+              <button className="icon-button hover:border-red-700 hover:text-red-800" onClick={() => setDeleteTemplate(null)} aria-label="Cancel template delete">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button className="button-ghost" onClick={() => setDeleteTemplate(null)}>
+                Cancel
+              </button>
+              <button className="button-primary bg-red-700 hover:bg-red-800" onClick={confirmDeleteTemplate}>
+                <Trash2 size={16} />
+                Confirm delete
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -1127,11 +1160,13 @@ function TemplateCard({
   items,
   setTemplates,
   onAddTemplate,
+  onDeleteTemplate,
 }: {
   template: QuoteTemplate;
   items: CatalogItem[];
   setTemplates: Dispatch<SetStateAction<QuoteTemplate[]>>;
   onAddTemplate: (template: QuoteTemplate) => void;
+  onDeleteTemplate: (template: QuoteTemplate) => void;
 }) {
   const [selectedItemId, setSelectedItemId] = useState(items[0]?.id ?? "");
   useEffect(() => {
@@ -1156,8 +1191,15 @@ function TemplateCard({
   };
 
   return (
-    <article className="rounded-lg border border-stone-200 bg-stone-50 p-4">
-      <input className="input font-black" value={template.name} onChange={(event) => updateTemplate({ name: event.target.value })} />
+    <article className="relative rounded-lg border border-stone-200 bg-stone-50 p-4">
+      <button
+        className="absolute right-3 top-3 inline-grid size-8 place-items-center rounded-full border border-transparent text-stone-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-800"
+        onClick={() => onDeleteTemplate(template)}
+        aria-label={`Delete ${template.name || "template"}`}
+      >
+        <X size={16} />
+      </button>
+      <input className="input pr-10 font-black" value={template.name} onChange={(event) => updateTemplate({ name: event.target.value })} />
       <textarea className="textarea mt-3" value={template.description} onChange={(event) => updateTemplate({ description: event.target.value })} placeholder="Template description" />
       <div className="mt-3 grid gap-2">
         {template.lines.map((line) => {
