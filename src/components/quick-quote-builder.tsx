@@ -91,6 +91,12 @@ const emptyMeta: QuoteMeta = {
 
 const isView = (value: unknown): value is View => ["home", "quote", "items", "templates", "previous", "settings"].includes(String(value));
 const isQuoteStep = (value: unknown): value is QuoteStep => ["pick", "customize", "review", "finalize"].includes(String(value));
+const viewPath = (view: View) => (view === "home" ? "/" : `/${view}`);
+const viewFromPath = () => {
+  if (typeof window === "undefined") return null;
+  const segment = window.location.pathname.split("/").filter(Boolean)[0];
+  return isView(segment) ? segment : window.location.pathname === "/" ? "home" : null;
+};
 
 const adiCatalog: AdiCatalogMatch[] = [
   {
@@ -256,6 +262,8 @@ function totalsFromSavedQuote(quote: SavedQuote): QuoteTotals {
 
 export function QuickQuoteBuilder() {
   const [view, setView] = useState<View>(() => {
+    const pathView = viewFromPath();
+    if (pathView) return pathView;
     const session = readStorage<{ view?: unknown }>(STORAGE_KEYS.session, {});
     return isView(session.view) ? session.view : "home";
   });
@@ -294,6 +302,13 @@ export function QuickQuoteBuilder() {
   const activeItems = useMemo(() => items.filter((item) => !item.deletedAt), [items]);
   const activeQuotes = useMemo(() => quotes.filter((quote) => !quote.deletedAt), [quotes]);
 
+  const navigateToView = (nextView: View) => {
+    setView(nextView);
+    if (typeof window === "undefined") return;
+    const nextPath = viewPath(nextView);
+    if (window.location.pathname !== nextPath) window.history.pushState({ view: nextView }, "", nextPath);
+  };
+
   useEffect(() => {
     let cancelled = false;
 
@@ -327,6 +342,15 @@ export function QuickQuoteBuilder() {
   useEffect(() => {
     writeStorage(STORAGE_KEYS.session, { view, quoteStep });
   }, [quoteStep, view]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const pathView = viewFromPath();
+      if (pathView) setView(pathView);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   useEffect(() => {
     if (draftHydrated) {
@@ -545,7 +569,7 @@ export function QuickQuoteBuilder() {
     setQuoteSaveError("");
     setQuotes((current) => [saved, ...current]);
     setSelectedQuote(saved);
-    setView("previous");
+    navigateToView("previous");
     setLines([]);
     setMeta(emptyMeta);
     setQuoteStep("pick");
@@ -555,7 +579,7 @@ export function QuickQuoteBuilder() {
     setMeta(quote.meta);
     setLines(quote.lines);
     setSelectedQuote(null);
-    setView("quote");
+    navigateToView("quote");
     setQuoteStep("customize");
   };
 
@@ -589,14 +613,14 @@ export function QuickQuoteBuilder() {
   ];
 
   const goToQuote = () => {
-    setView("quote");
+    navigateToView("quote");
     setMenuOpen(false);
     setCartOpen(false);
     setNotificationOpen(false);
   };
 
   const goToHome = () => {
-    setView("home");
+    navigateToView("home");
     setMenuOpen(false);
     setCartOpen(false);
     setNotificationOpen(false);
@@ -623,7 +647,7 @@ export function QuickQuoteBuilder() {
           </div>
           <nav className="hidden items-center gap-2 md:flex">
             {nav.map((item) => (
-              <button key={item.id} className={`nav-button ${view === item.id ? "nav-button-active" : ""}`} onClick={() => setView(item.id)}>
+              <button key={item.id} className={`nav-button ${view === item.id ? "nav-button-active" : ""}`} onClick={() => navigateToView(item.id)}>
                 <item.icon size={16} />
                 {item.label}
               </button>
@@ -652,7 +676,7 @@ export function QuickQuoteBuilder() {
                 onRenamePackage={renamePackage}
                 onRemoveLine={(id) => setLines((current) => current.filter((line) => line.lineId !== id))}
                 onNext={() => {
-                  setView("quote");
+                  navigateToView("quote");
                   setQuoteStep("finalize");
                   setCartOpen(false);
                 }}
@@ -686,7 +710,7 @@ export function QuickQuoteBuilder() {
         </div>
       </header>
 
-      {menuOpen ? <MobileMenu nav={nav} view={view} setView={setView} goToQuote={goToQuote} close={() => setMenuOpen(false)} /> : null}
+      {menuOpen ? <MobileMenu nav={nav} view={view} setView={navigateToView} goToQuote={goToQuote} close={() => setMenuOpen(false)} /> : null}
 
       <section className={`mx-auto grid max-w-7xl gap-4 px-4 py-4 ${view === "quote" && quoteStep !== "finalize" ? "lg:grid-cols-[320px_minmax(0,1fr)]" : ""}`}>
         {view === "home" ? <HomePage meta={meta} lines={activeLines} total={totals.total} onContinue={goToQuote} /> : null}
@@ -927,14 +951,7 @@ function CartDropdown({
               <details key={row.packageName} className="group min-w-0 overflow-hidden rounded-lg border border-stone-200 bg-stone-50 p-3">
                 <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto] items-start gap-2 [&::-webkit-details-marker]:hidden">
                   <div className="min-w-0">
-                    <input
-                      className="w-full min-w-0 truncate rounded-md border border-transparent bg-transparent py-1 font-black text-stone-950 outline-none transition focus:border-teal-300 focus:bg-white focus:px-2"
-                      value={row.packageName}
-                      onChange={(event) => onRenamePackage(row.packageName, event.target.value)}
-                      onClick={(event) => event.stopPropagation()}
-                      onKeyDown={(event) => event.stopPropagation()}
-                      aria-label={`Rename ${row.packageName}`}
-                    />
+                    <p className="truncate font-black text-stone-950">{row.packageName}</p>
                   </div>
                   <button
                     className="grid size-8 place-items-center rounded-full text-stone-500 hover:bg-red-50 hover:text-red-800"
