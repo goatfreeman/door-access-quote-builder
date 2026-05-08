@@ -37,6 +37,7 @@ export type QuoteLine = {
 export type QuoteMeta = {
   customer: string;
   project: string;
+  location?: string;
   email: string;
   quoteNumber: string;
   marginPercent: number;

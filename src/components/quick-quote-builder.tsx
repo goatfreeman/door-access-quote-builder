@@ -58,10 +58,14 @@ type TemplateRequirement = {
   terms: string[];
 };
 type ExportQuoteFormat = "print" | "pdf" | "excel";
+type RecoverySort = "recent" | "name";
+type PermanentDeleteTarget = { kind: "item"; id: string; label: string } | { kind: "quote"; id: string; label: string };
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const appStage = process.env.NEXT_PUBLIC_APP_STAGE ?? "development";
 const isProductionStage = appStage.toLowerCase() === "production";
+const recoveryRetentionDays = 30;
+const dayInMs = 24 * 60 * 60 * 1000;
 const STORAGE_KEYS = {
   items: "qqb.cache.items.v1",
   templates: "qqb.cache.templates.v1",
@@ -74,6 +78,7 @@ const STORAGE_KEYS = {
 const emptyMeta: QuoteMeta = {
   customer: "",
   project: "",
+  location: "",
   email: "",
   quoteNumber: "QQ-1001",
   marginPercent: 18,
@@ -166,6 +171,24 @@ function readStorage<T>(key: string, fallback: T): T {
 
 function writeStorage<T>(key: string, value: T) {
   if (typeof window !== "undefined") window.localStorage.setItem(key, JSON.stringify(value));
+}
+
+function daysUntilRecoveryPurge(deletedAt?: string) {
+  if (!deletedAt) return recoveryRetentionDays;
+  const deletedTime = new Date(deletedAt).getTime();
+  if (Number.isNaN(deletedTime)) return recoveryRetentionDays;
+  return Math.max(0, Math.ceil((deletedTime + recoveryRetentionDays * dayInMs - Date.now()) / dayInMs));
+}
+
+function shouldPurgeRecoveredRecord(deletedAt?: string) {
+  return Boolean(deletedAt && daysUntilRecoveryPurge(deletedAt) <= 0);
+}
+
+function recoveryUrgencyClasses(daysRemaining: number) {
+  if (daysRemaining <= 3) return "border-red-300 bg-red-100 text-red-950";
+  if (daysRemaining <= 7) return "border-red-200 bg-red-50 text-red-900";
+  if (daysRemaining <= 14) return "border-amber-200 bg-amber-50 text-amber-900";
+  return "border-stone-200 bg-white text-stone-950";
 }
 
 function isLabor(line: QuoteLine) {
@@ -313,6 +336,12 @@ export function QuickQuoteBuilder() {
       setQuoteSaveError("");
     }
   }, [meta.customer, meta.project, quoteSaveError]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    setItems((current) => current.filter((item) => !shouldPurgeRecoveredRecord(item.deletedAt)));
+    setQuotes((current) => current.filter((quote) => !shouldPurgeRecoveredRecord(quote.deletedAt)));
+  }, [hydrated]);
 
   useEffect(() => {
     let cancelled = false;
@@ -463,6 +492,7 @@ export function QuickQuoteBuilder() {
         ...meta,
         customer: meta.customer.trim(),
         project: meta.project.trim(),
+        location: meta.location?.trim() ?? "",
       },
       lines,
       total: totals.total,
@@ -735,6 +765,7 @@ function PrintQuoteDocument({ quote }: { quote: PrintableQuote }) {
         <div>
           <p className="print-label">Project</p>
           <p>{quote.meta.project || "Project name"}</p>
+          {quote.meta.location ? <p>{quote.meta.location}</p> : null}
         </div>
       </div>
       <table className="print-table">
@@ -1137,6 +1168,10 @@ function FinalizePanel({
           <input className="input" value={meta.project} onChange={(event) => setMeta((current) => ({ ...current, project: event.target.value }))} />
         </label>
         <label className="field">
+          <span>Location</span>
+          <input className="input" value={meta.location ?? ""} onChange={(event) => setMeta((current) => ({ ...current, location: event.target.value }))} />
+        </label>
+        <label className="field">
           <span>Quote number</span>
           <input className="input" value={meta.quoteNumber} onChange={(event) => setMeta((current) => ({ ...current, quoteNumber: event.target.value }))} />
         </label>
@@ -1223,6 +1258,7 @@ function exportQuote(quote: SavedQuote, format: ExportQuoteFormat) {
     ["Quote", quote.meta.quoteNumber],
     ["Customer", quote.meta.customer],
     ["Project", quote.meta.project],
+    ["Location", quote.meta.location ?? ""],
     ["Created", new Date(quote.createdAt).toLocaleString()],
     [],
     ["Item", "SKU", "Package", "Quantity", "Unit Price", "Line Total", "Notes"],
@@ -2020,6 +2056,15 @@ function PreviousQuotes({
 }) {
   const [deleteQuote, setDeleteQuote] = useState<SavedQuote | null>(null);
   const [printMenuOpen, setPrintMenuOpen] = useState(false);
+  const [quoteSearch, setQuoteSearch] = useState("");
+  const visibleQuotes = useMemo(() => {
+    const query = normalizeSearchValue(quoteSearch);
+    if (!query) return quotes;
+    return quotes.filter((quote) => {
+      const searchable = normalizeSearchValue(`${quote.meta.customer} ${quote.meta.project} ${quote.meta.location ?? ""} ${quote.meta.quoteNumber} ${quote.lines.map((line) => `${line.name} ${line.sku}`).join(" ")}`);
+      return searchable.includes(query);
+    });
+  }, [quoteSearch, quotes]);
   const confirmDeleteQuote = () => {
     if (!deleteQuote) return;
     const deletedAt = new Date().toISOString();
@@ -2038,17 +2083,19 @@ function PreviousQuotes({
           </div>
         </div>
         <div className="grid gap-2 p-4">
-          {quotes.length ? (
-            quotes.map((quote) => (
+          <input className="input" value={quoteSearch} onChange={(event) => setQuoteSearch(event.target.value)} placeholder="Search customer, project, location, quote, or item" />
+          {visibleQuotes.length ? (
+            visibleQuotes.map((quote) => (
               <button key={quote.id} className={`rounded-lg border p-3 text-left ${selectedQuote?.id === quote.id ? "border-teal-700 bg-teal-50" : "border-stone-200 bg-white"}`} onClick={() => setSelectedQuote(quote)}>
                 <p className="font-black">{quote.meta.customer || "Unnamed customer"}</p>
                 <p className="text-sm text-stone-600">{new Date(quote.createdAt).toLocaleDateString()} · {quote.meta.quoteNumber}</p>
                 {quote.meta.project ? <p className="text-sm font-bold text-stone-700">{quote.meta.project}</p> : null}
+                {quote.meta.location ? <p className="text-sm text-stone-600">{quote.meta.location}</p> : null}
                 <p className="mt-2 font-black">{money.format(quote.total)}</p>
               </button>
             ))
           ) : (
-            <p className="rounded-lg border border-dashed border-stone-300 p-6 text-center text-stone-500">No saved quotes yet.</p>
+            <p className="rounded-lg border border-dashed border-stone-300 p-6 text-center text-stone-500">{quotes.length ? "No quotes match that search." : "No saved quotes yet."}</p>
           )}
         </div>
       </div>
@@ -2066,6 +2113,7 @@ function PreviousQuotes({
                 <p className="font-black">{selectedQuote.meta.customer || "Unnamed customer"}</p>
                 <p className="text-sm text-stone-600">Quote {selectedQuote.meta.quoteNumber} · Quoted {new Date(selectedQuote.createdAt).toLocaleString()}</p>
                 {selectedQuote.meta.project ? <p className="mt-1 text-sm font-bold text-stone-700">{selectedQuote.meta.project}</p> : null}
+                {selectedQuote.meta.location ? <p className="text-sm text-stone-600">{selectedQuote.meta.location}</p> : null}
               </div>
               <div className="grid gap-2">
                 {selectedQuote.lines.map((line) => (
@@ -2173,6 +2221,9 @@ function SettingsPage({
   const [activeSection, setActiveSection] = useState<SettingsSection>("account");
   const [databaseStatus, setDatabaseStatus] = useState<DatabaseStatus | null>(null);
   const [syncConfirmOpen, setSyncConfirmOpen] = useState(false);
+  const [recoverySearch, setRecoverySearch] = useState("");
+  const [recoverySort, setRecoverySort] = useState<RecoverySort>("recent");
+  const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<PermanentDeleteTarget | null>(null);
   const sections: { id: SettingsSection; label: string }[] = [
     { id: "account", label: "Account Info" },
     { id: "database", label: "Database" },
@@ -2181,8 +2232,24 @@ function SettingsPage({
     { id: "sync", label: "Sync" },
     { id: "recovery", label: "Admin Recovery" },
   ];
-  const deletedItems = items.filter((item) => item.deletedAt);
-  const deletedQuotes = quotes.filter((quote) => quote.deletedAt);
+  const deletedItems = useMemo(() => {
+    const query = normalizeSearchValue(recoverySearch);
+    const filtered = items.filter((item) => {
+      if (!item.deletedAt) return false;
+      if (!query) return true;
+      return normalizeSearchValue(`${item.name} ${item.sku} ${item.category} ${item.vendor ?? ""}`).includes(query);
+    });
+    return [...filtered].sort((a, b) => (recoverySort === "name" ? a.name.localeCompare(b.name) : new Date(b.deletedAt ?? 0).getTime() - new Date(a.deletedAt ?? 0).getTime()));
+  }, [items, recoverySearch, recoverySort]);
+  const deletedQuotes = useMemo(() => {
+    const query = normalizeSearchValue(recoverySearch);
+    const filtered = quotes.filter((quote) => {
+      if (!quote.deletedAt) return false;
+      if (!query) return true;
+      return normalizeSearchValue(`${quote.meta.customer} ${quote.meta.project} ${quote.meta.location ?? ""} ${quote.meta.quoteNumber}`).includes(query);
+    });
+    return [...filtered].sort((a, b) => (recoverySort === "name" ? (a.meta.customer || a.meta.project || a.meta.quoteNumber).localeCompare(b.meta.customer || b.meta.project || b.meta.quoteNumber) : new Date(b.deletedAt ?? 0).getTime() - new Date(a.deletedAt ?? 0).getTime()));
+  }, [quotes, recoverySearch, recoverySort]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2208,6 +2275,15 @@ function SettingsPage({
   const recoverQuote = (quoteId: string) => {
     const updatedAt = new Date().toISOString();
     setQuotes((current) => current.map((quote) => (quote.id === quoteId ? { ...quote, deletedAt: undefined, updatedAt } : quote)));
+  };
+  const confirmPermanentDelete = () => {
+    if (!permanentDeleteTarget) return;
+    if (permanentDeleteTarget.kind === "item") {
+      setItems((current) => current.filter((item) => item.id !== permanentDeleteTarget.id));
+    } else {
+      setQuotes((current) => current.filter((quote) => quote.id !== permanentDeleteTarget.id));
+    }
+    setPermanentDeleteTarget(null);
   };
 
   return (
@@ -2308,20 +2384,44 @@ function SettingsPage({
             </section>
           ) : null}
           {activeSection === "recovery" ? (
-            <section className="grid gap-4 rounded-lg border border-stone-200 bg-stone-50 p-4 lg:grid-cols-2">
+            <section className="grid gap-4 rounded-lg border border-stone-200 bg-stone-50 p-4">
               <div>
+                <h3 className="font-black">Admin Recovery</h3>
+                <p className="mt-1 text-sm text-stone-600">Deleted records self-purge after 30 days. Permanent delete cannot be recovered.</p>
+              </div>
+              <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
+                <input className="input" value={recoverySearch} onChange={(event) => setRecoverySearch(event.target.value)} placeholder="Search deleted quotes or items" />
+                <select className="input" value={recoverySort} onChange={(event) => setRecoverySort(event.target.value as RecoverySort)}>
+                  <option value="recent">Most recent</option>
+                  <option value="name">Name</option>
+                </select>
+              </div>
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div>
                 <h3 className="font-black">Deleted Quotes</h3>
                 <div className="mt-3 grid gap-2">
                   {deletedQuotes.length ? (
-                    deletedQuotes.map((quote) => (
-                      <div key={quote.id} className="rounded-lg border border-stone-200 bg-white p-3">
-                        <p className="font-bold">{quote.meta.customer || "Unnamed customer"}</p>
+                    deletedQuotes.map((quote) => {
+                      const daysRemaining = daysUntilRecoveryPurge(quote.deletedAt);
+                      return (
+                      <div key={quote.id} className={`relative rounded-lg border p-3 ${recoveryUrgencyClasses(daysRemaining)}`}>
+                        <span className="absolute right-3 top-3 rounded-full bg-white/80 px-2 py-1 text-xs font-black">{daysRemaining}d left</span>
+                        <p className="pr-20 font-bold">{quote.meta.customer || "Unnamed customer"}</p>
+                        <p className="text-sm font-semibold">{quote.meta.project || quote.meta.quoteNumber}</p>
+                        {quote.meta.location ? <p className="text-xs text-stone-600">{quote.meta.location}</p> : null}
                         <p className="text-xs text-stone-600">Deleted {quote.deletedAt ? new Date(quote.deletedAt).toLocaleString() : "recently"}</p>
-                        <button className="button-secondary mt-2 min-h-9" onClick={() => recoverQuote(quote.id)}>
-                          Recover
-                        </button>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <button className="button-secondary min-h-9" onClick={() => recoverQuote(quote.id)}>
+                            Recover
+                          </button>
+                          <button className="button-ghost min-h-9 text-red-800 hover:bg-red-50" onClick={() => setPermanentDeleteTarget({ kind: "quote", id: quote.id, label: quote.meta.customer || quote.meta.quoteNumber })}>
+                            <Trash2 size={16} />
+                            Delete
+                          </button>
+                        </div>
                       </div>
-                    ))
+                      );
+                    })
                   ) : (
                     <p className="rounded-lg border border-dashed border-stone-300 bg-white p-4 text-sm text-stone-500">No deleted quotes.</p>
                   )}
@@ -2331,19 +2431,31 @@ function SettingsPage({
                 <h3 className="font-black">Deleted Items</h3>
                 <div className="mt-3 grid gap-2">
                   {deletedItems.length ? (
-                    deletedItems.map((item) => (
-                      <div key={item.id} className="rounded-lg border border-stone-200 bg-white p-3">
-                        <p className="font-bold">{item.name}</p>
+                    deletedItems.map((item) => {
+                      const daysRemaining = daysUntilRecoveryPurge(item.deletedAt);
+                      return (
+                      <div key={item.id} className={`relative rounded-lg border p-3 ${recoveryUrgencyClasses(daysRemaining)}`}>
+                        <span className="absolute right-3 top-3 rounded-full bg-white/80 px-2 py-1 text-xs font-black">{daysRemaining}d left</span>
+                        <p className="pr-20 font-bold">{item.name}</p>
                         <p className="font-mono text-xs text-stone-600">{item.sku}</p>
-                        <button className="button-secondary mt-2 min-h-9" onClick={() => recoverItem(item.id)}>
-                          Recover
-                        </button>
+                        <p className="text-xs text-stone-600">Deleted {item.deletedAt ? new Date(item.deletedAt).toLocaleString() : "recently"}</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <button className="button-secondary min-h-9" onClick={() => recoverItem(item.id)}>
+                            Recover
+                          </button>
+                          <button className="button-ghost min-h-9 text-red-800 hover:bg-red-50" onClick={() => setPermanentDeleteTarget({ kind: "item", id: item.id, label: item.name })}>
+                            <Trash2 size={16} />
+                            Delete
+                          </button>
+                        </div>
                       </div>
-                    ))
+                      );
+                    })
                   ) : (
                     <p className="rounded-lg border border-dashed border-stone-300 bg-white p-4 text-sm text-stone-500">No deleted items.</p>
                   )}
                 </div>
+              </div>
               </div>
             </section>
           ) : null}
@@ -2367,6 +2479,30 @@ function SettingsPage({
               </button>
               <button className="button-primary" onClick={confirmSync}>
                 Sync Now
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {permanentDeleteTarget ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onClick={() => setPermanentDeleteTarget(null)}>
+          <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-2xl font-black text-red-900">Permanently delete?</h3>
+                <p className="mt-2 text-sm text-stone-600">This permanently deletes {permanentDeleteTarget.label}. It cannot be recovered after this action.</p>
+              </div>
+              <button className="icon-button" onClick={() => setPermanentDeleteTarget(null)} aria-label="Cancel permanent delete">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button className="button-ghost" onClick={() => setPermanentDeleteTarget(null)}>
+                Cancel
+              </button>
+              <button className="button-primary bg-red-700 hover:bg-red-800" onClick={confirmPermanentDelete}>
+                <Trash2 size={16} />
+                Delete forever
               </button>
             </div>
           </div>
