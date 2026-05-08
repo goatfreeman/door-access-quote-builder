@@ -649,6 +649,7 @@ export function QuickQuoteBuilder() {
                   setQuoteStep("finalize");
                   setCartOpen(false);
                 }}
+                onClose={() => setCartOpen(false)}
               />
             </details>
             <div ref={notificationRef} className="relative">
@@ -867,20 +868,27 @@ function CartDropdown({
   onUpdateLine,
   onRemoveLine,
   onNext,
+  onClose,
 }: {
   lines: QuoteLine[];
   totals: QuoteTotals;
   onUpdateLine: (lineId: string, patch: Partial<QuoteLine>) => void;
   onRemoveLine: (lineId: string) => void;
   onNext: () => void;
+  onClose: () => void;
 }) {
   return (
-    <div className="absolute right-0 top-12 z-50 grid max-h-[calc(100vh-7rem)] w-[min(390px,calc(100vw-1.5rem))] gap-3 overflow-auto rounded-lg border border-stone-200 bg-white p-4 shadow-2xl">
+    <div className="fixed inset-0 z-50 grid grid-rows-[auto_minmax(0,1fr)_auto_auto] gap-3 overflow-hidden rounded-none border border-stone-200 bg-white p-4 shadow-2xl md:absolute md:inset-auto md:right-0 md:top-12 md:max-h-[calc(100vh-7rem)] md:w-[min(390px,calc(100vw-1.5rem))] md:grid-rows-none md:overflow-auto md:rounded-lg">
       <div className="flex items-center justify-between">
-        <p className="font-black">Shopping cart</p>
-        <p className="text-sm text-stone-500">{lines.length} lines</p>
+        <div>
+          <p className="font-black">Shopping cart</p>
+          <p className="text-sm text-stone-500">{lines.length} lines</p>
+        </div>
+        <button className="icon-button md:hidden" onClick={onClose} aria-label="Close shopping cart">
+          <X size={18} />
+        </button>
       </div>
-      <div className="grid gap-2">
+      <div className="grid content-start gap-2 overflow-auto pr-1 md:overflow-visible md:pr-0">
         {lines.length ? (
           lines.map((line) => (
             <div key={line.lineId} className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3">
@@ -898,7 +906,7 @@ function CartDropdown({
                 </div>
               </div>
               <button
-                className="grid size-8 translate-x-2 place-items-center rounded-full text-stone-400 opacity-0 transition duration-200 hover:bg-red-50 hover:text-red-800 group-hover:translate-x-0 group-hover:opacity-100"
+                className="grid size-8 place-items-center rounded-full text-stone-500 opacity-100 transition duration-200 hover:bg-red-50 hover:text-red-800 md:translate-x-2 md:text-stone-400 md:opacity-0 md:group-hover:translate-x-0 md:group-hover:opacity-100"
                 onClick={() => onRemoveLine(line.lineId)}
                 aria-label={`Remove ${line.name}`}
               >
