@@ -96,10 +96,10 @@ const quoteSlugFromPath = () => {
   const [, viewSegment, slug] = window.location.pathname.split("/");
   return viewSegment === "previous" || viewSegment === "client" ? slug ?? "" : "";
 };
-const findQuoteBySlug = (quotes: SavedQuote[], slug: string) => quotes.find((quote) => quote.id === slug) ?? null;
+const findQuoteByShareToken = (quotes: SavedQuote[], token: string) => quotes.find((quote) => quote.shareToken === token) ?? null;
 const viewPath = (view: View, quote?: SavedQuote) => {
   if (view === "home") return "/";
-  if ((view === "previous" || view === "client") && quote) return `/${view}/${quote.id}`;
+  if ((view === "previous" || view === "client") && quote?.shareToken) return `/${view}/${quote.shareToken}`;
   return `/${view}`;
 };
 const viewFromPath = () => {
@@ -175,6 +175,8 @@ const makeId = (prefix: string) => {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return `${prefix}-${crypto.randomUUID()}`;
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 };
+
+const makeShareToken = () => makeId("share");
 
 function readStorage<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -315,7 +317,7 @@ export function QuickQuoteBuilder() {
 
   const navigateToView = (nextView: View, quote?: SavedQuote) => {
     setView(nextView);
-    setRouteQuoteSlug(quote ? quote.id : "");
+    setRouteQuoteSlug(quote?.shareToken ?? "");
     if (typeof window === "undefined") return;
     const nextPath = viewPath(nextView, quote);
     if (window.location.pathname !== nextPath) window.history.pushState({ view: nextView }, "", nextPath);
@@ -367,7 +369,7 @@ export function QuickQuoteBuilder() {
 
   useEffect(() => {
     if ((view !== "previous" && view !== "client") || !routeQuoteSlug) return;
-    const quote = findQuoteBySlug(activeQuotes, routeQuoteSlug);
+    const quote = findQuoteByShareToken(activeQuotes, routeQuoteSlug);
     if (quote && selectedQuote?.id !== quote.id) setSelectedQuote(quote);
   }, [activeQuotes, routeQuoteSlug, selectedQuote?.id, view]);
 
@@ -415,6 +417,19 @@ export function QuickQuoteBuilder() {
     if (!hydrated) return;
     setItems((current) => current.filter((item) => !shouldPurgeRecoveredRecord(item.deletedAt)));
     setQuotes((current) => current.filter((quote) => !shouldPurgeRecoveredRecord(quote.deletedAt)));
+  }, [hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    setQuotes((current) => {
+      let changed = false;
+      const nextQuotes = current.map((quote) => {
+        if (quote.shareToken) return quote;
+        changed = true;
+        return { ...quote, shareToken: makeShareToken(), updatedAt: new Date().toISOString() };
+      });
+      return changed ? nextQuotes : current;
+    });
   }, [hydrated]);
 
   useEffect(() => {
@@ -573,6 +588,7 @@ export function QuickQuoteBuilder() {
     const now = new Date().toISOString();
     const saved: SavedQuote = {
       id: makeId("quote"),
+      shareToken: makeShareToken(),
       createdAt: now,
       updatedAt: now,
       meta: {

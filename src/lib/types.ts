@@ -49,6 +49,7 @@ export type QuoteMeta = {
 
 export type SavedQuote = {
   id: string;
+  shareToken?: string;
   createdAt: string;
   updatedAt: string;
   meta: QuoteMeta;
