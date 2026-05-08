@@ -1402,10 +1402,28 @@ function TemplatesPage({
   onAddTemplate: (template: QuoteTemplate) => void;
 }) {
   const [deleteTemplate, setDeleteTemplate] = useState<QuoteTemplate | null>(null);
+  const [draftTemplate, setDraftTemplate] = useState<QuoteTemplate | null>(null);
+  const [draftSelectorOpen, setDraftSelectorOpen] = useState(false);
   const confirmDeleteTemplate = () => {
     if (!deleteTemplate) return;
     setTemplates((current) => current.filter((template) => template.id !== deleteTemplate.id));
     setDeleteTemplate(null);
+  };
+  const addTemplateDraftLine = (itemId: string) => {
+    setDraftTemplate((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        lines: current.lines.some((line) => line.itemId === itemId)
+          ? current.lines.map((line) => (line.itemId === itemId ? { ...line, quantity: line.quantity + 1 } : line))
+          : [...current.lines, { itemId, quantity: 1 }],
+      };
+    });
+  };
+  const saveDraftTemplate = () => {
+    if (!draftTemplate) return;
+    setTemplates((current) => [...current, { ...draftTemplate, name: draftTemplate.name || "New Template" }]);
+    setDraftTemplate(null);
   };
 
   return (
@@ -1418,15 +1436,12 @@ function TemplatesPage({
         <button
           className="button-primary"
           onClick={() =>
-            setTemplates((current) => [
-              ...current,
-              {
-                id: makeId("template"),
-                name: "New Template",
-                description: "",
-                lines: [],
-              },
-            ])
+            setDraftTemplate({
+              id: makeId("template"),
+              name: "",
+              description: "",
+              lines: [],
+            })
           }
         >
           <PackagePlus size={17} />
@@ -1466,6 +1481,90 @@ function TemplatesPage({
           </div>
         </div>
       ) : null}
+      {draftTemplate ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onClick={() => setDraftTemplate(null)}>
+          <div className="max-h-[calc(100vh-2rem)] w-full max-w-3xl overflow-y-auto rounded-lg bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-2xl font-black">Create Template</h3>
+                <p className="mt-1 text-sm text-stone-600">Build a reusable item list before saving it to templates.</p>
+              </div>
+              <button className="icon-button" onClick={() => setDraftTemplate(null)} aria-label="Close create template">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="mt-5 grid gap-3">
+              <label className="field">
+                <span>Template name</span>
+                <input className="input" value={draftTemplate.name} onChange={(event) => setDraftTemplate((current) => (current ? { ...current, name: event.target.value } : current))} placeholder="One door setup" />
+              </label>
+              <label className="field">
+                <span>Description</span>
+                <textarea className="textarea" value={draftTemplate.description} onChange={(event) => setDraftTemplate((current) => (current ? { ...current, description: event.target.value } : current))} placeholder="Template notes or use case" />
+              </label>
+              <div className="grid gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-black">Template items</p>
+                  <button className="button-secondary" onClick={() => setDraftSelectorOpen(true)}>
+                    <PackagePlus size={16} />
+                    Add item to list
+                  </button>
+                </div>
+                {draftTemplate.lines.length ? (
+                  draftTemplate.lines.map((line) => {
+                    const item = items.find((candidate) => candidate.id === line.itemId);
+                    if (!item) return null;
+                    return (
+                      <div key={line.itemId} className="grid grid-cols-[minmax(0,1fr)_76px_auto] items-center gap-2 rounded-md bg-white p-2 text-sm">
+                        <span className="truncate font-bold">{item.name}</span>
+                        <input
+                          className="input min-h-9"
+                          type="number"
+                          min={1}
+                          value={line.quantity}
+                          onChange={(event) =>
+                            setDraftTemplate((current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    lines: current.lines.map((candidate) => (candidate.itemId === line.itemId ? { ...candidate, quantity: Number(event.target.value) } : candidate)),
+                                  }
+                                : current,
+                            )
+                          }
+                        />
+                        <button className="button-ghost" onClick={() => setDraftTemplate((current) => (current ? { ...current, lines: current.lines.filter((candidate) => candidate.itemId !== line.itemId) } : current))} aria-label={`Remove ${item.name}`}>
+                          <X size={16} />
+                        </button>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="rounded-lg border border-dashed border-stone-300 bg-white p-5 text-center text-stone-500">No items added yet.</p>
+                )}
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button className="button-ghost" onClick={() => setDraftTemplate(null)}>
+                Cancel
+              </button>
+              <button className="button-primary" onClick={saveDraftTemplate}>
+                Save Template
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {draftSelectorOpen ? (
+        <TemplateItemSelector
+          items={items}
+          onCancel={() => setDraftSelectorOpen(false)}
+          onConfirm={(itemId) => {
+            addTemplateDraftLine(itemId);
+            setDraftSelectorOpen(false);
+          }}
+        />
+      ) : null}
     </section>
   );
 }
@@ -1483,25 +1582,15 @@ function TemplateCard({
   onAddTemplate: (template: QuoteTemplate) => void;
   onDeleteTemplate: (template: QuoteTemplate) => void;
 }) {
-  const [selectedItemId, setSelectedItemId] = useState(items[0]?.id ?? "");
-  useEffect(() => {
-    if (!items.length) {
-      setSelectedItemId("");
-      return;
-    }
-    if (!selectedItemId || !items.some((item) => item.id === selectedItemId)) {
-      setSelectedItemId(items[0].id);
-    }
-  }, [items, selectedItemId]);
+  const [selectorOpen, setSelectorOpen] = useState(false);
   const updateTemplate = (patch: Partial<QuoteTemplate>) => {
     setTemplates((current) => current.map((candidate) => (candidate.id === template.id ? { ...candidate, ...patch } : candidate)));
   };
-  const addTemplateLine = () => {
-    if (!selectedItemId) return;
+  const addTemplateLine = (itemId: string) => {
     updateTemplate({
-      lines: template.lines.some((line) => line.itemId === selectedItemId)
-        ? template.lines.map((line) => (line.itemId === selectedItemId ? { ...line, quantity: line.quantity + 1 } : line))
-        : [...template.lines, { itemId: selectedItemId, quantity: 1 }],
+      lines: template.lines.some((line) => line.itemId === itemId)
+        ? template.lines.map((line) => (line.itemId === itemId ? { ...line, quantity: line.quantity + 1 } : line))
+        : [...template.lines, { itemId, quantity: 1 }],
     });
   };
   const requirements = useMemo(() => getDoorTemplateRequirements(template), [template]);
@@ -1595,29 +1684,97 @@ function TemplateCard({
           );
         })}
       </div>
-      <label className="field mt-3">
-        <span>Item to add</span>
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-          <select className="input bg-white font-bold" value={selectedItemId} onChange={(event) => setSelectedItemId(event.target.value)} disabled={!items.length}>
-            {items.length ? (
-              items.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))
-            ) : (
-              <option value="">None</option>
-            )}
-          </select>
-          <button className="button-secondary" onClick={addTemplateLine} disabled={!selectedItemId}>
-            Add
-          </button>
-        </div>
-      </label>
+      <button className="button-secondary mt-3 w-full justify-start" onClick={() => setSelectorOpen(true)}>
+        <PackagePlus size={16} />
+        Add item to list
+      </button>
       <button className="button-primary mt-4 w-full" onClick={() => onAddTemplate(template)}>
         Add to Quote
       </button>
+      {selectorOpen ? (
+        <TemplateItemSelector
+          items={items}
+          onCancel={() => setSelectorOpen(false)}
+          onConfirm={(itemId) => {
+            addTemplateLine(itemId);
+            setSelectorOpen(false);
+          }}
+        />
+      ) : null}
     </article>
+  );
+}
+
+function TemplateItemSelector({ items, onCancel, onConfirm }: { items: CatalogItem[]; onCancel: () => void; onConfirm: (itemId: string) => void }) {
+  const categories = useMemo(() => Array.from(new Set(items.map((item) => item.category || "Uncategorized"))).sort((a, b) => a.localeCompare(b)), [items]);
+  const [category, setCategory] = useState(categories[0] ?? "");
+  const [selectedItemId, setSelectedItemId] = useState("");
+  const visibleItems = useMemo(() => items.filter((item) => (item.category || "Uncategorized") === category), [category, items]);
+
+  useEffect(() => {
+    if ((!category || !categories.includes(category)) && categories[0]) setCategory(categories[0]);
+  }, [categories, category]);
+
+  useEffect(() => {
+    if (!visibleItems.some((item) => item.id === selectedItemId)) {
+      setSelectedItemId(visibleItems[0]?.id ?? "");
+    }
+  }, [selectedItemId, visibleItems]);
+
+  return (
+    <div className="fixed inset-0 z-[60] grid place-items-center bg-black/45 p-4" onClick={onCancel}>
+      <div className="max-h-[calc(100vh-2rem)] w-full max-w-4xl overflow-y-auto rounded-lg bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-2xl font-black">Add Item to List</h3>
+            <p className="mt-1 text-sm text-stone-600">Pick a category, then choose the item to add to this template.</p>
+          </div>
+          <button className="icon-button" onClick={onCancel} aria-label="Close item selector">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="mt-5 grid min-h-[360px] gap-4 md:grid-cols-[240px_minmax(0,1fr)]">
+          <div className="rounded-lg border border-stone-200 bg-stone-50 p-3">
+            <p className="mb-3 text-xs font-bold uppercase tracking-normal text-stone-500">Categories</p>
+            <div className="grid gap-2">
+              {categories.length ? (
+                categories.map((item) => (
+                  <button key={item} className={`rounded-md px-3 py-2 text-left text-sm font-bold ${category === item ? "bg-white text-teal-800 shadow-sm" : "hover:bg-white"}`} onClick={() => setCategory(item)}>
+                    {item}
+                  </button>
+                ))
+              ) : (
+                <p className="rounded-md border border-dashed border-stone-300 bg-white p-3 text-sm text-stone-500">No categories</p>
+              )}
+            </div>
+          </div>
+          <div className="rounded-lg border border-stone-200 bg-stone-50 p-3">
+            <p className="mb-3 text-xs font-bold uppercase tracking-normal text-stone-500">Items</p>
+            <div className="grid max-h-[52vh] gap-2 overflow-auto pr-1">
+              {visibleItems.length ? (
+                visibleItems.map((item) => (
+                  <button key={item.id} className={`rounded-lg border p-3 text-left ${selectedItemId === item.id ? "border-teal-700 bg-teal-50" : "border-stone-200 bg-white"}`} onClick={() => setSelectedItemId(item.id)}>
+                    <p className="font-black">{item.name}</p>
+                    <p className="mt-1 font-mono text-xs text-stone-500">{item.sku}</p>
+                    <p className="mt-2 text-sm font-bold">{money.format(item.unitPrice)}</p>
+                  </button>
+                ))
+              ) : (
+                <p className="rounded-md border border-dashed border-stone-300 bg-white p-6 text-center text-stone-500">No items in this category.</p>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <button className="button-ghost" onClick={onCancel}>
+            Cancel
+          </button>
+          <button className="button-primary" onClick={() => selectedItemId && onConfirm(selectedItemId)} disabled={!selectedItemId}>
+            Add item
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
