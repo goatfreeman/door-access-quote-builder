@@ -676,9 +676,6 @@ export function QuickQuoteBuilder() {
                 </div>
               ) : null}
             </div>
-            <button className="icon-button" onClick={() => setView("settings")} aria-label="Settings">
-              <Settings size={18} />
-            </button>
           </div>
         </div>
       </header>
