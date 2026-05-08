@@ -22,7 +22,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { readDb, writeDb } from "@/lib/client-db";
 import type { CatalogItem, QuoteLine, QuoteMeta, QuoteTemplate, SavedQuote, ServiceTitanSettings } from "@/lib/types";
 
-type View = "quote" | "items" | "templates" | "previous" | "settings";
+type View = "home" | "quote" | "items" | "templates" | "previous" | "settings";
 type QuoteStep = "pick" | "customize" | "review" | "finalize";
 type SettingsSection = "account" | "database" | "serviceTitan" | "adi" | "sync" | "recovery";
 type AdiCatalogMatch = Omit<CatalogItem, "id"> & {
@@ -60,6 +60,7 @@ const STORAGE_KEYS = {
   quotes: "qqb.cache.quotes.v1",
   settings: "qqb.cache.settings.v1",
   session: "qqb.session.v1",
+  draftQuote: "qqb.draft.quote.v1",
 };
 
 const emptyMeta: QuoteMeta = {
@@ -74,7 +75,7 @@ const emptyMeta: QuoteMeta = {
   laborRate: 125,
 };
 
-const isView = (value: unknown): value is View => ["quote", "items", "templates", "previous", "settings"].includes(String(value));
+const isView = (value: unknown): value is View => ["home", "quote", "items", "templates", "previous", "settings"].includes(String(value));
 const isQuoteStep = (value: unknown): value is QuoteStep => ["pick", "customize", "review", "finalize"].includes(String(value));
 
 const adiCatalog: AdiCatalogMatch[] = [
@@ -209,7 +210,7 @@ function itemMatchesRequirement(item: CatalogItem, requirement: TemplateRequirem
 export function QuickQuoteBuilder() {
   const [view, setView] = useState<View>(() => {
     const session = readStorage<{ view?: unknown }>(STORAGE_KEYS.session, {});
-    return isView(session.view) ? session.view : "quote";
+    return isView(session.view) ? session.view : "home";
   });
   const [quoteStep, setQuoteStep] = useState<QuoteStep>(() => {
     const session = readStorage<{ quoteStep?: unknown }>(STORAGE_KEYS.session, {});
@@ -226,8 +227,8 @@ export function QuickQuoteBuilder() {
     clientId: "",
     clientSecret: "",
   });
-  const [lines, setLines] = useState<QuoteLine[]>([]);
-  const [meta, setMeta] = useState<QuoteMeta>(emptyMeta);
+  const [lines, setLines] = useState<QuoteLine[]>(() => readStorage<{ lines?: QuoteLine[] }>(STORAGE_KEYS.draftQuote, {}).lines ?? []);
+  const [meta, setMeta] = useState<QuoteMeta>(() => ({ ...emptyMeta, ...(readStorage<{ meta?: Partial<QuoteMeta> }>(STORAGE_KEYS.draftQuote, {}).meta ?? {}) }));
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
   const [notificationOpen, setNotificationOpen] = useState(false);
@@ -266,6 +267,10 @@ export function QuickQuoteBuilder() {
   useEffect(() => {
     writeStorage(STORAGE_KEYS.session, { view, quoteStep });
   }, [quoteStep, view]);
+
+  useEffect(() => {
+    writeStorage(STORAGE_KEYS.draftQuote, { lines, meta, quoteStep, updatedAt: new Date().toISOString() });
+  }, [lines, meta, quoteStep]);
 
   useEffect(() => {
     let cancelled = false;
@@ -421,6 +426,9 @@ export function QuickQuoteBuilder() {
     setQuotes((current) => [saved, ...current]);
     setSelectedQuote(saved);
     setView("previous");
+    setLines([]);
+    setMeta(emptyMeta);
+    setQuoteStep("pick");
   };
 
   const loadQuoteForEdit = (quote: SavedQuote) => {
@@ -444,6 +452,7 @@ export function QuickQuoteBuilder() {
   };
 
   const nav = [
+    { id: "home" as const, label: "Home", icon: ClipboardList },
     { id: "quote" as const, label: "Quote", icon: ClipboardList },
     { id: "items" as const, label: "Items", icon: PackagePlus },
     { id: "templates" as const, label: "Templates", icon: FileText },
@@ -458,6 +467,13 @@ export function QuickQuoteBuilder() {
     setNotificationOpen(false);
   };
 
+  const goToHome = () => {
+    setView("home");
+    setMenuOpen(false);
+    setCartOpen(false);
+    setNotificationOpen(false);
+  };
+
   return (
     <main className="min-h-screen bg-stone-100 text-stone-950">
       <header className="sticky top-0 z-40 border-b border-stone-200 bg-stone-100/95 px-4 py-3 backdrop-blur">
@@ -466,10 +482,10 @@ export function QuickQuoteBuilder() {
             <button className="icon-button md:hidden" onClick={() => setMenuOpen(true)} aria-label="Open menu">
               <Menu size={19} />
             </button>
-            <button className="grid size-10 place-items-center rounded-lg bg-stone-900 text-xl font-black text-white" onClick={goToQuote} aria-label="Go to quote page">
+            <button className="grid size-10 place-items-center rounded-lg bg-stone-900 text-xl font-black text-white" onClick={goToHome} aria-label="Go to home page">
               Q
             </button>
-            <button className="min-w-0 text-left" onClick={goToQuote} aria-label="Go to quote page">
+            <button className="min-w-0 text-left" onClick={goToHome} aria-label="Go to home page">
               <span className="flex min-w-0 flex-wrap items-center gap-2">
                 <h1 className="truncate text-lg font-black leading-tight sm:text-2xl">Quick Quote Builder</h1>
                 {!isProductionStage ? <span className="rounded-full border border-amber-300 bg-amber-100 px-2 py-1 text-xs font-black uppercase tracking-normal text-amber-900">Dev Build</span> : null}
@@ -504,6 +520,7 @@ export function QuickQuoteBuilder() {
               <CartDropdown
                 lines={activeLines}
                 totals={totals}
+                onRemoveLine={(id) => setLines((current) => current.filter((line) => line.lineId !== id))}
                 onNext={() => {
                   setQuoteStep("finalize");
                   setCartOpen(false);
@@ -539,6 +556,7 @@ export function QuickQuoteBuilder() {
       {menuOpen ? <MobileMenu nav={nav} view={view} setView={setView} goToQuote={goToQuote} close={() => setMenuOpen(false)} /> : null}
 
       <section className={`mx-auto grid max-w-7xl gap-4 px-4 py-4 ${view === "quote" && quoteStep !== "finalize" ? "lg:grid-cols-[320px_minmax(0,1fr)]" : ""}`}>
+        {view === "home" ? <HomePage meta={meta} lines={activeLines} total={totals.total} onContinue={goToQuote} /> : null}
         {view === "quote" ? (
           <>
             {quoteStep !== "finalize" ? (
@@ -603,13 +621,49 @@ function previousStep(step: QuoteStep): QuoteStep {
   return "pick";
 }
 
+function HomePage({ meta, lines, total, onContinue }: { meta: QuoteMeta; lines: QuoteLine[]; total: number; onContinue: () => void }) {
+  const hasDraft = lines.length > 0 || Boolean(meta.customer || meta.project);
+
+  return (
+    <section className="panel lg:col-span-2">
+      <div className="panel-header">
+        <div>
+          <h2>Welcome back, User</h2>
+          <p>Pick up ongoing quote work or start from the quote workspace.</p>
+        </div>
+      </div>
+      <div className="grid gap-4 p-4">
+        {hasDraft ? (
+          <button className="rounded-lg border border-teal-200 bg-teal-50 p-4 text-left transition hover:border-teal-700 hover:bg-white" onClick={onContinue}>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="font-black">{meta.customer || "Unsaved quote"}</p>
+                <p className="mt-1 text-sm text-stone-600">{meta.project || "Ongoing quote draft"}</p>
+                <p className="mt-2 text-sm text-stone-600">{lines.length} cart lines</p>
+              </div>
+              <strong className="text-xl">{money.format(total)}</strong>
+            </div>
+          </button>
+        ) : (
+          <div className="rounded-lg border border-dashed border-stone-300 bg-stone-50 p-8 text-center text-stone-500">No ongoing quote yet.</div>
+        )}
+        <button className="button-primary w-fit" onClick={onContinue}>
+          Open Quote Workspace
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function CartDropdown({
   lines,
   totals,
+  onRemoveLine,
   onNext,
 }: {
   lines: QuoteLine[];
   totals: QuoteTotals;
+  onRemoveLine: (lineId: string) => void;
   onNext: () => void;
 }) {
   return (
@@ -621,10 +675,19 @@ function CartDropdown({
       <div className="grid gap-2">
         {lines.length ? (
           lines.map((line) => (
-            <div key={line.lineId} className="rounded-lg border border-stone-200 bg-stone-50 p-3">
-              <p className="font-bold">{line.packageName ?? line.name}</p>
-              {line.packageName ? <p className="mt-1 text-sm text-stone-600">{line.name}</p> : null}
-              <p className="mt-1 text-sm text-stone-600">Qty {line.quantity}</p>
+            <div key={line.lineId} className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3">
+              <div className="min-w-0">
+                <p className="truncate font-bold">{line.packageName ?? line.name}</p>
+                {line.packageName ? <p className="mt-1 truncate text-sm text-stone-600">{line.name}</p> : null}
+                <p className="mt-1 text-sm text-stone-600">Qty {line.quantity}</p>
+              </div>
+              <button
+                className="grid size-8 translate-x-2 place-items-center rounded-full text-stone-400 opacity-0 transition duration-200 hover:bg-red-50 hover:text-red-800 group-hover:translate-x-0 group-hover:opacity-100"
+                onClick={() => onRemoveLine(line.lineId)}
+                aria-label={`Remove ${line.name}`}
+              >
+                <X size={16} />
+              </button>
             </div>
           ))
         ) : (
