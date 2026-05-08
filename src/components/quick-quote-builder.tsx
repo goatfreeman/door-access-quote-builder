@@ -91,20 +91,15 @@ const emptyMeta: QuoteMeta = {
 
 const isView = (value: unknown): value is View => ["home", "quote", "items", "templates", "previous", "settings", "client"].includes(String(value));
 const isQuoteStep = (value: unknown): value is QuoteStep => ["pick", "customize", "review", "finalize"].includes(String(value));
-const slugify = (value: string) =>
-  normalizeSearchValue(value)
-    .replace(/\s+/g, "-")
-    .replace(/^-|-$/g, "");
-const quoteSlug = (quote: SavedQuote) => `${slugify(`${quote.meta.quoteNumber} ${quote.meta.project || quote.meta.customer}`) || "quote"}-${quote.id}`;
 const quoteSlugFromPath = () => {
   if (typeof window === "undefined") return "";
   const [, viewSegment, slug] = window.location.pathname.split("/");
   return viewSegment === "previous" || viewSegment === "client" ? slug ?? "" : "";
 };
-const findQuoteBySlug = (quotes: SavedQuote[], slug: string) => quotes.find((quote) => quoteSlug(quote) === slug || quote.id === slug || quote.meta.quoteNumber === slug) ?? null;
+const findQuoteBySlug = (quotes: SavedQuote[], slug: string) => quotes.find((quote) => quote.id === slug) ?? null;
 const viewPath = (view: View, quote?: SavedQuote) => {
   if (view === "home") return "/";
-  if ((view === "previous" || view === "client") && quote) return `/${view}/${quoteSlug(quote)}`;
+  if ((view === "previous" || view === "client") && quote) return `/${view}/${quote.id}`;
   return `/${view}`;
 };
 const viewFromPath = () => {
@@ -320,7 +315,7 @@ export function QuickQuoteBuilder() {
 
   const navigateToView = (nextView: View, quote?: SavedQuote) => {
     setView(nextView);
-    setRouteQuoteSlug(quote ? quoteSlug(quote) : "");
+    setRouteQuoteSlug(quote ? quote.id : "");
     if (typeof window === "undefined") return;
     const nextPath = viewPath(nextView, quote);
     if (window.location.pathname !== nextPath) window.history.pushState({ view: nextView }, "", nextPath);
