@@ -483,10 +483,11 @@ export function QuickQuoteBuilder() {
     });
   };
 
-  const addTemplate = (template: QuoteTemplate, jumpToCustomize = true) => {
+  const addTemplate = (template: QuoteTemplate, jumpToCustomize = true, nickname = "") => {
+    const packageName = nickname.trim() ? `${template.name} - ${nickname.trim()}` : template.name;
     template.lines.forEach((line) => {
       const item = activeItems.find((candidate) => candidate.id === line.itemId);
-      if (item) addItem(item, template.name, line.quantity);
+      if (item) addItem(item, packageName, line.quantity);
     });
     if (jumpToCustomize) setQuoteStep("customize");
   };
@@ -878,7 +879,7 @@ function CartDropdown({
   onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 grid grid-rows-[auto_minmax(0,1fr)_auto_auto] gap-3 overflow-hidden rounded-none border border-stone-200 bg-white p-4 shadow-2xl md:absolute md:inset-auto md:right-0 md:top-12 md:max-h-[calc(100vh-7rem)] md:w-[min(390px,calc(100vw-1.5rem))] md:grid-rows-none md:overflow-auto md:rounded-lg">
+    <div className="fixed inset-0 z-50 grid h-[100dvh] w-screen grid-rows-[auto_minmax(0,1fr)_auto_auto] gap-3 overflow-hidden rounded-none border border-stone-200 bg-white p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-2xl md:absolute md:inset-auto md:right-0 md:top-12 md:h-auto md:max-h-[calc(100vh-7rem)] md:w-[min(390px,calc(100vw-1.5rem))] md:grid-rows-none md:overflow-auto md:rounded-lg md:pb-4">
       <div className="flex items-center justify-between">
         <div>
           <p className="font-black">Shopping cart</p>
@@ -888,7 +889,8 @@ function CartDropdown({
           <X size={18} />
         </button>
       </div>
-      <div className="grid content-start gap-2 overflow-auto pr-1 md:overflow-visible md:pr-0">
+      <div className="min-h-0 overflow-y-auto pr-1 md:overflow-visible md:pr-0">
+        <div className="grid content-start gap-2">
         {lines.length ? (
           lines.map((line) => (
             <div key={line.lineId} className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3">
@@ -917,6 +919,7 @@ function CartDropdown({
         ) : (
           <p className="rounded-lg border border-dashed border-stone-300 p-4 text-center text-sm text-stone-500">No items added yet.</p>
         )}
+        </div>
       </div>
       <TotalsCard totals={totals} />
       <button className="button-primary" onClick={onNext}>
@@ -1019,7 +1022,7 @@ function QuoteWorkspace(props: {
   setMeta: Dispatch<SetStateAction<QuoteMeta>>;
   totals: QuoteTotals;
   templates: QuoteTemplate[];
-  onAddTemplate: (template: QuoteTemplate, jumpToCustomize?: boolean) => void;
+  onAddTemplate: (template: QuoteTemplate, jumpToCustomize?: boolean, nickname?: string) => void;
   onUpdateLine: (lineId: string, patch: Partial<QuoteLine>) => void;
   onRemoveLine: (lineId: string) => void;
   onSave: () => void;
@@ -1029,11 +1032,13 @@ function QuoteWorkspace(props: {
 }) {
   const steps: QuoteStep[] = ["pick", "customize", "review", "finalize"];
   const [addedTemplateId, setAddedTemplateId] = useState<string | null>(null);
+  const [templateNickname, setTemplateNickname] = useState("");
 
   const addTemplateFromPicker = (template: QuoteTemplate) => {
     if (addedTemplateId) return;
     setAddedTemplateId(template.id);
-    props.onAddTemplate(template, false);
+    props.onAddTemplate(template, false, templateNickname);
+    setTemplateNickname("");
     window.setTimeout(() => {
       setAddedTemplateId(null);
       props.setStep("customize");
@@ -1078,6 +1083,10 @@ function QuoteWorkspace(props: {
                 <div className="rounded-lg border border-stone-200 bg-stone-50 p-5">
                   <p className="font-black">From Templates</p>
                   <p className="mt-2 text-sm text-stone-600">Choose a saved setup to prefill the quote.</p>
+                  <label className="field mt-4">
+                    <span>Template nickname</span>
+                    <input className="input" value={templateNickname} onChange={(event) => setTemplateNickname(event.target.value)} placeholder="Optional, like Front Entry or Camera 1" />
+                  </label>
                 </div>
               </div>
               <div className="grid gap-3 md:grid-cols-3">
@@ -1712,7 +1721,7 @@ function TemplatesPage({
   templates: QuoteTemplate[];
   items: CatalogItem[];
   setTemplates: Dispatch<SetStateAction<QuoteTemplate[]>>;
-  onAddTemplate: (template: QuoteTemplate) => void;
+  onAddTemplate: (template: QuoteTemplate, jumpToCustomize?: boolean, nickname?: string) => void;
 }) {
   const [deleteTemplate, setDeleteTemplate] = useState<QuoteTemplate | null>(null);
   const [draftTemplate, setDraftTemplate] = useState<QuoteTemplate | null>(null);
@@ -1892,10 +1901,11 @@ function TemplateCard({
   template: QuoteTemplate;
   items: CatalogItem[];
   setTemplates: Dispatch<SetStateAction<QuoteTemplate[]>>;
-  onAddTemplate: (template: QuoteTemplate) => void;
+  onAddTemplate: (template: QuoteTemplate, jumpToCustomize?: boolean, nickname?: string) => void;
   onDeleteTemplate: (template: QuoteTemplate) => void;
 }) {
   const [selectorOpen, setSelectorOpen] = useState(false);
+  const [nickname, setNickname] = useState("");
   const updateTemplate = (patch: Partial<QuoteTemplate>) => {
     setTemplates((current) => current.map((candidate) => (candidate.id === template.id ? { ...candidate, ...patch } : candidate)));
   };
@@ -2001,7 +2011,11 @@ function TemplateCard({
         <PackagePlus size={16} />
         Add item to list
       </button>
-      <button className="button-primary mt-4 w-full" onClick={() => onAddTemplate(template)}>
+      <label className="field mt-3">
+        <span>Nickname for this quote</span>
+        <input className="input" value={nickname} onChange={(event) => setNickname(event.target.value)} placeholder="Optional, like Front Door or Camera 1" />
+      </label>
+      <button className="button-primary mt-4 w-full" onClick={() => onAddTemplate(template, true, nickname)}>
         Add to Quote
       </button>
       {selectorOpen ? (
