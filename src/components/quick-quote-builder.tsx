@@ -250,8 +250,8 @@ export function QuickQuoteBuilder() {
     clientId: "",
     clientSecret: "",
   });
-  const [lines, setLines] = useState<QuoteLine[]>(() => readStorage<{ lines?: QuoteLine[] }>(STORAGE_KEYS.draftQuote, {}).lines ?? []);
-  const [meta, setMeta] = useState<QuoteMeta>(() => ({ ...emptyMeta, ...(readStorage<{ meta?: Partial<QuoteMeta> }>(STORAGE_KEYS.draftQuote, {}).meta ?? {}) }));
+  const [lines, setLines] = useState<QuoteLine[]>([]);
+  const [meta, setMeta] = useState<QuoteMeta>(emptyMeta);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
   const [notificationOpen, setNotificationOpen] = useState(false);
@@ -260,6 +260,7 @@ export function QuickQuoteBuilder() {
   const [selectedQuote, setSelectedQuote] = useState<SavedQuote | null>(null);
   const [printableQuote, setPrintableQuote] = useState<PrintableQuote | null>(null);
   const [databaseStatus, setDatabaseStatus] = useState<DatabaseStatus | null>(null);
+  const [draftHydrated, setDraftHydrated] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const cartRef = useRef<HTMLDetailsElement>(null);
   const notificationRef = useRef<HTMLDivElement>(null);
@@ -289,12 +290,22 @@ export function QuickQuoteBuilder() {
   }, []);
 
   useEffect(() => {
+    const draft = readStorage<{ lines?: QuoteLine[]; meta?: Partial<QuoteMeta>; quoteStep?: unknown }>(STORAGE_KEYS.draftQuote, {});
+    setLines(Array.isArray(draft.lines) ? draft.lines : []);
+    setMeta({ ...emptyMeta, ...(draft.meta ?? {}) });
+    if (isQuoteStep(draft.quoteStep)) setQuoteStep(draft.quoteStep);
+    setDraftHydrated(true);
+  }, []);
+
+  useEffect(() => {
     writeStorage(STORAGE_KEYS.session, { view, quoteStep });
   }, [quoteStep, view]);
 
   useEffect(() => {
-    writeStorage(STORAGE_KEYS.draftQuote, { lines, meta, quoteStep, updatedAt: new Date().toISOString() });
-  }, [lines, meta, quoteStep]);
+    if (draftHydrated) {
+      writeStorage(STORAGE_KEYS.draftQuote, { lines, meta, quoteStep, updatedAt: new Date().toISOString() });
+    }
+  }, [draftHydrated, lines, meta, quoteStep]);
 
   useEffect(() => {
     let cancelled = false;
