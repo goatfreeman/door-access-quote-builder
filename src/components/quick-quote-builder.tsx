@@ -496,7 +496,8 @@ export function QuickQuoteBuilder() {
   };
 
   const renamePackage = (packageName: string, nextName: string) => {
-    setLines((current) => current.map((line) => (line.packageName === packageName ? { ...line, packageName: nextName.trim() || undefined } : line)));
+    const cleanName = nextName.trim() || packageName;
+    setLines((current) => current.map((line) => (line.packageName === packageName ? { ...line, packageName: cleanName } : line)));
   };
 
   const deleteItemEverywhere = (itemId: string) => {
@@ -918,16 +919,22 @@ function CartDropdown({
           <X size={18} />
         </button>
       </div>
-      <div className="min-h-0 overflow-y-auto pr-1 md:overflow-visible md:pr-0">
+      <div className="min-h-0 overflow-y-auto pr-1 md:pr-0">
         <div className="grid content-start gap-2">
         {cartRows.length ? (
           cartRows.map((row) =>
             row.type === "package" ? (
-              <details key={row.packageName} className="group rounded-lg border border-stone-200 bg-stone-50 p-3">
+              <details key={row.packageName} className="group min-w-0 overflow-hidden rounded-lg border border-stone-200 bg-stone-50 p-3">
                 <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto] items-start gap-2 [&::-webkit-details-marker]:hidden">
                   <div className="min-w-0">
-                    <p className="truncate font-bold">{row.packageName}</p>
-                    <p className="mt-1 text-sm text-stone-600">Template has been added</p>
+                    <input
+                      className="w-full min-w-0 truncate rounded-md border border-transparent bg-transparent py-1 font-black text-stone-950 outline-none transition focus:border-teal-300 focus:bg-white focus:px-2"
+                      value={row.packageName}
+                      onChange={(event) => onRenamePackage(row.packageName, event.target.value)}
+                      onClick={(event) => event.stopPropagation()}
+                      onKeyDown={(event) => event.stopPropagation()}
+                      aria-label={`Rename ${row.packageName}`}
+                    />
                   </div>
                   <button
                     className="grid size-8 place-items-center rounded-full text-stone-500 hover:bg-red-50 hover:text-red-800"
@@ -940,17 +947,13 @@ function CartDropdown({
                     <X size={16} />
                   </button>
                 </summary>
-                <div className="hidden gap-2 pt-3 group-open:grid md:group-hover:grid">
-                  <label className="block">
-                    <span className="text-xs font-bold uppercase tracking-normal text-stone-500">Cart name</span>
-                    <input className="input mt-1 min-h-9" value={row.packageName} onChange={(event) => onRenamePackage(row.packageName, event.target.value)} />
-                  </label>
-                  <div className="grid gap-1 border-t border-stone-200 pt-3">
+                <div className="hidden gap-2 pt-3 group-open:grid md:group-hover:grid md:group-focus-within:grid">
+                  <div className="grid min-w-0 gap-1 border-t border-stone-200 pt-3">
                     {row.lines.map((line) => (
                       <div key={line.lineId} className="flex items-start justify-between gap-2 rounded-md bg-white p-2 text-sm">
                         <div className="min-w-0">
                           <p className="truncate font-bold">{line.name}</p>
-                          <p className="font-mono text-xs text-stone-500">{line.sku}</p>
+                          <p className="truncate font-mono text-xs text-stone-500">{line.sku}</p>
                         </div>
                         <span className="shrink-0 font-black">Qty {line.quantity}</span>
                       </div>
@@ -1243,8 +1246,8 @@ function QuoteLines({
             </label>
             {line.packageName ? (
               <label className="field md:col-span-2">
-                <span>Cart name / nickname</span>
-                <input className="input" value={line.packageName} onChange={(event) => onRenamePackage(line.packageName ?? "", event.target.value)} />
+                <span>Nickname</span>
+                <input className="input border-teal-200 bg-teal-50 font-black text-teal-950" value={line.packageName} onChange={(event) => onRenamePackage(line.packageName ?? "", event.target.value)} />
               </label>
             ) : null}
             <label className="field">
