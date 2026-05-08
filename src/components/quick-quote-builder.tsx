@@ -651,6 +651,7 @@ export function QuickQuoteBuilder() {
                 onRenamePackage={renamePackage}
                 onRemoveLine={(id) => setLines((current) => current.filter((line) => line.lineId !== id))}
                 onNext={() => {
+                  setView("quote");
                   setQuoteStep("finalize");
                   setCartOpen(false);
                 }}
