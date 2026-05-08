@@ -483,17 +483,20 @@ export function QuickQuoteBuilder() {
     });
   };
 
-  const addTemplate = (template: QuoteTemplate, jumpToCustomize = true, nickname = "") => {
-    const packageName = nickname.trim() ? `${template.name} - ${nickname.trim()}` : template.name;
+  const addTemplate = (template: QuoteTemplate, jumpToCustomize = true) => {
     template.lines.forEach((line) => {
       const item = activeItems.find((candidate) => candidate.id === line.itemId);
-      if (item) addItem(item, packageName, line.quantity);
+      if (item) addItem(item, template.name, line.quantity);
     });
     if (jumpToCustomize) setQuoteStep("customize");
   };
 
   const updateLine = (lineId: string, patch: Partial<QuoteLine>) => {
     setLines((current) => current.map((line) => (line.lineId === lineId ? { ...line, ...patch } : line)));
+  };
+
+  const renamePackage = (packageName: string, nextName: string) => {
+    setLines((current) => current.map((line) => (line.packageName === packageName ? { ...line, packageName: nextName.trim() || undefined } : line)));
   };
 
   const deleteItemEverywhere = (itemId: string) => {
@@ -645,6 +648,7 @@ export function QuickQuoteBuilder() {
                 lines={activeLines}
                 totals={totals}
                 onUpdateLine={updateLine}
+                onRenamePackage={renamePackage}
                 onRemoveLine={(id) => setLines((current) => current.filter((line) => line.lineId !== id))}
                 onNext={() => {
                   setQuoteStep("finalize");
@@ -700,6 +704,7 @@ export function QuickQuoteBuilder() {
               templates={templates}
               onAddTemplate={addTemplate}
               onUpdateLine={updateLine}
+              onRenamePackage={renamePackage}
               onRemoveLine={(id) => setLines((current) => current.filter((line) => line.lineId !== id))}
               onSave={saveQuote}
               saveError={quoteSaveError}
@@ -864,6 +869,7 @@ function CartDropdown({
   lines,
   totals,
   onUpdateLine,
+  onRenamePackage,
   onRemoveLine,
   onNext,
   onClose,
@@ -871,6 +877,7 @@ function CartDropdown({
   lines: QuoteLine[];
   totals: QuoteTotals;
   onUpdateLine: (lineId: string, patch: Partial<QuoteLine>) => void;
+  onRenamePackage: (packageName: string, nextName: string) => void;
   onRemoveLine: (lineId: string) => void;
   onNext: () => void;
   onClose: () => void;
@@ -894,6 +901,12 @@ function CartDropdown({
               <div className="min-w-0">
                 <p className="truncate font-bold">{line.packageName ?? line.name}</p>
                 {line.packageName ? <p className="mt-1 truncate text-sm text-stone-600">{line.name}</p> : null}
+                {line.packageName ? (
+                  <label className="mt-2 block">
+                    <span className="text-xs font-bold uppercase tracking-normal text-stone-500">Cart name</span>
+                    <input className="input mt-1 min-h-9" value={line.packageName} onChange={(event) => onRenamePackage(line.packageName ?? "", event.target.value)} />
+                  </label>
+                ) : null}
                 <div className="mt-2 inline-grid grid-cols-[32px_48px_32px] items-center overflow-hidden rounded-md border border-stone-200 bg-white">
                   <button className="grid size-8 place-items-center text-stone-700 hover:bg-stone-100" onClick={() => (line.quantity <= 1 ? onRemoveLine(line.lineId) : onUpdateLine(line.lineId, { quantity: line.quantity - 1 }))} aria-label={`Decrease ${line.name}`}>
                     <Minus size={14} />
@@ -1019,8 +1032,9 @@ function QuoteWorkspace(props: {
   setMeta: Dispatch<SetStateAction<QuoteMeta>>;
   totals: QuoteTotals;
   templates: QuoteTemplate[];
-  onAddTemplate: (template: QuoteTemplate, jumpToCustomize?: boolean, nickname?: string) => void;
+  onAddTemplate: (template: QuoteTemplate, jumpToCustomize?: boolean) => void;
   onUpdateLine: (lineId: string, patch: Partial<QuoteLine>) => void;
+  onRenamePackage: (packageName: string, nextName: string) => void;
   onRemoveLine: (lineId: string) => void;
   onSave: () => void;
   saveError: string;
@@ -1029,13 +1043,11 @@ function QuoteWorkspace(props: {
 }) {
   const steps: QuoteStep[] = ["pick", "customize", "review", "finalize"];
   const [addedTemplateId, setAddedTemplateId] = useState<string | null>(null);
-  const [templateNickname, setTemplateNickname] = useState("");
 
   const addTemplateFromPicker = (template: QuoteTemplate) => {
     if (addedTemplateId) return;
     setAddedTemplateId(template.id);
-    props.onAddTemplate(template, false, templateNickname);
-    setTemplateNickname("");
+    props.onAddTemplate(template, false);
     window.setTimeout(() => {
       setAddedTemplateId(null);
       props.setStep("customize");
@@ -1080,10 +1092,6 @@ function QuoteWorkspace(props: {
                 <div className="rounded-lg border border-stone-200 bg-stone-50 p-5">
                   <p className="font-black">From Templates</p>
                   <p className="mt-2 text-sm text-stone-600">Choose a saved setup to prefill the quote.</p>
-                  <label className="field mt-4">
-                    <span>Template nickname</span>
-                    <input className="input" value={templateNickname} onChange={(event) => setTemplateNickname(event.target.value)} placeholder="Optional, like Front Entry or Camera 1" />
-                  </label>
                 </div>
               </div>
               <div className="grid gap-3 md:grid-cols-3">
@@ -1111,7 +1119,7 @@ function QuoteWorkspace(props: {
           ) : null}
 
           {props.step === "customize" || props.step === "review" || props.step === "finalize" ? (
-            <QuoteLines lines={props.lines} onUpdateLine={props.onUpdateLine} onRemoveLine={props.onRemoveLine} />
+            <QuoteLines lines={props.lines} onUpdateLine={props.onUpdateLine} onRenamePackage={props.onRenamePackage} onRemoveLine={props.onRemoveLine} />
           ) : null}
 
           {props.step === "finalize" ? (
@@ -1146,7 +1154,17 @@ function QuoteWorkspace(props: {
   );
 }
 
-function QuoteLines({ lines, onUpdateLine, onRemoveLine }: { lines: QuoteLine[]; onUpdateLine: (lineId: string, patch: Partial<QuoteLine>) => void; onRemoveLine: (lineId: string) => void }) {
+function QuoteLines({
+  lines,
+  onUpdateLine,
+  onRenamePackage,
+  onRemoveLine,
+}: {
+  lines: QuoteLine[];
+  onUpdateLine: (lineId: string, patch: Partial<QuoteLine>) => void;
+  onRenamePackage: (packageName: string, nextName: string) => void;
+  onRemoveLine: (lineId: string) => void;
+}) {
   if (!lines.length) {
     return <div className="rounded-lg border border-dashed border-stone-300 bg-stone-50 p-8 text-center text-stone-500">Add catalog items or choose a template to start.</div>;
   }
@@ -1167,6 +1185,12 @@ function QuoteLines({ lines, onUpdateLine, onRemoveLine }: { lines: QuoteLine[];
               <span>Item name</span>
               <input className="input" value={line.name} onChange={(event) => onUpdateLine(line.lineId, { name: event.target.value })} />
             </label>
+            {line.packageName ? (
+              <label className="field md:col-span-2">
+                <span>Cart name / nickname</span>
+                <input className="input" value={line.packageName} onChange={(event) => onRenamePackage(line.packageName ?? "", event.target.value)} />
+              </label>
+            ) : null}
             <label className="field">
               <span>Quantity</span>
               <input className="input" type="number" min={0} value={line.quantity} onChange={(event) => onUpdateLine(line.lineId, { quantity: Number(event.target.value) })} />
@@ -1718,7 +1742,7 @@ function TemplatesPage({
   templates: QuoteTemplate[];
   items: CatalogItem[];
   setTemplates: Dispatch<SetStateAction<QuoteTemplate[]>>;
-  onAddTemplate: (template: QuoteTemplate, jumpToCustomize?: boolean, nickname?: string) => void;
+  onAddTemplate: (template: QuoteTemplate, jumpToCustomize?: boolean) => void;
 }) {
   const [deleteTemplate, setDeleteTemplate] = useState<QuoteTemplate | null>(null);
   const [draftTemplate, setDraftTemplate] = useState<QuoteTemplate | null>(null);
@@ -1898,11 +1922,10 @@ function TemplateCard({
   template: QuoteTemplate;
   items: CatalogItem[];
   setTemplates: Dispatch<SetStateAction<QuoteTemplate[]>>;
-  onAddTemplate: (template: QuoteTemplate, jumpToCustomize?: boolean, nickname?: string) => void;
+  onAddTemplate: (template: QuoteTemplate, jumpToCustomize?: boolean) => void;
   onDeleteTemplate: (template: QuoteTemplate) => void;
 }) {
   const [selectorOpen, setSelectorOpen] = useState(false);
-  const [nickname, setNickname] = useState("");
   const updateTemplate = (patch: Partial<QuoteTemplate>) => {
     setTemplates((current) => current.map((candidate) => (candidate.id === template.id ? { ...candidate, ...patch } : candidate)));
   };
@@ -2008,11 +2031,7 @@ function TemplateCard({
         <PackagePlus size={16} />
         Add item to list
       </button>
-      <label className="field mt-3">
-        <span>Nickname for this quote</span>
-        <input className="input" value={nickname} onChange={(event) => setNickname(event.target.value)} placeholder="Optional, like Front Door or Camera 1" />
-      </label>
-      <button className="button-primary mt-4 w-full" onClick={() => onAddTemplate(template, true, nickname)}>
+      <button className="button-primary mt-4 w-full" onClick={() => onAddTemplate(template)}>
         Add to Quote
       </button>
       {selectorOpen ? (
