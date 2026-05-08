@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import type { Dispatch, SetStateAction } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { readDb, writeDb } from "@/lib/client-db";
+import { getPendingWriteCount, readDb, syncPendingWrites, writeDb } from "@/lib/client-db";
 import type { CatalogItem, QuoteLine, QuoteMeta, QuoteTemplate, SavedQuote, ServiceTitanSettings } from "@/lib/types";
 
 type View = "home" | "quote" | "items" | "templates" | "previous" | "settings";
@@ -285,6 +285,8 @@ export function QuickQuoteBuilder() {
   const [printableQuote, setPrintableQuote] = useState<PrintableQuote | null>(null);
   const [quoteSaveError, setQuoteSaveError] = useState("");
   const [databaseStatus, setDatabaseStatus] = useState<DatabaseStatus | null>(null);
+  const [isOnline, setIsOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
+  const [pendingOfflineWrites, setPendingOfflineWrites] = useState(0);
   const [draftHydrated, setDraftHydrated] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const cartRef = useRef<HTMLDetailsElement>(null);
@@ -328,9 +330,37 @@ export function QuickQuoteBuilder() {
 
   useEffect(() => {
     if (draftHydrated) {
-      writeStorage(STORAGE_KEYS.draftQuote, { lines, meta, quoteStep, updatedAt: new Date().toISOString() });
+      const draft = { lines, meta, quoteStep, updatedAt: new Date().toISOString() };
+      writeStorage(STORAGE_KEYS.draftQuote, draft);
+      void writeDb("drafts", draft).then(() => setPendingOfflineWrites(getPendingWriteCount()));
     }
   }, [draftHydrated, lines, meta, quoteStep]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+    void navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const syncNow = () => {
+      setIsOnline(navigator.onLine);
+      if (navigator.onLine) {
+        void syncPendingWrites().then((result) => setPendingOfflineWrites(result.pending));
+      } else {
+        setPendingOfflineWrites(getPendingWriteCount());
+      }
+    };
+
+    syncNow();
+    window.addEventListener("online", syncNow);
+    window.addEventListener("offline", syncNow);
+    return () => {
+      window.removeEventListener("online", syncNow);
+      window.removeEventListener("offline", syncNow);
+    };
+  }, []);
 
   useEffect(() => {
     if (quoteSaveError === requiredQuoteDetailsError && meta.customer.trim() && meta.project.trim() && meta.quoteNumber.trim()) {
@@ -363,28 +393,28 @@ export function QuickQuoteBuilder() {
   useEffect(() => {
     if (hydrated) {
       writeStorage(STORAGE_KEYS.items, items);
-      void writeDb("items", items);
+      void writeDb("items", items).then(() => setPendingOfflineWrites(getPendingWriteCount()));
     }
   }, [hydrated, items]);
 
   useEffect(() => {
     if (hydrated) {
       writeStorage(STORAGE_KEYS.templates, templates);
-      void writeDb("templates", templates);
+      void writeDb("templates", templates).then(() => setPendingOfflineWrites(getPendingWriteCount()));
     }
   }, [hydrated, templates]);
 
   useEffect(() => {
     if (hydrated) {
       writeStorage(STORAGE_KEYS.quotes, quotes);
-      void writeDb("quotes", quotes);
+      void writeDb("quotes", quotes).then(() => setPendingOfflineWrites(getPendingWriteCount()));
     }
   }, [hydrated, quotes]);
 
   useEffect(() => {
     if (hydrated) {
       writeStorage(STORAGE_KEYS.settings, settings);
-      void writeDb("settings", settings);
+      void writeDb("settings", settings).then(() => setPendingOfflineWrites(getPendingWriteCount()));
     }
   }, [hydrated, settings]);
 
@@ -631,12 +661,16 @@ export function QuickQuoteBuilder() {
                 aria-label="Notifications"
               >
                 <Bell size={18} />
-                <span className="absolute right-2 top-2 size-2 rounded-full bg-red-700" />
+                {!isOnline || pendingOfflineWrites ? <span className="absolute right-2 top-2 size-2 rounded-full bg-red-700" /> : null}
               </button>
               {notificationOpen ? (
                 <div className="absolute right-0 top-12 z-50 w-80 rounded-lg border border-stone-200 bg-white p-4 shadow-xl">
                   <p className="font-bold">Notifications</p>
-                  <p className="mt-2 text-sm text-stone-600">Database connection and ServiceTitan sync are in local placeholder mode until production credentials are connected.</p>
+                  <div className="mt-2 grid gap-2 text-sm text-stone-600">
+                    <p>{isOnline ? "Online. Database changes sync automatically." : "Offline. Changes are saved locally and will sync when the browser is online again."}</p>
+                    <p>{pendingOfflineWrites ? `${pendingOfflineWrites} database update${pendingOfflineWrites === 1 ? "" : "s"} waiting to sync.` : "No offline database updates waiting."}</p>
+                    <p>ServiceTitan sync is in placeholder mode until production credentials are connected.</p>
+                  </div>
                 </div>
               ) : null}
             </div>
@@ -2548,7 +2582,13 @@ function MobileMenu({
     <div className="fixed inset-0 z-50 bg-black/35 md:hidden" onClick={close}>
       <div className="h-full w-80 max-w-[85vw] bg-white p-4 shadow-2xl" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <button className="flex items-center gap-3 text-left" onClick={goToQuote}>
+          <button
+            className="flex items-center gap-3 text-left"
+            onClick={() => {
+              goToQuote();
+              close();
+            }}
+          >
             <span className="grid size-9 place-items-center rounded-lg bg-stone-900 text-lg font-black text-white">Q</span>
             <span className="font-black">Quick Quote Builder</span>
           </button>
