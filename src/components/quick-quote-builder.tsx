@@ -59,6 +59,7 @@ const STORAGE_KEYS = {
   templates: "qqb.cache.templates.v1",
   quotes: "qqb.cache.quotes.v1",
   settings: "qqb.cache.settings.v1",
+  session: "qqb.session.v1",
 };
 
 const emptyMeta: QuoteMeta = {
@@ -72,6 +73,9 @@ const emptyMeta: QuoteMeta = {
   laborHours: 0,
   laborRate: 125,
 };
+
+const isView = (value: unknown): value is View => ["quote", "items", "templates", "previous", "settings"].includes(String(value));
+const isQuoteStep = (value: unknown): value is QuoteStep => ["pick", "customize", "review", "finalize"].includes(String(value));
 
 const adiCatalog: AdiCatalogMatch[] = [
   {
@@ -203,8 +207,14 @@ function itemMatchesRequirement(item: CatalogItem, requirement: TemplateRequirem
 }
 
 export function QuickQuoteBuilder() {
-  const [view, setView] = useState<View>("quote");
-  const [quoteStep, setQuoteStep] = useState<QuoteStep>("pick");
+  const [view, setView] = useState<View>(() => {
+    const session = readStorage<{ view?: unknown }>(STORAGE_KEYS.session, {});
+    return isView(session.view) ? session.view : "quote";
+  });
+  const [quoteStep, setQuoteStep] = useState<QuoteStep>(() => {
+    const session = readStorage<{ quoteStep?: unknown }>(STORAGE_KEYS.session, {});
+    return isQuoteStep(session.quoteStep) ? session.quoteStep : "pick";
+  });
   const [menuOpen, setMenuOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
   const [items, setItems] = useState<CatalogItem[]>([]);
@@ -224,6 +234,7 @@ export function QuickQuoteBuilder() {
   const [emailPromptOpen, setEmailPromptOpen] = useState(false);
   const [pendingEmail, setPendingEmail] = useState("");
   const [selectedQuote, setSelectedQuote] = useState<SavedQuote | null>(null);
+  const [databaseStatus, setDatabaseStatus] = useState<DatabaseStatus | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const cartRef = useRef<HTMLDetailsElement>(null);
   const notificationRef = useRef<HTMLDivElement>(null);
@@ -246,6 +257,26 @@ export function QuickQuoteBuilder() {
       setSettings(dbSettings);
       setHydrated(true);
     });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    writeStorage(STORAGE_KEYS.session, { view, quoteStep });
+  }, [quoteStep, view]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/db/status", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((status: DatabaseStatus | null) => {
+        if (!cancelled) setDatabaseStatus(status);
+      })
+      .catch(() => {
+        if (!cancelled) setDatabaseStatus(null);
+      });
 
     return () => {
       cancelled = true;
@@ -442,6 +473,9 @@ export function QuickQuoteBuilder() {
               <span className="flex min-w-0 flex-wrap items-center gap-2">
                 <h1 className="truncate text-lg font-black leading-tight sm:text-2xl">Quick Quote Builder</h1>
                 {!isProductionStage ? <span className="rounded-full border border-amber-300 bg-amber-100 px-2 py-1 text-xs font-black uppercase tracking-normal text-amber-900">Dev Build</span> : null}
+                <span className={`rounded-full border px-2 py-1 text-xs font-black uppercase tracking-normal ${databaseStatus?.persistent ? "border-teal-300 bg-teal-100 text-teal-900" : "border-red-300 bg-red-100 text-red-900"}`}>
+                  {databaseStatus?.persistent ? "Database connected" : "Database offline"}
+                </span>
               </span>
               <p className="hidden text-sm text-stone-600 sm:block">Quote equipment, labor, templates, and saved jobs.</p>
             </button>
