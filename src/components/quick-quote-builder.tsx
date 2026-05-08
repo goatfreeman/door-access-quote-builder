@@ -45,6 +45,12 @@ type QuoteTotals = {
   taxAmount: number;
   total: number;
 };
+type PrintableQuote = {
+  meta: QuoteMeta;
+  lines: QuoteLine[];
+  totals: QuoteTotals;
+  createdAt?: string;
+};
 type TemplateRequirement = {
   id: string;
   label: string;
@@ -209,6 +215,21 @@ function itemMatchesRequirement(item: CatalogItem, requirement: TemplateRequirem
   return requirement.terms.some((term) => searchable.includes(normalizeSearchValue(term)));
 }
 
+function buildQuoteTotals(lines: QuoteLine[], meta: QuoteMeta): QuoteTotals {
+  const equipmentSubtotal = lines.filter((line) => !isLabor(line)).reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);
+  const laborAmount = meta.includeLabor ? (meta.laborHours ?? 0) * (meta.laborRate ?? 0) : 0;
+  const subtotal = equipmentSubtotal + laborAmount;
+  const marginAmount = subtotal * (meta.marginPercent / 100);
+  const taxable = subtotal + marginAmount;
+  const taxAmount = taxable * (meta.taxPercent / 100);
+  return { subtotal, equipmentSubtotal, laborAmount, marginAmount, taxAmount, total: taxable + taxAmount };
+}
+
+function totalsFromSavedQuote(quote: SavedQuote): QuoteTotals {
+  const calculated = buildQuoteTotals(quote.lines, quote.meta);
+  return { ...calculated, total: quote.total || calculated.total };
+}
+
 export function QuickQuoteBuilder() {
   const [view, setView] = useState<View>(() => {
     const session = readStorage<{ view?: unknown }>(STORAGE_KEYS.session, {});
@@ -237,6 +258,7 @@ export function QuickQuoteBuilder() {
   const [emailPromptOpen, setEmailPromptOpen] = useState(false);
   const [pendingEmail, setPendingEmail] = useState("");
   const [selectedQuote, setSelectedQuote] = useState<SavedQuote | null>(null);
+  const [printableQuote, setPrintableQuote] = useState<PrintableQuote | null>(null);
   const [databaseStatus, setDatabaseStatus] = useState<DatabaseStatus | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const cartRef = useRef<HTMLDetailsElement>(null);
@@ -358,15 +380,7 @@ export function QuickQuoteBuilder() {
   }, [catalogCategories, category]);
 
   const activeLines = useMemo(() => lines.filter((line) => !isLabor(line)), [lines]);
-  const totals = useMemo(() => {
-    const equipmentSubtotal = activeLines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);
-    const laborAmount = meta.includeLabor ? (meta.laborHours ?? 0) * (meta.laborRate ?? 0) : 0;
-    const subtotal = equipmentSubtotal + laborAmount;
-    const marginAmount = subtotal * (meta.marginPercent / 100);
-    const taxable = subtotal + marginAmount;
-    const taxAmount = taxable * (meta.taxPercent / 100);
-    return { subtotal, equipmentSubtotal, laborAmount, marginAmount, taxAmount, total: taxable + taxAmount };
-  }, [activeLines, meta.includeLabor, meta.laborHours, meta.laborRate, meta.marginPercent, meta.taxPercent]);
+  const totals = useMemo(() => buildQuoteTotals(lines, meta), [lines, meta]);
   const cartCount = activeLines.reduce((sum, line) => sum + line.quantity, 0);
 
   const addItem = (item: CatalogItem, packageName?: string, quantity = 1) => {
@@ -441,10 +455,18 @@ export function QuickQuoteBuilder() {
     setQuoteStep("customize");
   };
 
-  const printQuote = () => window.print();
+  const printQuote = () => {
+    setPrintableQuote(null);
+    window.setTimeout(() => window.print(), 80);
+  };
+  const printSavedQuote = (quote: SavedQuote) => {
+    setPrintableQuote({ meta: quote.meta, lines: quote.lines, totals: totalsFromSavedQuote(quote), createdAt: quote.createdAt });
+    window.setTimeout(() => window.print(), 80);
+  };
 
   const sendEmail = () => {
     setMeta((current) => ({ ...current, email: pendingEmail }));
+    setPrintableQuote(null);
     setEmailPromptOpen(false);
     window.setTimeout(() => window.print(), 80);
   };
@@ -589,7 +611,7 @@ export function QuickQuoteBuilder() {
 
         {view === "items" ? <ItemsPage items={activeItems} setItems={setItems} onDeleteItem={deleteItemEverywhere} /> : null}
         {view === "templates" ? <TemplatesPage templates={templates} items={activeItems} setTemplates={setTemplates} onAddTemplate={addTemplate} /> : null}
-        {view === "previous" ? <PreviousQuotes quotes={activeQuotes} selectedQuote={selectedQuote} setSelectedQuote={setSelectedQuote} onEdit={loadQuoteForEdit} setQuotes={setQuotes} /> : null}
+        {view === "previous" ? <PreviousQuotes quotes={activeQuotes} selectedQuote={selectedQuote} setSelectedQuote={setSelectedQuote} onEdit={loadQuoteForEdit} onPrintQuote={printSavedQuote} setQuotes={setQuotes} /> : null}
         {view === "settings" ? <SettingsPage settings={settings} setSettings={setSettings} onSync={syncServiceTitan} items={items} setItems={setItems} quotes={quotes} setQuotes={setQuotes} /> : null}
       </section>
 
@@ -613,6 +635,7 @@ export function QuickQuoteBuilder() {
           </div>
         </div>
       ) : null}
+      <PrintQuoteDocument quote={printableQuote ?? { meta, lines: activeLines, totals }} />
     </main>
   );
 }
@@ -653,6 +676,81 @@ function HomePage({ meta, lines, total, onContinue }: { meta: QuoteMeta; lines: 
         <button className="button-primary w-fit" onClick={onContinue}>
           Open Quote Workspace
         </button>
+      </div>
+    </section>
+  );
+}
+
+function PrintQuoteDocument({ quote }: { quote: PrintableQuote }) {
+  const issuedDate = quote.createdAt ? new Date(quote.createdAt) : new Date();
+
+  return (
+    <section className="print-document">
+      <div className="print-header">
+        <div>
+          <p className="print-brand">Quick Quote Builder</p>
+          <h1>Quote</h1>
+        </div>
+        <div className="print-meta">
+          <p><strong>Quote #</strong> {quote.meta.quoteNumber || "Draft"}</p>
+          <p><strong>Date</strong> {issuedDate.toLocaleDateString()}</p>
+        </div>
+      </div>
+      <div className="print-info-grid">
+        <div>
+          <p className="print-label">Customer</p>
+          <p>{quote.meta.customer || "Customer name"}</p>
+          <p>{quote.meta.email || ""}</p>
+        </div>
+        <div>
+          <p className="print-label">Project</p>
+          <p>{quote.meta.project || "Project name"}</p>
+        </div>
+      </div>
+      <table className="print-table">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>SKU</th>
+            <th>Qty</th>
+            <th>Unit</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {quote.lines.length ? (
+            quote.lines.map((line) => (
+              <tr key={line.lineId}>
+                <td>
+                  <strong>{line.packageName ?? line.name}</strong>
+                  {line.packageName ? <span>{line.name}</span> : null}
+                  {line.notes ? <small>{line.notes}</small> : null}
+                </td>
+                <td>{line.sku}</td>
+                <td>{line.quantity}</td>
+                <td>{money.format(line.unitPrice)}</td>
+                <td>{money.format(line.quantity * line.unitPrice)}</td>
+              </tr>
+            ))
+          ) : (
+            <tr>
+              <td colSpan={5}>No line items.</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+      <div className="print-summary">
+        <SummaryRow label="Equipment" value={quote.totals.equipmentSubtotal} />
+        {quote.totals.laborAmount ? <SummaryRow label="Labor" value={quote.totals.laborAmount} /> : null}
+        <SummaryRow label="Margin" value={quote.totals.marginAmount} />
+        <SummaryRow label="Tax" value={quote.totals.taxAmount} />
+        <div className="print-total">
+          <span>Total</span>
+          <strong>{money.format(quote.totals.total)}</strong>
+        </div>
+      </div>
+      <div className="print-footer">
+        <p>Prepared for review. Pricing is valid as of the quote date unless otherwise noted.</p>
       </div>
     </section>
   );
@@ -1856,12 +1954,14 @@ function PreviousQuotes({
   selectedQuote,
   setSelectedQuote,
   onEdit,
+  onPrintQuote,
   setQuotes,
 }: {
   quotes: SavedQuote[];
   selectedQuote: SavedQuote | null;
   setSelectedQuote: (quote: SavedQuote | null) => void;
   onEdit: (quote: SavedQuote) => void;
+  onPrintQuote: (quote: SavedQuote) => void;
   setQuotes: Dispatch<SetStateAction<SavedQuote[]>>;
 }) {
   const [deleteQuote, setDeleteQuote] = useState<SavedQuote | null>(null);
@@ -1944,7 +2044,11 @@ function PreviousQuotes({
                           key={format}
                           className="rounded-md px-3 py-2 text-left text-sm font-bold hover:bg-stone-100"
                           onClick={() => {
-                            exportQuote(selectedQuote, format as ExportQuoteFormat);
+                            if (format === "excel") {
+                              exportQuote(selectedQuote, format as ExportQuoteFormat);
+                            } else {
+                              onPrintQuote(selectedQuote);
+                            }
                             setPrintMenuOpen(false);
                           }}
                         >
