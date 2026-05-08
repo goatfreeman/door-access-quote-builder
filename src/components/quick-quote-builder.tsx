@@ -473,9 +473,6 @@ export function QuickQuoteBuilder() {
               <span className="flex min-w-0 flex-wrap items-center gap-2">
                 <h1 className="truncate text-lg font-black leading-tight sm:text-2xl">Quick Quote Builder</h1>
                 {!isProductionStage ? <span className="rounded-full border border-amber-300 bg-amber-100 px-2 py-1 text-xs font-black uppercase tracking-normal text-amber-900">Dev Build</span> : null}
-                <span className={`rounded-full border px-2 py-1 text-xs font-black uppercase tracking-normal ${databaseStatus?.persistent ? "border-teal-300 bg-teal-100 text-teal-900" : "border-red-300 bg-red-100 text-red-900"}`}>
-                  {databaseStatus?.persistent ? "Database connected" : "Database offline"}
-                </span>
               </span>
               <p className="hidden text-sm text-stone-600 sm:block">Quote equipment, labor, templates, and saved jobs.</p>
             </button>
@@ -2011,7 +2008,12 @@ function SettingsPage({
           ) : null}
           {activeSection === "database" ? (
             <section className="rounded-lg border border-stone-200 bg-stone-50 p-4">
-              <h3 className="font-black">Database</h3>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h3 className="font-black">Database</h3>
+                <span className={`rounded-full border px-2 py-1 text-xs font-black uppercase tracking-normal ${databaseStatus?.persistent ? "border-teal-300 bg-teal-100 text-teal-900" : "border-red-300 bg-red-100 text-red-900"}`}>
+                  {databaseStatus?.persistent ? "Database connected" : "Database offline"}
+                </span>
+              </div>
               <div className="mt-4 grid gap-3 md:grid-cols-3">
                 <InfoTile label="Current database" value={databaseStatus?.provider ?? "Checking"} />
                 <InfoTile label="Database name" value={databaseStatus?.databaseName ?? "Checking"} />
