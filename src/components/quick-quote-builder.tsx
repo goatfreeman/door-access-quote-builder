@@ -35,6 +35,12 @@ type DatabaseStatus = {
   databaseName: string;
   persistent: boolean;
 };
+type TemplateRequirement = {
+  id: string;
+  label: string;
+  quantity: number;
+  terms: string[];
+};
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const appStage = process.env.NEXT_PUBLIC_APP_STAGE ?? "development";
@@ -164,6 +170,25 @@ function fuzzyScore(query: string, candidate: AdiCatalogMatch) {
 
   if (candidate.sku.toLowerCase().includes(compactQuery) || candidate.manufacturerSku.toLowerCase().includes(compactQuery)) score += 40;
   return Math.min(score, 100);
+}
+
+function getDoorTemplateRequirements(template: QuoteTemplate): TemplateRequirement[] {
+  const text = normalizeSearchValue(`${template.name} ${template.description}`);
+  if (!text.includes("door") && !text.includes("access")) return [];
+  const readerQuantity = /\b(2|two|dual)\b/.test(text) || text.includes("in out") || text.includes("entry exit") ? 2 : 1;
+
+  return [
+    { id: "strike", label: "Door strike", quantity: 1, terms: ["strike", "9600", "hes"] },
+    { id: "reader", label: readerQuantity > 1 ? "Readers" : "Reader", quantity: readerQuantity, terms: ["reader", "hid", "signo"] },
+    { id: "contact", label: "Door contact", quantity: 1, terms: ["contact", "door contact", "reed"] },
+    { id: "rex", label: "REX", quantity: 1, terms: ["rex", "request to exit", "motion"] },
+    { id: "panel", label: "Honeywell panel", quantity: 1, terms: ["honeywell", "panel", "controller", "pw6"] },
+  ];
+}
+
+function itemMatchesRequirement(item: CatalogItem, requirement: TemplateRequirement) {
+  const searchable = normalizeSearchValue(`${item.name} ${item.sku} ${item.category} ${item.vendor ?? ""} ${item.notes ?? ""}`);
+  return requirement.terms.some((term) => searchable.includes(normalizeSearchValue(term)));
 }
 
 export function QuickQuoteBuilder() {
@@ -1057,6 +1082,10 @@ function ItemsPage({
                 <span>Inventory</span>
                 <input className="input" type="number" value={item.inventory ?? 0} onChange={(event) => updateItem(item.id, { inventory: Number(event.target.value) })} />
               </label>
+              <label className="field md:col-span-3">
+                <span>Notes</span>
+                <textarea className="textarea" value={item.notes ?? ""} onChange={(event) => updateItem(item.id, { notes: event.target.value })} placeholder="Optional item notes" />
+              </label>
               <div className="flex justify-end md:col-span-3">
                 <button className="button-ghost text-red-800 hover:bg-red-100" onClick={() => setDeleteItem(item)}>
                   <Trash2 size={16} />
@@ -1069,7 +1098,7 @@ function ItemsPage({
       </div>
       {addItemOpen ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onClick={() => setAddItemOpen(false)}>
-          <div className="w-full max-w-3xl rounded-lg bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+          <div className="max-h-[calc(100vh-2rem)] w-full max-w-3xl overflow-y-auto rounded-lg bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="text-2xl font-black">Add Item</h3>
@@ -1346,6 +1375,30 @@ function TemplateCard({
         : [...template.lines, { itemId: selectedItemId, quantity: 1 }],
     });
   };
+  const requirements = useMemo(() => getDoorTemplateRequirements(template), [template]);
+  const requirementStatus = useMemo(() => {
+    return requirements.map((requirement) => {
+      const quantityInTemplate = template.lines.reduce((sum, line) => {
+        const item = items.find((candidate) => candidate.id === line.itemId);
+        return item && itemMatchesRequirement(item, requirement) ? sum + line.quantity : sum;
+      }, 0);
+      const suggestedItem = items.find((item) => itemMatchesRequirement(item, requirement));
+      return {
+        ...requirement,
+        quantityInTemplate,
+        missingQuantity: Math.max(requirement.quantity - quantityInTemplate, 0),
+        suggestedItem,
+      };
+    });
+  }, [items, requirements, template.lines]);
+  const addMissingRequirement = (requirement: (typeof requirementStatus)[number]) => {
+    if (!requirement.suggestedItem || !requirement.missingQuantity) return;
+    updateTemplate({
+      lines: template.lines.some((line) => line.itemId === requirement.suggestedItem?.id)
+        ? template.lines.map((line) => (line.itemId === requirement.suggestedItem?.id ? { ...line, quantity: line.quantity + requirement.missingQuantity } : line))
+        : [...template.lines, { itemId: requirement.suggestedItem.id, quantity: requirement.missingQuantity }],
+    });
+  };
 
   return (
     <article className="rounded-lg border border-stone-200 bg-stone-50 p-4">
@@ -1360,6 +1413,34 @@ function TemplateCard({
         </button>
       </div>
       <textarea className="textarea mt-3" value={template.description} onChange={(event) => updateTemplate({ description: event.target.value })} placeholder="Template description" />
+      {requirements.length ? (
+        <div className="mt-3 grid gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+          <div>
+            <p className="text-sm font-black text-amber-950">Door template check</p>
+            <p className="text-xs font-medium text-amber-900">Checks common door access prerequisites from the item database.</p>
+          </div>
+          <div className="grid gap-2">
+            {requirementStatus.map((requirement) => (
+              <div key={requirement.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-md bg-white p-2 text-sm">
+                <div className="min-w-0">
+                  <p className="font-bold text-stone-950">{requirement.label}</p>
+                  <p className="text-xs text-stone-600">
+                    Need {requirement.quantity}, has {requirement.quantityInTemplate}
+                    {requirement.missingQuantity ? requirement.suggestedItem ? ` / can add ${requirement.suggestedItem.name}` : " / no matching catalog item" : " / complete"}
+                  </p>
+                </div>
+                {requirement.missingQuantity ? (
+                  <button className="button-secondary min-h-9 px-3 py-1" onClick={() => addMissingRequirement(requirement)} disabled={!requirement.suggestedItem}>
+                    Add
+                  </button>
+                ) : (
+                  <span className="rounded-md bg-teal-50 px-2 py-1 text-xs font-black text-teal-800">OK</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
       <div className="mt-3 grid gap-2">
         {template.lines.map((line) => {
           const item = items.find((candidate) => candidate.id === line.itemId);
