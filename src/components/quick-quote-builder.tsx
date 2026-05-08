@@ -24,7 +24,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getPendingWriteCount, readDb, syncPendingWrites, writeDb } from "@/lib/client-db";
 import type { CatalogItem, QuoteLine, QuoteMeta, QuoteTemplate, SavedQuote, ServiceTitanSettings } from "@/lib/types";
 
-type View = "home" | "quote" | "items" | "templates" | "previous" | "settings";
+type View = "home" | "quote" | "items" | "templates" | "previous" | "settings" | "client";
 type QuoteStep = "pick" | "customize" | "review" | "finalize";
 type SettingsSection = "account" | "database" | "serviceTitan" | "adi" | "sync" | "recovery";
 type AdiCatalogMatch = Omit<CatalogItem, "id"> & {
@@ -89,9 +89,24 @@ const emptyMeta: QuoteMeta = {
   laborRate: 125,
 };
 
-const isView = (value: unknown): value is View => ["home", "quote", "items", "templates", "previous", "settings"].includes(String(value));
+const isView = (value: unknown): value is View => ["home", "quote", "items", "templates", "previous", "settings", "client"].includes(String(value));
 const isQuoteStep = (value: unknown): value is QuoteStep => ["pick", "customize", "review", "finalize"].includes(String(value));
-const viewPath = (view: View) => (view === "home" ? "/" : `/${view}`);
+const slugify = (value: string) =>
+  normalizeSearchValue(value)
+    .replace(/\s+/g, "-")
+    .replace(/^-|-$/g, "");
+const quoteSlug = (quote: SavedQuote) => `${slugify(`${quote.meta.quoteNumber} ${quote.meta.project || quote.meta.customer}`) || "quote"}-${quote.id}`;
+const quoteSlugFromPath = () => {
+  if (typeof window === "undefined") return "";
+  const [, viewSegment, slug] = window.location.pathname.split("/");
+  return viewSegment === "previous" || viewSegment === "client" ? slug ?? "" : "";
+};
+const findQuoteBySlug = (quotes: SavedQuote[], slug: string) => quotes.find((quote) => quoteSlug(quote) === slug || quote.id === slug || quote.meta.quoteNumber === slug) ?? null;
+const viewPath = (view: View, quote?: SavedQuote) => {
+  if (view === "home") return "/";
+  if ((view === "previous" || view === "client") && quote) return `/${view}/${quoteSlug(quote)}`;
+  return `/${view}`;
+};
 const viewFromPath = () => {
   if (typeof window === "undefined") return null;
   const segment = window.location.pathname.split("/").filter(Boolean)[0];
@@ -290,6 +305,7 @@ export function QuickQuoteBuilder() {
   const [emailPromptOpen, setEmailPromptOpen] = useState(false);
   const [pendingEmail, setPendingEmail] = useState("");
   const [selectedQuote, setSelectedQuote] = useState<SavedQuote | null>(null);
+  const [routeQuoteSlug, setRouteQuoteSlug] = useState(() => quoteSlugFromPath());
   const [printableQuote, setPrintableQuote] = useState<PrintableQuote | null>(null);
   const [quoteSaveError, setQuoteSaveError] = useState("");
   const [databaseStatus, setDatabaseStatus] = useState<DatabaseStatus | null>(null);
@@ -302,10 +318,11 @@ export function QuickQuoteBuilder() {
   const activeItems = useMemo(() => items.filter((item) => !item.deletedAt), [items]);
   const activeQuotes = useMemo(() => quotes.filter((quote) => !quote.deletedAt), [quotes]);
 
-  const navigateToView = (nextView: View) => {
+  const navigateToView = (nextView: View, quote?: SavedQuote) => {
     setView(nextView);
+    setRouteQuoteSlug(quote ? quoteSlug(quote) : "");
     if (typeof window === "undefined") return;
-    const nextPath = viewPath(nextView);
+    const nextPath = viewPath(nextView, quote);
     if (window.location.pathname !== nextPath) window.history.pushState({ view: nextView }, "", nextPath);
   };
 
@@ -347,10 +364,17 @@ export function QuickQuoteBuilder() {
     const handlePopState = () => {
       const pathView = viewFromPath();
       if (pathView) setView(pathView);
+      setRouteQuoteSlug(quoteSlugFromPath());
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
+
+  useEffect(() => {
+    if ((view !== "previous" && view !== "client") || !routeQuoteSlug) return;
+    const quote = findQuoteBySlug(activeQuotes, routeQuoteSlug);
+    if (quote && selectedQuote?.id !== quote.id) setSelectedQuote(quote);
+  }, [activeQuotes, routeQuoteSlug, selectedQuote?.id, view]);
 
   useEffect(() => {
     if (draftHydrated) {
@@ -569,7 +593,7 @@ export function QuickQuoteBuilder() {
     setQuoteSaveError("");
     setQuotes((current) => [saved, ...current]);
     setSelectedQuote(saved);
-    navigateToView("previous");
+    navigateToView("previous", saved);
     setLines([]);
     setMeta(emptyMeta);
     setQuoteStep("pick");
@@ -579,6 +603,7 @@ export function QuickQuoteBuilder() {
     setMeta(quote.meta);
     setLines(quote.lines);
     setSelectedQuote(null);
+    setRouteQuoteSlug("");
     navigateToView("quote");
     setQuoteStep("customize");
   };
@@ -611,6 +636,7 @@ export function QuickQuoteBuilder() {
     { id: "previous" as const, label: "Previous Quotes", icon: Database },
     { id: "settings" as const, label: "Settings", icon: Settings },
   ];
+  const isClientView = view === "client";
 
   const goToQuote = () => {
     navigateToView("quote");
@@ -631,9 +657,11 @@ export function QuickQuoteBuilder() {
       <header className="sticky top-0 z-40 border-b border-stone-200 bg-stone-100/95 px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
-            <button className="icon-button md:hidden" onClick={() => setMenuOpen(true)} aria-label="Open menu">
-              <Menu size={19} />
-            </button>
+            {!isClientView ? (
+              <button className="icon-button md:hidden" onClick={() => setMenuOpen(true)} aria-label="Open menu">
+                <Menu size={19} />
+              </button>
+            ) : null}
             <button className="grid size-10 place-items-center rounded-lg bg-stone-900 text-xl font-black text-white" onClick={goToHome} aria-label="Go to home page">
               Q
             </button>
@@ -645,15 +673,17 @@ export function QuickQuoteBuilder() {
               <p className="hidden text-sm text-stone-600 sm:block">Quote equipment, labor, templates, and saved jobs.</p>
             </button>
           </div>
-          <nav className="hidden items-center gap-2 md:flex">
-            {nav.map((item) => (
-              <button key={item.id} className={`nav-button ${view === item.id ? "nav-button-active" : ""}`} onClick={() => navigateToView(item.id)}>
-                <item.icon size={16} />
-                {item.label}
-              </button>
-            ))}
-          </nav>
-          <div className="flex items-center gap-2">
+          {!isClientView ? (
+            <nav className="hidden items-center gap-2 md:flex">
+              {nav.map((item) => (
+                <button key={item.id} className={`nav-button ${view === item.id ? "nav-button-active" : ""}`} onClick={() => navigateToView(item.id)}>
+                  <item.icon size={16} />
+                  {item.label}
+                </button>
+              ))}
+            </nav>
+          ) : null}
+          {!isClientView ? <div className="flex items-center gap-2">
             <details ref={cartRef} className="group relative" open={cartOpen}>
               <summary
                 className="icon-button relative list-none bg-teal-700 text-white [&::-webkit-details-marker]:hidden"
@@ -706,11 +736,11 @@ export function QuickQuoteBuilder() {
                 </div>
               ) : null}
             </div>
-          </div>
+          </div> : null}
         </div>
       </header>
 
-      {menuOpen ? <MobileMenu nav={nav} view={view} setView={navigateToView} goToQuote={goToQuote} close={() => setMenuOpen(false)} /> : null}
+      {menuOpen && !isClientView ? <MobileMenu nav={nav} view={view} setView={navigateToView} goToQuote={goToQuote} close={() => setMenuOpen(false)} /> : null}
 
       <section className={`mx-auto grid max-w-7xl gap-4 px-4 py-4 ${view === "quote" && quoteStep !== "finalize" ? "lg:grid-cols-[320px_minmax(0,1fr)]" : ""}`}>
         {view === "home" ? <HomePage meta={meta} lines={activeLines} total={totals.total} onContinue={goToQuote} /> : null}
@@ -745,7 +775,25 @@ export function QuickQuoteBuilder() {
 
         {view === "items" ? <ItemsPage items={activeItems} setItems={setItems} onDeleteItem={deleteItemEverywhere} /> : null}
         {view === "templates" ? <TemplatesPage templates={templates} items={activeItems} setTemplates={setTemplates} onAddTemplate={addTemplate} /> : null}
-        {view === "previous" ? <PreviousQuotes quotes={activeQuotes} selectedQuote={selectedQuote} setSelectedQuote={setSelectedQuote} onEdit={loadQuoteForEdit} onPrintQuote={printSavedQuote} setQuotes={setQuotes} /> : null}
+        {view === "previous" ? (
+          <PreviousQuotes
+            quotes={activeQuotes}
+            selectedQuote={selectedQuote}
+            onSelectQuote={(quote) => {
+              setSelectedQuote(quote);
+              navigateToView("previous", quote);
+            }}
+            onClearQuote={() => setSelectedQuote(null)}
+            onClientView={(quote) => {
+              setSelectedQuote(quote);
+              navigateToView("client", quote);
+            }}
+            onEdit={loadQuoteForEdit}
+            onPrintQuote={printSavedQuote}
+            setQuotes={setQuotes}
+          />
+        ) : null}
+        {view === "client" ? <ClientQuoteView quote={selectedQuote} onPrintQuote={printSavedQuote} /> : null}
         {view === "settings" ? <SettingsPage settings={settings} setSettings={setSettings} onSync={syncServiceTitan} items={items} setItems={setItems} quotes={quotes} setQuotes={setQuotes} /> : null}
       </section>
 
@@ -2200,14 +2248,18 @@ function TemplateItemSelector({ items, onCancel, onConfirm }: { items: CatalogIt
 function PreviousQuotes({
   quotes,
   selectedQuote,
-  setSelectedQuote,
+  onSelectQuote,
+  onClearQuote,
+  onClientView,
   onEdit,
   onPrintQuote,
   setQuotes,
 }: {
   quotes: SavedQuote[];
   selectedQuote: SavedQuote | null;
-  setSelectedQuote: (quote: SavedQuote | null) => void;
+  onSelectQuote: (quote: SavedQuote) => void;
+  onClearQuote: () => void;
+  onClientView: (quote: SavedQuote) => void;
   onEdit: (quote: SavedQuote) => void;
   onPrintQuote: (quote: SavedQuote) => void;
   setQuotes: Dispatch<SetStateAction<SavedQuote[]>>;
@@ -2227,7 +2279,7 @@ function PreviousQuotes({
     if (!deleteQuote) return;
     const deletedAt = new Date().toISOString();
     setQuotes((current) => current.map((quote) => (quote.id === deleteQuote.id ? { ...quote, deletedAt, updatedAt: deletedAt } : quote)));
-    if (selectedQuote?.id === deleteQuote.id) setSelectedQuote(null);
+    if (selectedQuote?.id === deleteQuote.id) onClearQuote();
     setDeleteQuote(null);
   };
 
@@ -2244,7 +2296,7 @@ function PreviousQuotes({
           <input className="input" value={quoteSearch} onChange={(event) => setQuoteSearch(event.target.value)} placeholder="Search customer, project, location, quote, or item" />
           {visibleQuotes.length ? (
             visibleQuotes.map((quote) => (
-              <button key={quote.id} className={`rounded-lg border p-3 text-left ${selectedQuote?.id === quote.id ? "border-teal-700 bg-teal-50" : "border-stone-200 bg-white"}`} onClick={() => setSelectedQuote(quote)}>
+              <button key={quote.id} className={`rounded-lg border p-3 text-left ${selectedQuote?.id === quote.id ? "border-teal-700 bg-teal-50" : "border-stone-200 bg-white"}`} onClick={() => onSelectQuote(quote)}>
                 <p className="font-black">{quote.meta.customer || "Unnamed customer"}</p>
                 <p className="text-sm text-stone-600">{new Date(quote.createdAt).toLocaleDateString()} · {quote.meta.quoteNumber}</p>
                 {quote.meta.project ? <p className="text-sm font-bold text-stone-700">{quote.meta.project}</p> : null}
@@ -2288,6 +2340,9 @@ function PreviousQuotes({
               <div className="flex flex-wrap gap-2">
                 <button className="button-primary" onClick={() => onEdit(selectedQuote)}>
                   Edit Quote
+                </button>
+                <button className="button-secondary" onClick={() => onClientView(selectedQuote)}>
+                  Client View
                 </button>
                 <div className="relative">
                   <button className="button-secondary" onClick={() => setPrintMenuOpen((open) => !open)}>
@@ -2355,6 +2410,61 @@ function PreviousQuotes({
           </div>
         </div>
       ) : null}
+    </section>
+  );
+}
+
+function ClientQuoteView({ quote, onPrintQuote }: { quote: SavedQuote | null; onPrintQuote: (quote: SavedQuote) => void }) {
+  if (!quote) {
+    return (
+      <section className="panel lg:col-span-2">
+        <div className="panel-header">
+          <div>
+            <h2>Quote</h2>
+            <p>This client quote link is loading or no longer exists.</p>
+          </div>
+        </div>
+        <div className="p-6">
+          <p className="rounded-lg border border-dashed border-stone-300 bg-stone-50 p-8 text-center text-stone-500">Quote not found.</p>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="panel lg:col-span-2">
+      <div className="panel-header">
+        <div>
+          <h2>{quote.meta.project || quote.meta.customer || "Quote"}</h2>
+          <p>Client view for quote {quote.meta.quoteNumber}.</p>
+        </div>
+        <button className="button-secondary" onClick={() => onPrintQuote(quote)}>
+          <Printer size={16} />
+          Print
+        </button>
+      </div>
+      <div className="grid gap-4 p-4">
+        <div className="grid gap-3 rounded-lg bg-stone-50 p-4 md:grid-cols-2">
+          <InfoTile label="Customer" value={quote.meta.customer || "Customer"} />
+          <InfoTile label="Project" value={quote.meta.project || "Project"} />
+          <InfoTile label="Quote" value={quote.meta.quoteNumber} />
+          <InfoTile label="Quoted" value={new Date(quote.createdAt).toLocaleDateString()} />
+          {quote.meta.location ? <InfoTile label="Location" value={quote.meta.location} /> : null}
+        </div>
+        <div className="grid gap-2">
+          {quote.lines.map((line) => (
+            <div key={line.lineId} className="flex items-start justify-between gap-3 rounded-lg border border-stone-200 bg-white p-3">
+              <div className="min-w-0">
+                <p className="truncate font-bold">{line.packageName ?? line.name}</p>
+                {line.packageName ? <p className="truncate text-sm text-stone-600">{line.name}</p> : null}
+                <p className="text-sm text-stone-600">Qty {line.quantity}</p>
+              </div>
+              <strong className="shrink-0">{money.format(line.quantity * line.unitPrice)}</strong>
+            </div>
+          ))}
+        </div>
+        <TotalsCard totals={totalsFromSavedQuote(quote)} />
+      </div>
     </section>
   );
 }
