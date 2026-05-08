@@ -7,7 +7,9 @@ import {
   Database,
   FileText,
   Mail,
+  Minus,
   Menu,
+  Plus,
   PackagePlus,
   Printer,
   Save,
@@ -520,6 +522,7 @@ export function QuickQuoteBuilder() {
               <CartDropdown
                 lines={activeLines}
                 totals={totals}
+                onUpdateLine={updateLine}
                 onRemoveLine={(id) => setLines((current) => current.filter((line) => line.lineId !== id))}
                 onNext={() => {
                   setQuoteStep("finalize");
@@ -658,11 +661,13 @@ function HomePage({ meta, lines, total, onContinue }: { meta: QuoteMeta; lines: 
 function CartDropdown({
   lines,
   totals,
+  onUpdateLine,
   onRemoveLine,
   onNext,
 }: {
   lines: QuoteLine[];
   totals: QuoteTotals;
+  onUpdateLine: (lineId: string, patch: Partial<QuoteLine>) => void;
   onRemoveLine: (lineId: string) => void;
   onNext: () => void;
 }) {
@@ -679,7 +684,15 @@ function CartDropdown({
               <div className="min-w-0">
                 <p className="truncate font-bold">{line.packageName ?? line.name}</p>
                 {line.packageName ? <p className="mt-1 truncate text-sm text-stone-600">{line.name}</p> : null}
-                <p className="mt-1 text-sm text-stone-600">Qty {line.quantity}</p>
+                <div className="mt-2 inline-grid grid-cols-[32px_48px_32px] items-center overflow-hidden rounded-md border border-stone-200 bg-white">
+                  <button className="grid size-8 place-items-center text-stone-700 hover:bg-stone-100" onClick={() => (line.quantity <= 1 ? onRemoveLine(line.lineId) : onUpdateLine(line.lineId, { quantity: line.quantity - 1 }))} aria-label={`Decrease ${line.name}`}>
+                    <Minus size={14} />
+                  </button>
+                  <span className="text-center text-sm font-black">{line.quantity}</span>
+                  <button className="grid size-8 place-items-center text-stone-700 hover:bg-stone-100" onClick={() => onUpdateLine(line.lineId, { quantity: line.quantity + 1 })} aria-label={`Increase ${line.name}`}>
+                    <Plus size={14} />
+                  </button>
+                </div>
               </div>
               <button
                 className="grid size-8 translate-x-2 place-items-center rounded-full text-stone-400 opacity-0 transition duration-200 hover:bg-red-50 hover:text-red-800 group-hover:translate-x-0 group-hover:opacity-100"
