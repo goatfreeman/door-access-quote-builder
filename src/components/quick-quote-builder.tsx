@@ -66,6 +66,7 @@ const appStage = process.env.NEXT_PUBLIC_APP_STAGE ?? "development";
 const isProductionStage = appStage.toLowerCase() === "production";
 const recoveryRetentionDays = 30;
 const dayInMs = 24 * 60 * 60 * 1000;
+const requiredQuoteDetailsError = "Add a customer name, project, and quote number before saving this quote.";
 const STORAGE_KEYS = {
   items: "qqb.cache.items.v1",
   templates: "qqb.cache.templates.v1",
@@ -332,10 +333,10 @@ export function QuickQuoteBuilder() {
   }, [draftHydrated, lines, meta, quoteStep]);
 
   useEffect(() => {
-    if (quoteSaveError && meta.customer.trim() && meta.project.trim()) {
+    if (quoteSaveError === requiredQuoteDetailsError && meta.customer.trim() && meta.project.trim() && meta.quoteNumber.trim()) {
       setQuoteSaveError("");
     }
-  }, [meta.customer, meta.project, quoteSaveError]);
+  }, [meta.customer, meta.project, meta.quoteNumber, quoteSaveError]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -477,8 +478,16 @@ export function QuickQuoteBuilder() {
   };
 
   const saveQuote = () => {
-    if (!meta.customer.trim() || !meta.project.trim()) {
-      setQuoteSaveError("Add a customer name and project before saving this quote.");
+    const quoteNumber = meta.quoteNumber.trim();
+    if (!meta.customer.trim() || !meta.project.trim() || !quoteNumber) {
+      setQuoteSaveError(requiredQuoteDetailsError);
+      setQuoteStep("finalize");
+      return;
+    }
+
+    const duplicateQuote = activeQuotes.find((quote) => quote.meta.quoteNumber.trim().toLowerCase() === quoteNumber.toLowerCase());
+    if (duplicateQuote) {
+      setQuoteSaveError(`Quote number ${quoteNumber} is already used by ${duplicateQuote.meta.customer || "another saved quote"}. Use a unique quote number before saving.`);
       setQuoteStep("finalize");
       return;
     }
@@ -493,6 +502,7 @@ export function QuickQuoteBuilder() {
         customer: meta.customer.trim(),
         project: meta.project.trim(),
         location: meta.location?.trim() ?? "",
+        quoteNumber,
       },
       lines,
       total: totals.total,
