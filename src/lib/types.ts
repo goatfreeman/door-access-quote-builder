@@ -8,6 +8,7 @@ export type CatalogItem = {
   vendor?: string;
   inventory?: number;
   notes?: string;
+  deletedAt?: string;
 };
 
 export type TemplateLine = {

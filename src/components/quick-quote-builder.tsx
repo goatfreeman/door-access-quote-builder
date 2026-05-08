@@ -24,7 +24,7 @@ import type { CatalogItem, QuoteLine, QuoteMeta, QuoteTemplate, SavedQuote, Serv
 
 type View = "quote" | "items" | "templates" | "previous" | "settings";
 type QuoteStep = "pick" | "customize" | "review" | "finalize";
-type SettingsSection = "account" | "database" | "serviceTitan" | "adi" | "sync";
+type SettingsSection = "account" | "database" | "serviceTitan" | "adi" | "sync" | "recovery";
 type AdiCatalogMatch = Omit<CatalogItem, "id"> & {
   imageUrl: string;
   manufacturerSku: string;
@@ -49,6 +49,7 @@ type TemplateRequirement = {
   quantity: number;
   terms: string[];
 };
+type ExportQuoteFormat = "print" | "pdf" | "excel";
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const appStage = process.env.NEXT_PUBLIC_APP_STAGE ?? "development";
@@ -226,6 +227,8 @@ export function QuickQuoteBuilder() {
   const [hydrated, setHydrated] = useState(false);
   const cartRef = useRef<HTMLDetailsElement>(null);
   const notificationRef = useRef<HTMLDivElement>(null);
+  const activeItems = useMemo(() => items.filter((item) => !item.deletedAt), [items]);
+  const activeQuotes = useMemo(() => quotes.filter((quote) => !quote.deletedAt), [quotes]);
 
   useEffect(() => {
     let cancelled = false;
@@ -302,13 +305,13 @@ export function QuickQuoteBuilder() {
 
   const visibleItems = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return items.filter((item) => {
+    return activeItems.filter((item) => {
       const matchesCategory = category === "All" || item.category === category;
       const matchesSearch = !query || [item.name, item.sku, item.vendor, item.notes].some((value) => value?.toLowerCase().includes(query));
       return matchesCategory && matchesSearch;
     });
-  }, [items, search, category]);
-  const catalogCategories = useMemo(() => ["All", ...Array.from(new Set(items.map((item) => item.category).filter(Boolean))).sort((a, b) => a.localeCompare(b))], [items]);
+  }, [activeItems, search, category]);
+  const catalogCategories = useMemo(() => ["All", ...Array.from(new Set(activeItems.map((item) => item.category).filter(Boolean))).sort((a, b) => a.localeCompare(b))], [activeItems]);
 
   useEffect(() => {
     if (category !== "All" && !catalogCategories.includes(category)) {
@@ -352,7 +355,7 @@ export function QuickQuoteBuilder() {
 
   const addTemplate = (template: QuoteTemplate) => {
     template.lines.forEach((line) => {
-      const item = items.find((candidate) => candidate.id === line.itemId);
+      const item = activeItems.find((candidate) => candidate.id === line.itemId);
       if (item) addItem(item, template.name, line.quantity);
     });
     setQuoteStep("customize");
@@ -363,7 +366,8 @@ export function QuickQuoteBuilder() {
   };
 
   const deleteItemEverywhere = (itemId: string) => {
-    setItems((current) => current.filter((item) => item.id !== itemId));
+    const deletedAt = new Date().toISOString();
+    setItems((current) => current.map((item) => (item.id === itemId ? { ...item, deletedAt } : item)));
     setTemplates((current) =>
       current.map((template) => ({
         ...template,
@@ -531,15 +535,11 @@ export function QuickQuoteBuilder() {
           </>
         ) : null}
 
-        {view === "items" ? <ItemsPage items={items} setItems={setItems} onDeleteItem={deleteItemEverywhere} /> : null}
-        {view === "templates" ? <TemplatesPage templates={templates} items={items} setTemplates={setTemplates} onAddTemplate={addTemplate} /> : null}
-        {view === "previous" ? <PreviousQuotes quotes={quotes} selectedQuote={selectedQuote} setSelectedQuote={setSelectedQuote} onEdit={loadQuoteForEdit} setQuotes={setQuotes} /> : null}
-        {view === "settings" ? <SettingsPage settings={settings} setSettings={setSettings} onSync={syncServiceTitan} /> : null}
+        {view === "items" ? <ItemsPage items={activeItems} setItems={setItems} onDeleteItem={deleteItemEverywhere} /> : null}
+        {view === "templates" ? <TemplatesPage templates={templates} items={activeItems} setTemplates={setTemplates} onAddTemplate={addTemplate} /> : null}
+        {view === "previous" ? <PreviousQuotes quotes={activeQuotes} selectedQuote={selectedQuote} setSelectedQuote={setSelectedQuote} onEdit={loadQuoteForEdit} setQuotes={setQuotes} /> : null}
+        {view === "settings" ? <SettingsPage settings={settings} setSettings={setSettings} onSync={syncServiceTitan} items={items} setItems={setItems} quotes={quotes} setQuotes={setQuotes} /> : null}
       </section>
-
-      {view === "quote" ? (
-        <BottomTotalBar total={totals.total} label={quoteStep === "finalize" ? "Print" : "Next"} onClick={() => (quoteStep === "finalize" ? printQuote() : setQuoteStep(nextStep(quoteStep)))} />
-      ) : null}
 
       {emailPromptOpen ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4">
@@ -565,11 +565,11 @@ export function QuickQuoteBuilder() {
   );
 }
 
-function nextStep(step: QuoteStep): QuoteStep {
-  if (step === "pick") return "customize";
-  if (step === "customize") return "review";
-  if (step === "review") return "finalize";
-  return "finalize";
+function previousStep(step: QuoteStep): QuoteStep {
+  if (step === "finalize") return "review";
+  if (step === "review") return "customize";
+  if (step === "customize") return "pick";
+  return "pick";
 }
 
 function CartDropdown({
@@ -772,6 +772,29 @@ function QuoteWorkspace(props: {
           {props.step === "finalize" ? (
             <FinalizePanel meta={props.meta} setMeta={props.setMeta} totals={props.totals} onSave={props.onSave} onPrint={props.onPrint} onEmail={props.onEmail} />
           ) : null}
+          {props.step !== "pick" ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3">
+              <button className="button-secondary" onClick={() => props.setStep(previousStep(props.step))}>
+                Back
+              </button>
+              {props.step === "customize" ? (
+                <button className="button-primary" onClick={() => props.setStep("review")}>
+                  Next
+                </button>
+              ) : null}
+              {props.step === "review" ? (
+                <button className="button-primary" onClick={() => props.setStep("finalize")}>
+                  Add to cart
+                </button>
+              ) : null}
+              {props.step === "finalize" ? (
+                <button className="button-primary" onClick={props.onPrint}>
+                  <Printer size={17} />
+                  Print
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </div>
     </section>
@@ -809,7 +832,7 @@ function QuoteLines({ lines, onUpdateLine, onRemoveLine }: { lines: QuoteLine[];
             </label>
             <label className="field md:col-span-2">
               <span>Notes</span>
-              <textarea className="textarea" value={line.notes} onChange={(event) => onUpdateLine(line.lineId, { notes: event.target.value })} />
+              <p className="min-h-16 rounded-md border border-stone-200 bg-white p-3 text-sm font-medium text-stone-700">{line.notes || "No notes"}</p>
             </label>
             <div className="flex items-center justify-between gap-3 md:col-span-2">
               <strong>{money.format(line.quantity * line.unitPrice)}</strong>
@@ -929,6 +952,33 @@ function SummaryRow({ label, value }: { label: string; value: number }) {
       <strong className="text-stone-950">{money.format(value)}</strong>
     </div>
   );
+}
+
+function exportQuote(quote: SavedQuote, format: ExportQuoteFormat) {
+  if (format === "print" || format === "pdf") {
+    window.print();
+    return;
+  }
+
+  const rows = [
+    ["Quote", quote.meta.quoteNumber],
+    ["Customer", quote.meta.customer],
+    ["Project", quote.meta.project],
+    ["Created", new Date(quote.createdAt).toLocaleString()],
+    [],
+    ["Item", "SKU", "Package", "Quantity", "Unit Price", "Line Total", "Notes"],
+    ...quote.lines.map((line) => [line.name, line.sku, line.packageName ?? "", String(line.quantity), String(line.unitPrice), String(line.quantity * line.unitPrice), line.notes]),
+    [],
+    ["Total", String(quote.total)],
+  ];
+  const csv = rows.map((row) => row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${quote.meta.quoteNumber || "quote"}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 function ItemsPage({
@@ -1551,18 +1601,13 @@ function PreviousQuotes({
   setQuotes: Dispatch<SetStateAction<SavedQuote[]>>;
 }) {
   const [deleteQuote, setDeleteQuote] = useState<SavedQuote | null>(null);
-  const activeQuotes = quotes.filter((quote) => !quote.deletedAt);
-  const deletedQuotes = quotes.filter((quote) => quote.deletedAt);
+  const [printMenuOpen, setPrintMenuOpen] = useState(false);
   const confirmDeleteQuote = () => {
     if (!deleteQuote) return;
     const deletedAt = new Date().toISOString();
     setQuotes((current) => current.map((quote) => (quote.id === deleteQuote.id ? { ...quote, deletedAt, updatedAt: deletedAt } : quote)));
     if (selectedQuote?.id === deleteQuote.id) setSelectedQuote(null);
     setDeleteQuote(null);
-  };
-  const recoverQuote = (quoteId: string) => {
-    const updatedAt = new Date().toISOString();
-    setQuotes((current) => current.map((quote) => (quote.id === quoteId ? { ...quote, deletedAt: undefined, updatedAt } : quote)));
   };
 
   return (
@@ -1575,8 +1620,8 @@ function PreviousQuotes({
           </div>
         </div>
         <div className="grid gap-2 p-4">
-          {activeQuotes.length ? (
-            activeQuotes.map((quote) => (
+          {quotes.length ? (
+            quotes.map((quote) => (
               <button key={quote.id} className={`rounded-lg border p-3 text-left ${selectedQuote?.id === quote.id ? "border-teal-700 bg-teal-50" : "border-stone-200 bg-white"}`} onClick={() => setSelectedQuote(quote)}>
                 <p className="font-black">{quote.meta.customer || "Unnamed customer"}</p>
                 <p className="text-sm text-stone-600">{new Date(quote.createdAt).toLocaleDateString()} · {quote.meta.project || quote.meta.quoteNumber}</p>
@@ -1586,24 +1631,6 @@ function PreviousQuotes({
           ) : (
             <p className="rounded-lg border border-dashed border-stone-300 p-6 text-center text-stone-500">No saved quotes yet.</p>
           )}
-          <details className="mt-3 rounded-lg border border-stone-200 bg-stone-50">
-            <summary className="cursor-pointer list-none p-3 font-black [&::-webkit-details-marker]:hidden">Admin recovery ({deletedQuotes.length})</summary>
-            <div className="grid gap-2 border-t border-stone-200 p-3">
-              {deletedQuotes.length ? (
-                deletedQuotes.map((quote) => (
-                  <div key={quote.id} className="rounded-lg border border-stone-200 bg-white p-3">
-                    <p className="font-bold">{quote.meta.customer || "Unnamed customer"}</p>
-                    <p className="text-xs text-stone-600">Deleted {quote.deletedAt ? new Date(quote.deletedAt).toLocaleString() : "recently"}</p>
-                    <button className="button-secondary mt-2 min-h-9" onClick={() => recoverQuote(quote.id)}>
-                      Recover
-                    </button>
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm text-stone-500">No deleted quotes.</p>
-              )}
-            </div>
-          </details>
         </div>
       </div>
       <div className="panel">
@@ -1636,6 +1663,33 @@ function PreviousQuotes({
                 <button className="button-primary" onClick={() => onEdit(selectedQuote)}>
                   Edit Quote
                 </button>
+                <div className="relative">
+                  <button className="button-secondary" onClick={() => setPrintMenuOpen((open) => !open)}>
+                    <Printer size={16} />
+                    Print
+                    <ChevronDown size={16} />
+                  </button>
+                  {printMenuOpen ? (
+                    <div className="absolute left-0 top-12 z-20 grid w-44 gap-1 rounded-lg border border-stone-200 bg-white p-2 shadow-xl before:absolute before:-top-2 before:left-6 before:size-4 before:rotate-45 before:border-l before:border-t before:border-stone-200 before:bg-white">
+                      {[
+                        ["print", "Print"],
+                        ["pdf", "PDF"],
+                        ["excel", "Excel"],
+                      ].map(([format, label]) => (
+                        <button
+                          key={format}
+                          className="rounded-md px-3 py-2 text-left text-sm font-bold hover:bg-stone-100"
+                          onClick={() => {
+                            exportQuote(selectedQuote, format as ExportQuoteFormat);
+                            setPrintMenuOpen(false);
+                          }}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
                 <button className="button-ghost" onClick={() => setDeleteQuote(selectedQuote)}>
                   <Trash2 size={16} />
                   Remove
@@ -1675,7 +1729,23 @@ function PreviousQuotes({
   );
 }
 
-function SettingsPage({ settings, setSettings, onSync }: { settings: ServiceTitanSettings; setSettings: Dispatch<SetStateAction<ServiceTitanSettings>>; onSync: () => void }) {
+function SettingsPage({
+  settings,
+  setSettings,
+  onSync,
+  items,
+  setItems,
+  quotes,
+  setQuotes,
+}: {
+  settings: ServiceTitanSettings;
+  setSettings: Dispatch<SetStateAction<ServiceTitanSettings>>;
+  onSync: () => void;
+  items: CatalogItem[];
+  setItems: Dispatch<SetStateAction<CatalogItem[]>>;
+  quotes: SavedQuote[];
+  setQuotes: Dispatch<SetStateAction<SavedQuote[]>>;
+}) {
   const [activeSection, setActiveSection] = useState<SettingsSection>("account");
   const [databaseStatus, setDatabaseStatus] = useState<DatabaseStatus | null>(null);
   const [syncConfirmOpen, setSyncConfirmOpen] = useState(false);
@@ -1685,7 +1755,10 @@ function SettingsPage({ settings, setSettings, onSync }: { settings: ServiceTita
     { id: "serviceTitan", label: "ServiceTitan" },
     { id: "adi", label: "ADI MSRP" },
     { id: "sync", label: "Sync" },
+    { id: "recovery", label: "Admin Recovery" },
   ];
+  const deletedItems = items.filter((item) => item.deletedAt);
+  const deletedQuotes = quotes.filter((quote) => quote.deletedAt);
 
   useEffect(() => {
     let cancelled = false;
@@ -1706,6 +1779,11 @@ function SettingsPage({ settings, setSettings, onSync }: { settings: ServiceTita
   const confirmSync = () => {
     onSync();
     setSyncConfirmOpen(false);
+  };
+  const recoverItem = (itemId: string) => setItems((current) => current.map((item) => (item.id === itemId ? { ...item, deletedAt: undefined } : item)));
+  const recoverQuote = (quoteId: string) => {
+    const updatedAt = new Date().toISOString();
+    setQuotes((current) => current.map((quote) => (quote.id === quoteId ? { ...quote, deletedAt: undefined, updatedAt } : quote)));
   };
 
   return (
@@ -1800,6 +1878,46 @@ function SettingsPage({ settings, setSettings, onSync }: { settings: ServiceTita
               </div>
             </section>
           ) : null}
+          {activeSection === "recovery" ? (
+            <section className="grid gap-4 rounded-lg border border-stone-200 bg-stone-50 p-4 lg:grid-cols-2">
+              <div>
+                <h3 className="font-black">Deleted Quotes</h3>
+                <div className="mt-3 grid gap-2">
+                  {deletedQuotes.length ? (
+                    deletedQuotes.map((quote) => (
+                      <div key={quote.id} className="rounded-lg border border-stone-200 bg-white p-3">
+                        <p className="font-bold">{quote.meta.customer || "Unnamed customer"}</p>
+                        <p className="text-xs text-stone-600">Deleted {quote.deletedAt ? new Date(quote.deletedAt).toLocaleString() : "recently"}</p>
+                        <button className="button-secondary mt-2 min-h-9" onClick={() => recoverQuote(quote.id)}>
+                          Recover
+                        </button>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="rounded-lg border border-dashed border-stone-300 bg-white p-4 text-sm text-stone-500">No deleted quotes.</p>
+                  )}
+                </div>
+              </div>
+              <div>
+                <h3 className="font-black">Deleted Items</h3>
+                <div className="mt-3 grid gap-2">
+                  {deletedItems.length ? (
+                    deletedItems.map((item) => (
+                      <div key={item.id} className="rounded-lg border border-stone-200 bg-white p-3">
+                        <p className="font-bold">{item.name}</p>
+                        <p className="font-mono text-xs text-stone-600">{item.sku}</p>
+                        <button className="button-secondary mt-2 min-h-9" onClick={() => recoverItem(item.id)}>
+                          Recover
+                        </button>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="rounded-lg border border-dashed border-stone-300 bg-white p-4 text-sm text-stone-500">No deleted items.</p>
+                  )}
+                </div>
+              </div>
+            </section>
+          ) : null}
         </div>
       </div>
       {syncConfirmOpen ? (
@@ -1878,22 +1996,6 @@ function MobileMenu({
             </button>
           ))}
         </div>
-      </div>
-    </div>
-  );
-}
-
-function BottomTotalBar({ total, label, onClick }: { total: number; label: string; onClick: () => void }) {
-  return (
-    <div className="fixed inset-x-0 bottom-0 z-30 border-t border-stone-200 bg-white p-3 shadow-2xl md:hidden">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
-        <div>
-          <p className="text-xs font-bold uppercase text-stone-500">Total</p>
-          <p className="text-xl font-black">{money.format(total)}</p>
-        </div>
-        <button className="button-primary min-w-32" onClick={onClick}>
-          {label}
-        </button>
       </div>
     </div>
   );
