@@ -259,6 +259,7 @@ export function QuickQuoteBuilder() {
   const [pendingEmail, setPendingEmail] = useState("");
   const [selectedQuote, setSelectedQuote] = useState<SavedQuote | null>(null);
   const [printableQuote, setPrintableQuote] = useState<PrintableQuote | null>(null);
+  const [quoteSaveError, setQuoteSaveError] = useState("");
   const [databaseStatus, setDatabaseStatus] = useState<DatabaseStatus | null>(null);
   const [draftHydrated, setDraftHydrated] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -306,6 +307,12 @@ export function QuickQuoteBuilder() {
       writeStorage(STORAGE_KEYS.draftQuote, { lines, meta, quoteStep, updatedAt: new Date().toISOString() });
     }
   }, [draftHydrated, lines, meta, quoteStep]);
+
+  useEffect(() => {
+    if (quoteSaveError && meta.customer.trim() && meta.project.trim()) {
+      setQuoteSaveError("");
+    }
+  }, [meta.customer, meta.project, quoteSaveError]);
 
   useEffect(() => {
     let cancelled = false;
@@ -416,12 +423,12 @@ export function QuickQuoteBuilder() {
     });
   };
 
-  const addTemplate = (template: QuoteTemplate) => {
+  const addTemplate = (template: QuoteTemplate, jumpToCustomize = true) => {
     template.lines.forEach((line) => {
       const item = activeItems.find((candidate) => candidate.id === line.itemId);
       if (item) addItem(item, template.name, line.quantity);
     });
-    setQuoteStep("customize");
+    if (jumpToCustomize) setQuoteStep("customize");
   };
 
   const updateLine = (lineId: string, patch: Partial<QuoteLine>) => {
@@ -441,15 +448,26 @@ export function QuickQuoteBuilder() {
   };
 
   const saveQuote = () => {
+    if (!meta.customer.trim() || !meta.project.trim()) {
+      setQuoteSaveError("Add a customer name and project before saving this quote.");
+      setQuoteStep("finalize");
+      return;
+    }
+
     const now = new Date().toISOString();
     const saved: SavedQuote = {
       id: makeId("quote"),
       createdAt: now,
       updatedAt: now,
-      meta,
+      meta: {
+        ...meta,
+        customer: meta.customer.trim(),
+        project: meta.project.trim(),
+      },
       lines,
       total: totals.total,
     };
+    setQuoteSaveError("");
     setQuotes((current) => [saved, ...current]);
     setSelectedQuote(saved);
     setView("previous");
@@ -611,6 +629,7 @@ export function QuickQuoteBuilder() {
               onUpdateLine={updateLine}
               onRemoveLine={(id) => setLines((current) => current.filter((line) => line.lineId !== id))}
               onSave={saveQuote}
+              saveError={quoteSaveError}
               onPrint={printQuote}
               onEmail={() => {
                 setPendingEmail(meta.email);
@@ -917,14 +936,27 @@ function QuoteWorkspace(props: {
   setMeta: Dispatch<SetStateAction<QuoteMeta>>;
   totals: QuoteTotals;
   templates: QuoteTemplate[];
-  onAddTemplate: (template: QuoteTemplate) => void;
+  onAddTemplate: (template: QuoteTemplate, jumpToCustomize?: boolean) => void;
   onUpdateLine: (lineId: string, patch: Partial<QuoteLine>) => void;
   onRemoveLine: (lineId: string) => void;
   onSave: () => void;
+  saveError: string;
   onPrint: () => void;
   onEmail: () => void;
 }) {
   const steps: QuoteStep[] = ["pick", "customize", "review", "finalize"];
+  const [addedTemplateId, setAddedTemplateId] = useState<string | null>(null);
+
+  const addTemplateFromPicker = (template: QuoteTemplate) => {
+    if (addedTemplateId) return;
+    setAddedTemplateId(template.id);
+    props.onAddTemplate(template, false);
+    window.setTimeout(() => {
+      setAddedTemplateId(null);
+      props.setStep("customize");
+    }, 900);
+  };
+
   return (
     <section className="grid gap-4">
       <div className="panel">
@@ -967,13 +999,21 @@ function QuoteWorkspace(props: {
               </div>
               <div className="grid gap-3 md:grid-cols-3">
                 {props.templates.length ? (
-                  props.templates.map((template) => (
-                    <button key={template.id} className="rounded-lg border border-stone-200 bg-white p-4 text-left transition hover:border-teal-700 hover:bg-teal-50" onClick={() => props.onAddTemplate(template)}>
-                      <p className="font-black">{template.name}</p>
-                      <p className="mt-2 text-sm text-stone-600">{template.description}</p>
-                      <p className="mt-4 text-sm font-bold text-teal-800">{template.lines.length} preset lines</p>
-                    </button>
-                  ))
+                  props.templates.map((template) => {
+                    const isAdded = addedTemplateId === template.id;
+                    return (
+                      <button
+                        key={template.id}
+                        className={`rounded-lg border p-4 text-left transition ${isAdded ? "border-emerald-700 bg-emerald-50 text-emerald-950" : "border-stone-200 bg-white hover:border-teal-700 hover:bg-teal-50"}`}
+                        onClick={() => addTemplateFromPicker(template)}
+                        disabled={Boolean(addedTemplateId)}
+                      >
+                        <p className="font-black">{template.name}</p>
+                        <p className="mt-2 text-sm text-stone-600">{template.description}</p>
+                        <p className={`mt-4 text-sm font-bold ${isAdded ? "text-emerald-800" : "text-teal-800"}`}>{isAdded ? "Added to quote" : `${template.lines.length} preset lines`}</p>
+                      </button>
+                    );
+                  })
                 ) : (
                   <p className="rounded-lg border border-dashed border-stone-300 bg-stone-50 p-5 text-center text-stone-500 md:col-span-3">No templates yet.</p>
                 )}
@@ -986,7 +1026,7 @@ function QuoteWorkspace(props: {
           ) : null}
 
           {props.step === "finalize" ? (
-            <FinalizePanel meta={props.meta} setMeta={props.setMeta} totals={props.totals} onSave={props.onSave} onPrint={props.onPrint} onEmail={props.onEmail} />
+            <FinalizePanel meta={props.meta} setMeta={props.setMeta} totals={props.totals} onSave={props.onSave} saveError={props.saveError} onPrint={props.onPrint} onEmail={props.onEmail} />
           ) : null}
           {props.step !== "pick" ? (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3">
@@ -1069,6 +1109,7 @@ function FinalizePanel({
   setMeta,
   totals,
   onSave,
+  saveError,
   onPrint,
   onEmail,
 }: {
@@ -1076,6 +1117,7 @@ function FinalizePanel({
   setMeta: Dispatch<SetStateAction<QuoteMeta>>;
   totals: QuoteTotals;
   onSave: () => void;
+  saveError: string;
   onPrint: () => void;
   onEmail: () => void;
 }) {
@@ -1128,6 +1170,7 @@ function FinalizePanel({
         ) : null}
       </div>
       <div className="grid gap-3">
+        {saveError ? <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-900">{saveError}</p> : null}
         <TotalsCard totals={totals} />
         <button className="button-primary" onClick={onSave}>
           <Save size={17} />
@@ -1999,7 +2042,8 @@ function PreviousQuotes({
             quotes.map((quote) => (
               <button key={quote.id} className={`rounded-lg border p-3 text-left ${selectedQuote?.id === quote.id ? "border-teal-700 bg-teal-50" : "border-stone-200 bg-white"}`} onClick={() => setSelectedQuote(quote)}>
                 <p className="font-black">{quote.meta.customer || "Unnamed customer"}</p>
-                <p className="text-sm text-stone-600">{new Date(quote.createdAt).toLocaleDateString()} · {quote.meta.project || quote.meta.quoteNumber}</p>
+                <p className="text-sm text-stone-600">{new Date(quote.createdAt).toLocaleDateString()} · {quote.meta.quoteNumber}</p>
+                {quote.meta.project ? <p className="text-sm font-bold text-stone-700">{quote.meta.project}</p> : null}
                 <p className="mt-2 font-black">{money.format(quote.total)}</p>
               </button>
             ))
@@ -2020,7 +2064,8 @@ function PreviousQuotes({
             <div className="grid gap-4">
               <div className="rounded-lg bg-stone-50 p-4">
                 <p className="font-black">{selectedQuote.meta.customer || "Unnamed customer"}</p>
-                <p className="text-sm text-stone-600">Quoted {new Date(selectedQuote.createdAt).toLocaleString()}</p>
+                <p className="text-sm text-stone-600">Quote {selectedQuote.meta.quoteNumber} · Quoted {new Date(selectedQuote.createdAt).toLocaleString()}</p>
+                {selectedQuote.meta.project ? <p className="mt-1 text-sm font-bold text-stone-700">{selectedQuote.meta.project}</p> : null}
               </div>
               <div className="grid gap-2">
                 {selectedQuote.lines.map((line) => (
