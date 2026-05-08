@@ -1015,12 +1015,12 @@ function CartDropdown({
                 <div className="hidden gap-2 pt-3 group-open:grid md:group-hover:grid md:group-focus-within:grid">
                   <div className="grid min-w-0 gap-1 border-t border-stone-200 pt-3">
                     {row.lines.map((line) => (
-                      <div key={line.lineId} className="flex items-start justify-between gap-2 rounded-md bg-white p-2 text-sm">
+                      <div key={line.lineId} className="grid min-w-0 grid-cols-[minmax(0,1fr)_64px] items-start gap-2 rounded-md bg-white p-2 text-sm">
                         <div className="min-w-0">
                           <p className="truncate font-bold">{line.name}</p>
                           <p className="truncate font-mono text-xs text-stone-500">{line.sku}</p>
                         </div>
-                        <span className="shrink-0 font-black">Qty {line.quantity}</span>
+                        <span className="min-w-0 truncate text-right font-black">Qty {line.quantity}</span>
                       </div>
                     ))}
                   </div>
