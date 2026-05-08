@@ -35,6 +35,14 @@ type DatabaseStatus = {
   databaseName: string;
   persistent: boolean;
 };
+type QuoteTotals = {
+  subtotal: number;
+  equipmentSubtotal: number;
+  laborAmount: number;
+  marginAmount: number;
+  taxAmount: number;
+  total: number;
+};
 type TemplateRequirement = {
   id: string;
   label: string;
@@ -60,6 +68,8 @@ const emptyMeta: QuoteMeta = {
   marginPercent: 18,
   taxPercent: 8.875,
   includeLabor: true,
+  laborHours: 0,
+  laborRate: 125,
 };
 
 const adiCatalog: AdiCatalogMatch[] = [
@@ -306,14 +316,16 @@ export function QuickQuoteBuilder() {
     }
   }, [catalogCategories, category]);
 
-  const activeLines = useMemo(() => lines.filter((line) => meta.includeLabor || !isLabor(line)), [lines, meta.includeLabor]);
+  const activeLines = useMemo(() => lines.filter((line) => !isLabor(line)), [lines]);
   const totals = useMemo(() => {
-    const subtotal = activeLines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);
+    const equipmentSubtotal = activeLines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);
+    const laborAmount = meta.includeLabor ? (meta.laborHours ?? 0) * (meta.laborRate ?? 0) : 0;
+    const subtotal = equipmentSubtotal + laborAmount;
     const marginAmount = subtotal * (meta.marginPercent / 100);
     const taxable = subtotal + marginAmount;
     const taxAmount = taxable * (meta.taxPercent / 100);
-    return { subtotal, marginAmount, taxAmount, total: taxable + taxAmount };
-  }, [activeLines, meta.marginPercent, meta.taxPercent]);
+    return { subtotal, equipmentSubtotal, laborAmount, marginAmount, taxAmount, total: taxable + taxAmount };
+  }, [activeLines, meta.includeLabor, meta.laborHours, meta.laborRate, meta.marginPercent, meta.taxPercent]);
   const cartCount = activeLines.reduce((sum, line) => sum + line.quantity, 0);
 
   const addItem = (item: CatalogItem, packageName?: string, quantity = 1) => {
@@ -566,7 +578,7 @@ function CartDropdown({
   onNext,
 }: {
   lines: QuoteLine[];
-  totals: { subtotal: number; marginAmount: number; taxAmount: number; total: number };
+  totals: QuoteTotals;
   onNext: () => void;
 }) {
   return (
@@ -687,7 +699,7 @@ function QuoteWorkspace(props: {
   allLines: QuoteLine[];
   meta: QuoteMeta;
   setMeta: Dispatch<SetStateAction<QuoteMeta>>;
-  totals: { subtotal: number; marginAmount: number; taxAmount: number; total: number };
+  totals: QuoteTotals;
   templates: QuoteTemplate[];
   onAddTemplate: (template: QuoteTemplate) => void;
   onUpdateLine: (lineId: string, patch: Partial<QuoteLine>) => void;
@@ -703,7 +715,7 @@ function QuoteWorkspace(props: {
         <div className="panel-header">
           <div>
             <h2>Quote Workspace</h2>
-            <p>{props.step === "pick" ? "Choose a template or add catalog items." : "Review cart details and finalize the quote."}</p>
+            <p>{props.step === "pick" ? "Start fresh or build from a saved template." : "Review cart details and finalize the quote."}</p>
           </div>
           <div className="hidden items-center gap-2 sm:flex">
             {steps.map((step) => (
@@ -726,14 +738,30 @@ function QuoteWorkspace(props: {
           </div>
 
           {props.step === "pick" ? (
-            <div className="grid gap-3 md:grid-cols-3">
-              {props.templates.map((template) => (
-                <button key={template.id} className="rounded-lg border border-stone-200 bg-stone-50 p-4 text-left transition hover:border-teal-700 hover:bg-teal-50" onClick={() => props.onAddTemplate(template)}>
-                  <p className="font-black">{template.name}</p>
-                  <p className="mt-2 text-sm text-stone-600">{template.description}</p>
-                  <p className="mt-4 text-sm font-bold text-teal-800">{template.lines.length} preset lines</p>
+            <div className="grid gap-4">
+              <div className="grid gap-3 md:grid-cols-2">
+                <button className="rounded-lg border border-stone-200 bg-stone-50 p-5 text-left transition hover:border-teal-700 hover:bg-teal-50" onClick={() => props.setStep("customize")}>
+                  <p className="font-black">Start Fresh</p>
+                  <p className="mt-2 text-sm text-stone-600">Build a quote by adding catalog items from scratch.</p>
                 </button>
-              ))}
+                <div className="rounded-lg border border-stone-200 bg-stone-50 p-5">
+                  <p className="font-black">From Templates</p>
+                  <p className="mt-2 text-sm text-stone-600">Choose a saved setup to prefill the quote.</p>
+                </div>
+              </div>
+              <div className="grid gap-3 md:grid-cols-3">
+                {props.templates.length ? (
+                  props.templates.map((template) => (
+                    <button key={template.id} className="rounded-lg border border-stone-200 bg-white p-4 text-left transition hover:border-teal-700 hover:bg-teal-50" onClick={() => props.onAddTemplate(template)}>
+                      <p className="font-black">{template.name}</p>
+                      <p className="mt-2 text-sm text-stone-600">{template.description}</p>
+                      <p className="mt-4 text-sm font-bold text-teal-800">{template.lines.length} preset lines</p>
+                    </button>
+                  ))
+                ) : (
+                  <p className="rounded-lg border border-dashed border-stone-300 bg-stone-50 p-5 text-center text-stone-500 md:col-span-3">No templates yet.</p>
+                )}
+              </div>
             </div>
           ) : null}
 
@@ -807,7 +835,7 @@ function FinalizePanel({
 }: {
   meta: QuoteMeta;
   setMeta: Dispatch<SetStateAction<QuoteMeta>>;
-  totals: { subtotal: number; marginAmount: number; taxAmount: number; total: number };
+  totals: QuoteTotals;
   onSave: () => void;
   onPrint: () => void;
   onEmail: () => void;
@@ -843,6 +871,22 @@ function FinalizePanel({
           <input type="checkbox" checked={meta.includeLabor} onChange={(event) => setMeta((current) => ({ ...current, includeLabor: event.target.checked }))} />
           <span className="font-bold">Include labor in quote total</span>
         </label>
+        {meta.includeLabor ? (
+          <div className="grid gap-3 rounded-lg border border-teal-200 bg-teal-50 p-3 md:col-span-2 md:grid-cols-2">
+            <div className="md:col-span-2">
+              <p className="font-black text-teal-950">Labor</p>
+              <p className="mt-1 text-sm text-teal-900">Labor is calculated here instead of being added as a catalog item.</p>
+            </div>
+            <label className="field">
+              <span>Hours</span>
+              <input className="input" type="number" min={0} step="0.25" value={meta.laborHours ?? 0} onChange={(event) => setMeta((current) => ({ ...current, laborHours: Number(event.target.value) }))} />
+            </label>
+            <label className="field">
+              <span>Hourly rate</span>
+              <input className="input" type="number" min={0} step="0.01" value={meta.laborRate ?? 0} onChange={(event) => setMeta((current) => ({ ...current, laborRate: Number(event.target.value) }))} />
+            </label>
+          </div>
+        ) : null}
       </div>
       <div className="grid gap-3">
         <TotalsCard totals={totals} />
@@ -863,10 +907,11 @@ function FinalizePanel({
   );
 }
 
-function TotalsCard({ totals }: { totals: { subtotal: number; marginAmount: number; taxAmount: number; total: number } }) {
+function TotalsCard({ totals }: { totals: QuoteTotals }) {
   return (
     <div className="grid gap-2 rounded-lg border border-stone-200 bg-white p-4">
-      <SummaryRow label="Equipment and labor" value={totals.subtotal} />
+      <SummaryRow label="Equipment" value={totals.equipmentSubtotal} />
+      {totals.laborAmount ? <SummaryRow label="Labor" value={totals.laborAmount} /> : null}
       <SummaryRow label="Margin" value={totals.marginAmount} />
       <SummaryRow label="Tax" value={totals.taxAmount} />
       <div className="mt-2 flex items-center justify-between border-t border-stone-200 pt-3 text-xl font-black">
@@ -1505,6 +1550,21 @@ function PreviousQuotes({
   onEdit: (quote: SavedQuote) => void;
   setQuotes: Dispatch<SetStateAction<SavedQuote[]>>;
 }) {
+  const [deleteQuote, setDeleteQuote] = useState<SavedQuote | null>(null);
+  const activeQuotes = quotes.filter((quote) => !quote.deletedAt);
+  const deletedQuotes = quotes.filter((quote) => quote.deletedAt);
+  const confirmDeleteQuote = () => {
+    if (!deleteQuote) return;
+    const deletedAt = new Date().toISOString();
+    setQuotes((current) => current.map((quote) => (quote.id === deleteQuote.id ? { ...quote, deletedAt, updatedAt: deletedAt } : quote)));
+    if (selectedQuote?.id === deleteQuote.id) setSelectedQuote(null);
+    setDeleteQuote(null);
+  };
+  const recoverQuote = (quoteId: string) => {
+    const updatedAt = new Date().toISOString();
+    setQuotes((current) => current.map((quote) => (quote.id === quoteId ? { ...quote, deletedAt: undefined, updatedAt } : quote)));
+  };
+
   return (
     <section className="grid gap-4 lg:col-span-2 lg:grid-cols-[360px_minmax(0,1fr)]">
       <div className="panel">
@@ -1515,8 +1575,8 @@ function PreviousQuotes({
           </div>
         </div>
         <div className="grid gap-2 p-4">
-          {quotes.length ? (
-            quotes.map((quote) => (
+          {activeQuotes.length ? (
+            activeQuotes.map((quote) => (
               <button key={quote.id} className={`rounded-lg border p-3 text-left ${selectedQuote?.id === quote.id ? "border-teal-700 bg-teal-50" : "border-stone-200 bg-white"}`} onClick={() => setSelectedQuote(quote)}>
                 <p className="font-black">{quote.meta.customer || "Unnamed customer"}</p>
                 <p className="text-sm text-stone-600">{new Date(quote.createdAt).toLocaleDateString()} · {quote.meta.project || quote.meta.quoteNumber}</p>
@@ -1526,6 +1586,24 @@ function PreviousQuotes({
           ) : (
             <p className="rounded-lg border border-dashed border-stone-300 p-6 text-center text-stone-500">No saved quotes yet.</p>
           )}
+          <details className="mt-3 rounded-lg border border-stone-200 bg-stone-50">
+            <summary className="cursor-pointer list-none p-3 font-black [&::-webkit-details-marker]:hidden">Admin recovery ({deletedQuotes.length})</summary>
+            <div className="grid gap-2 border-t border-stone-200 p-3">
+              {deletedQuotes.length ? (
+                deletedQuotes.map((quote) => (
+                  <div key={quote.id} className="rounded-lg border border-stone-200 bg-white p-3">
+                    <p className="font-bold">{quote.meta.customer || "Unnamed customer"}</p>
+                    <p className="text-xs text-stone-600">Deleted {quote.deletedAt ? new Date(quote.deletedAt).toLocaleString() : "recently"}</p>
+                    <button className="button-secondary mt-2 min-h-9" onClick={() => recoverQuote(quote.id)}>
+                      Recover
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-stone-500">No deleted quotes.</p>
+              )}
+            </div>
+          </details>
         </div>
       </div>
       <div className="panel">
@@ -1558,7 +1636,7 @@ function PreviousQuotes({
                 <button className="button-primary" onClick={() => onEdit(selectedQuote)}>
                   Edit Quote
                 </button>
-                <button className="button-ghost" onClick={() => setQuotes((current) => current.filter((quote) => quote.id !== selectedQuote.id))}>
+                <button className="button-ghost" onClick={() => setDeleteQuote(selectedQuote)}>
                   <Trash2 size={16} />
                   Remove
                 </button>
@@ -1569,6 +1647,30 @@ function PreviousQuotes({
           )}
         </div>
       </div>
+      {deleteQuote ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onClick={() => setDeleteQuote(null)}>
+          <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-2xl font-black text-red-900">Delete quote?</h3>
+                <p className="mt-2 text-sm text-stone-600">This hides the quote from previous quotes and moves it to Admin recovery.</p>
+              </div>
+              <button className="icon-button" onClick={() => setDeleteQuote(null)} aria-label="Cancel quote delete">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button className="button-ghost" onClick={() => setDeleteQuote(null)}>
+                Cancel
+              </button>
+              <button className="button-primary bg-red-700 hover:bg-red-800" onClick={confirmDeleteQuote}>
+                <Trash2 size={16} />
+                Delete quote
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

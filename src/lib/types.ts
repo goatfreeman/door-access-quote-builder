@@ -41,6 +41,8 @@ export type QuoteMeta = {
   marginPercent: number;
   taxPercent: number;
   includeLabor: boolean;
+  laborHours?: number;
+  laborRate?: number;
 };
 
 export type SavedQuote = {
@@ -50,6 +52,7 @@ export type SavedQuote = {
   meta: QuoteMeta;
   lines: QuoteLine[];
   total: number;
+  deletedAt?: string;
 };
 
 export type ServiceTitanSettings = {
