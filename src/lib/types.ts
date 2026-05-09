@@ -31,6 +31,7 @@ export type QuoteLine = {
   packageName?: string;
   quantity: number;
   unitPrice: number;
+  msrp?: number;
   notes: string;
 };
 
@@ -45,6 +46,15 @@ export type QuoteMeta = {
   includeLabor: boolean;
   laborHours?: number;
   laborRate?: number;
+  notes?: string;
+};
+
+export type QuoteRevision = {
+  id: string;
+  savedAt: string;
+  meta: QuoteMeta;
+  lines: QuoteLine[];
+  total: number;
 };
 
 export type SavedQuote = {
@@ -55,7 +65,18 @@ export type SavedQuote = {
   meta: QuoteMeta;
   lines: QuoteLine[];
   total: number;
+  revisions?: QuoteRevision[];
   deletedAt?: string;
+};
+
+export type DraftQuote = {
+  id: string;
+  owner: string;
+  createdAt: string;
+  updatedAt: string;
+  meta: QuoteMeta;
+  lines: QuoteLine[];
+  total: number;
 };
 
 export type ServiceTitanSettings = {

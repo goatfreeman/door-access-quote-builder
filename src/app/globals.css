@@ -169,6 +169,7 @@ summary {
     border: 1px solid #d6d3d1;
     border-radius: 8px;
     padding: 12px;
+    font-size: 12px;
   }
 
   .print-label {
@@ -177,6 +178,14 @@ summary {
     font-weight: 800;
     letter-spacing: 0.06em;
     text-transform: uppercase;
+  }
+
+  .print-notes {
+    border: 1px solid #d6d3d1;
+    border-radius: 8px;
+    font-size: 12px;
+    margin-top: 12px;
+    padding: 12px;
   }
 
   .print-table {

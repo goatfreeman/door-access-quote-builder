@@ -39,7 +39,8 @@ export async function readCollection(collection: Collection) {
   const stored = await readStoredValue(collection);
   if (stored !== null) return stored;
   if (collection === "items") return readSeedItems();
-  if (collection === "settings" || collection === "drafts") return {};
+  if (collection === "settings") return {};
+  if (collection === "drafts") return [];
   return [];
 }
 

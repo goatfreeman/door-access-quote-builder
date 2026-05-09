@@ -22,7 +22,7 @@ import {
 import type { Dispatch, SetStateAction } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getPendingWriteCount, readDb, syncPendingWrites, writeDb } from "@/lib/client-db";
-import type { CatalogItem, QuoteLine, QuoteMeta, QuoteTemplate, SavedQuote, ServiceTitanSettings } from "@/lib/types";
+import type { CatalogItem, DraftQuote, QuoteLine, QuoteMeta, QuoteTemplate, SavedQuote, ServiceTitanSettings } from "@/lib/types";
 
 type View = "home" | "quote" | "items" | "templates" | "previous" | "settings" | "client";
 type QuoteStep = "pick" | "customize" | "review" | "finalize";
@@ -50,6 +50,7 @@ type PrintableQuote = {
   lines: QuoteLine[];
   totals: QuoteTotals;
   createdAt?: string;
+  revisionNumber?: number;
 };
 type TemplateRequirement = {
   id: string;
@@ -57,9 +58,10 @@ type TemplateRequirement = {
   quantity: number;
   terms: string[];
 };
-type ExportQuoteFormat = "print" | "pdf" | "excel";
+type ExportQuoteFormat = "print" | "pdf" | "excel" | "install";
 type RecoverySort = "recent" | "name";
 type PermanentDeleteTarget = { kind: "item"; id: string; label: string } | { kind: "quote"; id: string; label: string };
+type NotificationBlock = { id: string; title: string; message: string; createdAt: string };
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const appStage = process.env.NEXT_PUBLIC_APP_STAGE ?? "development";
@@ -74,6 +76,7 @@ const STORAGE_KEYS = {
   settings: "qqb.cache.settings.v1",
   session: "qqb.session.v1",
   draftQuote: "qqb.draft.quote.v1",
+  draftQuotes: "qqb.draft.quotes.v1",
 };
 
 const emptyMeta: QuoteMeta = {
@@ -87,6 +90,7 @@ const emptyMeta: QuoteMeta = {
   includeLabor: true,
   laborHours: 0,
   laborRate: 125,
+  notes: "",
 };
 
 const isView = (value: unknown): value is View => ["home", "quote", "items", "templates", "previous", "settings", "client"].includes(String(value));
@@ -288,6 +292,7 @@ export function QuickQuoteBuilder() {
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [templates, setTemplates] = useState<QuoteTemplate[]>([]);
   const [quotes, setQuotes] = useState<SavedQuote[]>([]);
+  const [draftQuotes, setDraftQuotes] = useState<DraftQuote[]>([]);
   const [settings, setSettings] = useState<ServiceTitanSettings>({
     baseUrl: "",
     tenantId: "",
@@ -305,6 +310,10 @@ export function QuickQuoteBuilder() {
   const [routeQuoteSlug, setRouteQuoteSlug] = useState(() => quoteSlugFromPath());
   const [printableQuote, setPrintableQuote] = useState<PrintableQuote | null>(null);
   const [quoteSaveError, setQuoteSaveError] = useState("");
+  const [editingQuoteId, setEditingQuoteId] = useState("");
+  const [notifications, setNotifications] = useState<NotificationBlock[]>([]);
+  const [adminUnlocked, setAdminUnlocked] = useState(false);
+  const [startFreshPromptOpen, setStartFreshPromptOpen] = useState(false);
   const [databaseStatus, setDatabaseStatus] = useState<DatabaseStatus | null>(null);
   const [isOnline, setIsOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
   const [pendingOfflineWrites, setPendingOfflineWrites] = useState(0);
@@ -312,6 +321,7 @@ export function QuickQuoteBuilder() {
   const [hydrated, setHydrated] = useState(false);
   const cartRef = useRef<HTMLDetailsElement>(null);
   const notificationRef = useRef<HTMLDivElement>(null);
+  const settingsHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeItems = useMemo(() => items.filter((item) => !item.deletedAt), [items]);
   const activeQuotes = useMemo(() => quotes.filter((quote) => !quote.deletedAt), [quotes]);
 
@@ -330,12 +340,14 @@ export function QuickQuoteBuilder() {
       readDb<CatalogItem[]>("items", readStorage(STORAGE_KEYS.items, [])),
       readDb<QuoteTemplate[]>("templates", readStorage(STORAGE_KEYS.templates, [])),
       readDb<SavedQuote[]>("quotes", readStorage(STORAGE_KEYS.quotes, [])),
+      readDb<DraftQuote[]>("drafts", readStorage(STORAGE_KEYS.draftQuotes, [])),
       readDb<ServiceTitanSettings>("settings", readStorage(STORAGE_KEYS.settings, { baseUrl: "", tenantId: "", clientId: "", clientSecret: "" })),
-    ]).then(([dbItems, dbTemplates, dbQuotes, dbSettings]) => {
+    ]).then(([dbItems, dbTemplates, dbQuotes, dbDraftQuotes, dbSettings]) => {
       if (cancelled) return;
       setItems(dbItems);
       setTemplates(dbTemplates);
       setQuotes(dbQuotes);
+      setDraftQuotes(Array.isArray(dbDraftQuotes) ? dbDraftQuotes : []);
       setSettings(dbSettings);
       setHydrated(true);
     });
@@ -377,7 +389,6 @@ export function QuickQuoteBuilder() {
     if (draftHydrated) {
       const draft = { lines, meta, quoteStep, updatedAt: new Date().toISOString() };
       writeStorage(STORAGE_KEYS.draftQuote, draft);
-      void writeDb("drafts", draft).then(() => setPendingOfflineWrites(getPendingWriteCount()));
     }
   }, [draftHydrated, lines, meta, quoteStep]);
 
@@ -471,6 +482,13 @@ export function QuickQuoteBuilder() {
 
   useEffect(() => {
     if (hydrated) {
+      writeStorage(STORAGE_KEYS.draftQuotes, draftQuotes);
+      void writeDb("drafts", draftQuotes).then(() => setPendingOfflineWrites(getPendingWriteCount()));
+    }
+  }, [draftQuotes, hydrated]);
+
+  useEffect(() => {
+    if (hydrated) {
       writeStorage(STORAGE_KEYS.settings, settings);
       void writeDb("settings", settings).then(() => setPendingOfflineWrites(getPendingWriteCount()));
     }
@@ -519,6 +537,69 @@ export function QuickQuoteBuilder() {
   const totals = useMemo(() => buildQuoteTotals(lines, meta), [lines, meta]);
   const cartCount = activeLines.reduce((sum, line) => sum + line.quantity, 0);
 
+  const pushNotification = (title: string, message: string) => {
+    setNotifications((current) => [{ id: makeId("note"), title, message, createdAt: new Date().toISOString() }, ...current].slice(0, 8));
+  };
+
+  const dismissNotification = (id: string) => {
+    setNotifications((current) => current.filter((notification) => notification.id !== id));
+  };
+
+  const saveDraftQuote = (label = "Temporary quote") => {
+    if (!activeLines.length && !meta.customer.trim() && !meta.project.trim()) return;
+    const now = new Date().toISOString();
+    const draft: DraftQuote = {
+      id: makeId("draft"),
+      owner: "User",
+      createdAt: now,
+      updatedAt: now,
+      meta: { ...meta, project: meta.project.trim() || label },
+      lines: activeLines,
+      total: totals.total,
+    };
+    setDraftQuotes((current) => [draft, ...current]);
+    pushNotification("Draft saved", "This quote was saved to your user workspace.");
+  };
+
+  const clearCurrentQuote = () => {
+    setLines([]);
+    setMeta(emptyMeta);
+    setEditingQuoteId("");
+    setQuoteSaveError("");
+    setQuoteStep("customize");
+  };
+
+  const startFresh = () => {
+    if (activeLines.length || meta.customer.trim() || meta.project.trim()) {
+      setStartFreshPromptOpen(true);
+      return;
+    }
+    clearCurrentQuote();
+  };
+
+  const loadDraftQuote = (draft: DraftQuote) => {
+    setMeta(draft.meta);
+    setLines(draft.lines);
+    setEditingQuoteId("");
+    navigateToView("quote");
+    setQuoteStep("customize");
+  };
+
+  const startSettingsHold = () => {
+    if (adminUnlocked) return;
+    if (settingsHoldTimer.current) clearTimeout(settingsHoldTimer.current);
+    settingsHoldTimer.current = setTimeout(() => {
+      setAdminUnlocked(true);
+      pushNotification("Admin panel unlocked", "ServiceTitan, ADI, sync, and recovery settings are now available.");
+    }, 5000);
+  };
+
+  const cancelSettingsHold = () => {
+    if (!settingsHoldTimer.current) return;
+    clearTimeout(settingsHoldTimer.current);
+    settingsHoldTimer.current = null;
+  };
+
   const addItem = (item: CatalogItem, packageName?: string, quantity = 1) => {
     setLines((current) => {
       const existing = current.find((line) => line.itemId === item.id && line.packageName === packageName);
@@ -535,6 +616,7 @@ export function QuickQuoteBuilder() {
           packageName,
           quantity,
           unitPrice: item.unitPrice,
+          msrp: item.msrp,
           notes: item.notes ?? "",
         },
       ];
@@ -546,7 +628,11 @@ export function QuickQuoteBuilder() {
       const item = activeItems.find((candidate) => candidate.id === line.itemId);
       if (item) addItem(item, template.name, line.quantity);
     });
-    if (jumpToCustomize) setQuoteStep("customize");
+    pushNotification("Template added", `${template.name || "Template"} was added to the quote workspace.`);
+    if (jumpToCustomize) {
+      navigateToView("quote");
+      setQuoteStep("customize");
+    }
   };
 
   const updateLine = (lineId: string, patch: Partial<QuoteLine>) => {
@@ -559,14 +645,13 @@ export function QuickQuoteBuilder() {
   };
 
   const deleteItemEverywhere = (itemId: string) => {
+    const usedTemplate = templates.find((template) => template.lines.some((line) => line.itemId === itemId));
+    if (usedTemplate) {
+      pushNotification("Item delete blocked", `This item is still used in ${usedTemplate.name || "a template"}. Remove it from templates before deleting it.`);
+      return;
+    }
     const deletedAt = new Date().toISOString();
     setItems((current) => current.map((item) => (item.id === itemId ? { ...item, deletedAt } : item)));
-    setTemplates((current) =>
-      current.map((template) => ({
-        ...template,
-        lines: template.lines.filter((line) => line.itemId !== itemId),
-      })),
-    );
     setLines((current) => current.filter((line) => line.itemId !== itemId));
   };
 
@@ -578,7 +663,7 @@ export function QuickQuoteBuilder() {
       return;
     }
 
-    const duplicateQuote = activeQuotes.find((quote) => quote.meta.quoteNumber.trim().toLowerCase() === quoteNumber.toLowerCase());
+    const duplicateQuote = activeQuotes.find((quote) => quote.id !== editingQuoteId && quote.meta.quoteNumber.trim().toLowerCase() === quoteNumber.toLowerCase());
     if (duplicateQuote) {
       setQuoteSaveError(`Quote number ${quoteNumber} is already used by ${duplicateQuote.meta.customer || "another saved quote"}. Use a unique quote number before saving.`);
       setQuoteStep("finalize");
@@ -586,20 +671,53 @@ export function QuickQuoteBuilder() {
     }
 
     const now = new Date().toISOString();
+    const cleanMeta = {
+      ...meta,
+      customer: meta.customer.trim(),
+      project: meta.project.trim(),
+      location: meta.location?.trim() ?? "",
+      quoteNumber,
+      notes: meta.notes?.trim() ?? "",
+    };
+    if (editingQuoteId) {
+      const originalQuote = activeQuotes.find((quote) => quote.id === editingQuoteId);
+      if (!originalQuote) return;
+      const revision = {
+        id: makeId("revision"),
+        savedAt: now,
+        meta: originalQuote.meta,
+        lines: originalQuote.lines,
+        total: originalQuote.total,
+      };
+      const updatedQuote: SavedQuote = {
+        ...originalQuote,
+        updatedAt: now,
+        meta: cleanMeta,
+        lines: activeLines,
+        total: totals.total,
+        revisions: [...(originalQuote.revisions ?? []), revision],
+      };
+      setQuotes((current) => current.map((quote) => (quote.id === editingQuoteId ? updatedQuote : quote)));
+      setQuoteSaveError("");
+      setSelectedQuote(updatedQuote);
+      navigateToView("previous", updatedQuote);
+      setEditingQuoteId("");
+      setLines([]);
+      setMeta(emptyMeta);
+      setQuoteStep("pick");
+      pushNotification("Quote updated", "A revision snapshot was saved before applying the latest changes.");
+      return;
+    }
+
     const saved: SavedQuote = {
       id: makeId("quote"),
       shareToken: makeShareToken(),
       createdAt: now,
       updatedAt: now,
-      meta: {
-        ...meta,
-        customer: meta.customer.trim(),
-        project: meta.project.trim(),
-        location: meta.location?.trim() ?? "",
-        quoteNumber,
-      },
-      lines,
+      meta: cleanMeta,
+      lines: activeLines,
       total: totals.total,
+      revisions: [],
     };
     setQuoteSaveError("");
     setQuotes((current) => [saved, ...current]);
@@ -608,11 +726,13 @@ export function QuickQuoteBuilder() {
     setLines([]);
     setMeta(emptyMeta);
     setQuoteStep("pick");
+    pushNotification("Quote saved", `${saved.meta.quoteNumber} is now in Previous Quotes for the team.`);
   };
 
   const loadQuoteForEdit = (quote: SavedQuote) => {
     setMeta(quote.meta);
     setLines(quote.lines);
+    setEditingQuoteId(quote.id);
     setSelectedQuote(null);
     setRouteQuoteSlug("");
     navigateToView("quote");
@@ -624,7 +744,7 @@ export function QuickQuoteBuilder() {
     window.setTimeout(() => window.print(), 80);
   };
   const printSavedQuote = (quote: SavedQuote) => {
-    setPrintableQuote({ meta: quote.meta, lines: quote.lines, totals: totalsFromSavedQuote(quote), createdAt: quote.createdAt });
+    setPrintableQuote({ meta: quote.meta, lines: quote.lines, totals: totalsFromSavedQuote(quote), createdAt: quote.createdAt, revisionNumber: (quote.revisions?.length ?? 0) + 1 });
     window.setTimeout(() => window.print(), 80);
   };
 
@@ -673,10 +793,10 @@ export function QuickQuoteBuilder() {
                 <Menu size={19} />
               </button>
             ) : null}
-            <button className="grid size-10 place-items-center rounded-lg bg-stone-900 text-xl font-black text-white" onClick={goToHome} aria-label="Go to home page">
+            <button className="grid size-10 place-items-center rounded-lg bg-stone-900 text-xl font-black text-white disabled:cursor-default" onClick={isClientView ? undefined : goToHome} disabled={isClientView} aria-label="Go to home page">
               Q
             </button>
-            <button className="min-w-0 text-left" onClick={goToHome} aria-label="Go to home page">
+            <button className="min-w-0 text-left disabled:cursor-default" onClick={isClientView ? undefined : goToHome} disabled={isClientView} aria-label="Go to home page">
               <span className="flex min-w-0 flex-wrap items-center gap-2">
                 <h1 className="truncate text-lg font-black leading-tight sm:text-2xl">Quick Quote Builder</h1>
                 {!isProductionStage ? <span className="rounded-full border border-amber-300 bg-amber-100 px-2 py-1 text-xs font-black uppercase tracking-normal text-amber-900">Dev Build</span> : null}
@@ -687,7 +807,14 @@ export function QuickQuoteBuilder() {
           {!isClientView ? (
             <nav className="hidden items-center gap-2 md:flex">
               {nav.map((item) => (
-                <button key={item.id} className={`nav-button ${view === item.id ? "nav-button-active" : ""}`} onClick={() => navigateToView(item.id)}>
+                <button
+                  key={item.id}
+                  className={`nav-button ${view === item.id ? "nav-button-active" : ""}`}
+                  onPointerDown={item.id === "settings" ? startSettingsHold : undefined}
+                  onPointerUp={item.id === "settings" ? cancelSettingsHold : undefined}
+                  onPointerLeave={item.id === "settings" ? cancelSettingsHold : undefined}
+                  onClick={() => navigateToView(item.id)}
+                >
                   <item.icon size={16} />
                   {item.label}
                 </button>
@@ -734,15 +861,37 @@ export function QuickQuoteBuilder() {
                 aria-label="Notifications"
               >
                 <Bell size={18} />
-                {!isOnline || pendingOfflineWrites ? <span className="absolute right-2 top-2 size-2 rounded-full bg-red-700" /> : null}
+                {!isOnline || pendingOfflineWrites || notifications.length ? <span className="absolute right-2 top-2 size-2 rounded-full bg-red-700" /> : null}
               </button>
               {notificationOpen ? (
                 <div className="absolute right-0 top-12 z-50 w-80 rounded-lg border border-stone-200 bg-white p-4 shadow-xl">
-                  <p className="font-bold">Notifications</p>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-bold">Notifications</p>
+                    {notifications.length ? (
+                      <button className="text-xs font-bold text-stone-500 hover:text-red-800" onClick={() => setNotifications([])}>
+                        Dismiss all
+                      </button>
+                    ) : null}
+                  </div>
                   <div className="mt-2 grid gap-2 text-sm text-stone-600">
-                    <p>{isOnline ? "Online. Database changes sync automatically." : "Offline. Changes are saved locally and will sync when the browser is online again."}</p>
-                    <p>{pendingOfflineWrites ? `${pendingOfflineWrites} database update${pendingOfflineWrites === 1 ? "" : "s"} waiting to sync.` : "No offline database updates waiting."}</p>
-                    <p>ServiceTitan sync is in placeholder mode until production credentials are connected.</p>
+                    {notifications.map((notification) => (
+                      <div key={notification.id} className="rounded-lg border border-stone-200 bg-stone-50 p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-black text-stone-950">{notification.title}</p>
+                            <p className="mt-1">{notification.message}</p>
+                          </div>
+                          <button className="text-xs font-bold text-stone-500 hover:text-red-800" onClick={() => dismissNotification(notification.id)}>
+                            Dismiss
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="rounded-lg border border-stone-200 bg-white p-3">
+                      <p>{isOnline ? "Online. Database changes sync automatically." : "Offline. Changes are saved locally and will sync when the browser is online again."}</p>
+                      <p className="mt-1">{pendingOfflineWrites ? `${pendingOfflineWrites} database update${pendingOfflineWrites === 1 ? "" : "s"} waiting to sync.` : "No offline database updates waiting."}</p>
+                    </div>
+                    <div className="rounded-lg border border-stone-200 bg-white p-3">ServiceTitan sync is in placeholder mode until production credentials are connected.</div>
                   </div>
                 </div>
               ) : null}
@@ -751,10 +900,10 @@ export function QuickQuoteBuilder() {
         </div>
       </header>
 
-      {menuOpen && !isClientView ? <MobileMenu nav={nav} view={view} setView={navigateToView} goToQuote={goToQuote} close={() => setMenuOpen(false)} /> : null}
+      {menuOpen && !isClientView ? <MobileMenu nav={nav} view={view} setView={navigateToView} goToQuote={goToQuote} close={() => setMenuOpen(false)} onSettingsHoldStart={startSettingsHold} onSettingsHoldEnd={cancelSettingsHold} /> : null}
 
       <section className={`mx-auto grid max-w-7xl gap-4 px-4 py-4 ${view === "quote" && quoteStep !== "finalize" ? "lg:grid-cols-[320px_minmax(0,1fr)]" : ""}`}>
-        {view === "home" ? <HomePage meta={meta} lines={activeLines} total={totals.total} onContinue={goToQuote} /> : null}
+        {view === "home" ? <HomePage meta={meta} lines={activeLines} total={totals.total} drafts={draftQuotes} onContinue={goToQuote} onLoadDraft={loadDraftQuote} /> : null}
         {view === "quote" ? (
           <>
             {quoteStep !== "finalize" ? (
@@ -768,8 +917,11 @@ export function QuickQuoteBuilder() {
               meta={meta}
               setMeta={setMeta}
               totals={totals}
+              items={activeItems}
               templates={templates}
               onAddTemplate={addTemplate}
+              onStartFresh={startFresh}
+              onAddItemToPackage={addItem}
               onUpdateLine={updateLine}
               onRenamePackage={renamePackage}
               onRemoveLine={(id) => setLines((current) => current.filter((line) => line.lineId !== id))}
@@ -805,8 +957,48 @@ export function QuickQuoteBuilder() {
           />
         ) : null}
         {view === "client" ? <ClientQuoteView quote={selectedQuote} onPrintQuote={printSavedQuote} /> : null}
-        {view === "settings" ? <SettingsPage settings={settings} setSettings={setSettings} onSync={syncServiceTitan} items={items} setItems={setItems} quotes={quotes} setQuotes={setQuotes} /> : null}
+        {view === "settings" ? <SettingsPage settings={settings} setSettings={setSettings} onSync={syncServiceTitan} items={items} setItems={setItems} quotes={quotes} setQuotes={setQuotes} adminUnlocked={adminUnlocked} /> : null}
       </section>
+
+      {startFreshPromptOpen ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onClick={() => setStartFreshPromptOpen(false)}>
+          <div className="w-full max-w-lg rounded-lg bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-2xl font-black">Start fresh?</h2>
+                <p className="mt-2 text-sm text-stone-600">There are items or customer details in the current quote. Save a temporary draft first or clear the workspace.</p>
+              </div>
+              <button className="icon-button" onClick={() => setStartFreshPromptOpen(false)} aria-label="Close start fresh prompt">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="mt-5 grid gap-2 sm:grid-cols-3">
+              <button className="button-ghost" onClick={() => setStartFreshPromptOpen(false)}>
+                Continue current
+              </button>
+              <button
+                className="button-secondary"
+                onClick={() => {
+                  saveDraftQuote();
+                  clearCurrentQuote();
+                  setStartFreshPromptOpen(false);
+                }}
+              >
+                Temp save
+              </button>
+              <button
+                className="button-primary"
+                onClick={() => {
+                  clearCurrentQuote();
+                  setStartFreshPromptOpen(false);
+                }}
+              >
+                Start fresh
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {emailPromptOpen ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4">
@@ -840,7 +1032,7 @@ function previousStep(step: QuoteStep): QuoteStep {
   return "pick";
 }
 
-function HomePage({ meta, lines, total, onContinue }: { meta: QuoteMeta; lines: QuoteLine[]; total: number; onContinue: () => void }) {
+function HomePage({ meta, lines, total, drafts, onContinue, onLoadDraft }: { meta: QuoteMeta; lines: QuoteLine[]; total: number; drafts: DraftQuote[]; onContinue: () => void; onLoadDraft: (draft: DraftQuote) => void }) {
   const hasDraft = lines.length > 0 || Boolean(meta.customer || meta.project);
 
   return (
@@ -866,6 +1058,22 @@ function HomePage({ meta, lines, total, onContinue }: { meta: QuoteMeta; lines: 
         ) : (
           <div className="rounded-lg border border-dashed border-stone-300 bg-stone-50 p-8 text-center text-stone-500">No ongoing quote yet.</div>
         )}
+        {drafts.length ? (
+          <div className="grid gap-2">
+            <p className="text-sm font-black uppercase tracking-normal text-stone-500">Draft quotes saved to User workspace</p>
+            {drafts.slice(0, 5).map((draft) => (
+              <button key={draft.id} className="rounded-lg border border-stone-200 bg-white p-3 text-left transition hover:border-teal-700 hover:bg-teal-50" onClick={() => onLoadDraft(draft)}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-black">{draft.meta.customer || draft.meta.project || "Temporary quote"}</p>
+                    <p className="mt-1 text-sm text-stone-600">{draft.lines.length} lines · saved {new Date(draft.updatedAt).toLocaleString()}</p>
+                  </div>
+                  <strong>{money.format(draft.total)}</strong>
+                </div>
+              </button>
+            ))}
+          </div>
+        ) : null}
         <button className="button-primary w-fit" onClick={onContinue}>
           Open Quote Workspace
         </button>
@@ -886,6 +1094,7 @@ function PrintQuoteDocument({ quote }: { quote: PrintableQuote }) {
         </div>
         <div className="print-meta">
           <p><strong>Quote #</strong> {quote.meta.quoteNumber || "Draft"}</p>
+          {quote.revisionNumber ? <p><strong>Revision</strong> {quote.revisionNumber}</p> : null}
           <p><strong>Date</strong> {issuedDate.toLocaleDateString()}</p>
         </div>
       </div>
@@ -901,6 +1110,12 @@ function PrintQuoteDocument({ quote }: { quote: PrintableQuote }) {
           {quote.meta.location ? <p>{quote.meta.location}</p> : null}
         </div>
       </div>
+      {quote.meta.notes ? (
+        <div className="print-notes">
+          <p className="print-label">Notes</p>
+          <p>{quote.meta.notes}</p>
+        </div>
+      ) : null}
       <table className="print-table">
         <thead>
           <tr>
@@ -1166,8 +1381,11 @@ function QuoteWorkspace(props: {
   meta: QuoteMeta;
   setMeta: Dispatch<SetStateAction<QuoteMeta>>;
   totals: QuoteTotals;
+  items: CatalogItem[];
   templates: QuoteTemplate[];
   onAddTemplate: (template: QuoteTemplate, jumpToCustomize?: boolean) => void;
+  onStartFresh: () => void;
+  onAddItemToPackage: (item: CatalogItem, packageName?: string, quantity?: number) => void;
   onUpdateLine: (lineId: string, patch: Partial<QuoteLine>) => void;
   onRenamePackage: (packageName: string, nextName: string) => void;
   onRemoveLine: (lineId: string) => void;
@@ -1198,10 +1416,10 @@ function QuoteWorkspace(props: {
             <p>{props.step === "pick" ? "Start fresh or build from a saved template." : "Review cart details and finalize the quote."}</p>
           </div>
           <div className="hidden items-center gap-2 sm:flex">
-            {steps.map((step) => (
-              <button key={step} className={`chip capitalize ${props.step === step ? "chip-active" : ""}`} onClick={() => props.setStep(step)}>
-                {step}
-              </button>
+            {steps.map((step, index) => (
+              <div key={step} className={`chip capitalize ${props.step === step ? "chip-active" : ""}`}>
+                {index + 1}. {step}
+              </div>
             ))}
           </div>
         </div>
@@ -1209,9 +1427,9 @@ function QuoteWorkspace(props: {
           <div className="grid grid-cols-[auto_1fr_auto_1fr_auto_1fr_auto] items-center gap-2 sm:hidden">
             {steps.map((step, index) => (
               <div key={step} className="contents">
-                <button className={`grid size-8 place-items-center rounded-full text-sm font-black ${props.step === step ? "bg-teal-700 text-white" : "bg-white text-stone-600"}`} onClick={() => props.setStep(step)}>
+                <span className={`grid size-8 place-items-center rounded-full text-sm font-black ${props.step === step ? "bg-teal-700 text-white" : "bg-white text-stone-600"}`}>
                   {index + 1}
-                </button>
+                </span>
                 {index < steps.length - 1 ? <span className="h-px bg-stone-300" /> : null}
               </div>
             ))}
@@ -1220,7 +1438,7 @@ function QuoteWorkspace(props: {
           {props.step === "pick" ? (
             <div className="grid gap-4">
               <div className="grid gap-3 md:grid-cols-2">
-                <button className="rounded-lg border border-stone-200 bg-stone-50 p-5 text-left transition hover:border-teal-700 hover:bg-teal-50" onClick={() => props.setStep("customize")}>
+                <button className="rounded-lg border border-stone-200 bg-stone-50 p-5 text-left transition hover:border-teal-700 hover:bg-teal-50" onClick={props.onStartFresh}>
                   <p className="font-black">Start Fresh</p>
                   <p className="mt-2 text-sm text-stone-600">Build a quote by adding catalog items from scratch.</p>
                 </button>
@@ -1254,7 +1472,7 @@ function QuoteWorkspace(props: {
           ) : null}
 
           {props.step === "customize" || props.step === "review" || props.step === "finalize" ? (
-            <QuoteLines lines={props.lines} onUpdateLine={props.onUpdateLine} onRenamePackage={props.onRenamePackage} onRemoveLine={props.onRemoveLine} />
+            <QuoteLines lines={props.lines} items={props.items} onAddItemToPackage={props.onAddItemToPackage} onUpdateLine={props.onUpdateLine} onRenamePackage={props.onRenamePackage} onRemoveLine={props.onRemoveLine} />
           ) : null}
 
           {props.step === "finalize" ? (
@@ -1291,63 +1509,128 @@ function QuoteWorkspace(props: {
 
 function QuoteLines({
   lines,
+  items,
+  onAddItemToPackage,
   onUpdateLine,
   onRenamePackage,
   onRemoveLine,
 }: {
   lines: QuoteLine[];
+  items: CatalogItem[];
+  onAddItemToPackage: (item: CatalogItem, packageName?: string, quantity?: number) => void;
   onUpdateLine: (lineId: string, patch: Partial<QuoteLine>) => void;
   onRenamePackage: (packageName: string, nextName: string) => void;
   onRemoveLine: (lineId: string) => void;
 }) {
+  const [packageSelector, setPackageSelector] = useState("");
+  const rows = useMemo(() => {
+    const result: Array<{ type: "package"; packageName: string; lines: QuoteLine[] } | { type: "line"; line: QuoteLine }> = [];
+    const packageIndexes = new Map<string, number>();
+
+    lines.forEach((line) => {
+      if (!line.packageName) {
+        result.push({ type: "line", line });
+        return;
+      }
+      const existingIndex = packageIndexes.get(line.packageName);
+      if (existingIndex === undefined) {
+        packageIndexes.set(line.packageName, result.length);
+        result.push({ type: "package", packageName: line.packageName, lines: [line] });
+        return;
+      }
+      const existing = result[existingIndex];
+      if (existing.type === "package") existing.lines.push(line);
+    });
+
+    return result;
+  }, [lines]);
+
   if (!lines.length) {
     return <div className="rounded-lg border border-dashed border-stone-300 bg-stone-50 p-8 text-center text-stone-500">Add catalog items or choose a template to start.</div>;
   }
   return (
     <div className="grid gap-3">
-      {lines.map((line) => (
-        <details key={line.lineId} className="overflow-hidden rounded-lg border border-stone-200 bg-stone-50">
-          <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 p-4 [&::-webkit-details-marker]:hidden">
-            <div className="min-w-0">
-              {line.packageName ? <span className="mb-1 inline-flex rounded-full bg-teal-100 px-2 py-1 text-xs font-black text-teal-900">{line.packageName}</span> : null}
-              <p className="truncate font-black">{line.name}</p>
-            </div>
-            <span className="font-black">Qty {line.quantity}</span>
-            <ChevronDown size={17} className="text-stone-500" />
-          </summary>
-          <div className="grid gap-3 border-t border-stone-200 p-4 md:grid-cols-2">
-            <label className="field md:col-span-2">
-              <span>Item name</span>
-              <input className="input" value={line.name} onChange={(event) => onUpdateLine(line.lineId, { name: event.target.value })} />
-            </label>
-            {line.packageName ? (
-              <label className="field md:col-span-2">
-                <span>Nickname</span>
-                <input className="input border-teal-200 bg-teal-50 font-black text-teal-950" value={line.packageName} onChange={(event) => onRenamePackage(line.packageName ?? "", event.target.value)} />
+      {rows.map((row) =>
+        row.type === "package" ? (
+          <details key={row.packageName} className="overflow-hidden rounded-lg border border-teal-200 bg-teal-50">
+            <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 p-4 [&::-webkit-details-marker]:hidden">
+              <div className="min-w-0">
+                <p className="truncate font-black">{row.packageName}</p>
+                <p className="mt-1 text-sm font-medium text-teal-900">{row.lines.length} items · Qty {row.lines.reduce((sum, line) => sum + line.quantity, 0)}</p>
+              </div>
+              <span className="font-black">{money.format(row.lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0))}</span>
+              <ChevronDown size={17} className="text-stone-500" />
+            </summary>
+            <div className="grid gap-3 border-t border-teal-200 p-4">
+              <label className="field">
+                <span>Setup nickname</span>
+                <input className="input border-teal-200 bg-white font-black text-teal-950" value={row.packageName} onChange={(event) => onRenamePackage(row.packageName, event.target.value)} />
               </label>
-            ) : null}
-            <label className="field">
-              <span>Quantity</span>
-              <input className="input" type="number" min={0} value={line.quantity} onChange={(event) => onUpdateLine(line.lineId, { quantity: Number(event.target.value) })} />
-            </label>
-            <label className="field">
-              <span>Unit price</span>
-              <input className="input" type="number" min={0} step="0.01" value={line.unitPrice} onChange={(event) => onUpdateLine(line.lineId, { unitPrice: Number(event.target.value) })} />
-            </label>
-            <label className="field md:col-span-2">
-              <span>Notes</span>
-              <p className="min-h-16 rounded-md border border-stone-200 bg-white p-3 text-sm font-medium text-stone-700">{line.notes || "No notes"}</p>
-            </label>
-            <div className="flex items-center justify-between gap-3 md:col-span-2">
-              <strong>{money.format(line.quantity * line.unitPrice)}</strong>
-              <button className="button-ghost" onClick={() => onRemoveLine(line.lineId)}>
-                <Trash2 size={16} />
-                Remove
+              <div className="grid gap-2">
+                {row.lines.map((line) => (
+                  <QuoteLineEditor key={line.lineId} line={line} onUpdateLine={onUpdateLine} onRemoveLine={onRemoveLine} />
+                ))}
+              </div>
+              <button className="button-secondary w-fit" onClick={() => setPackageSelector(row.packageName)}>
+                <PackagePlus size={16} />
+                Add more item
               </button>
             </div>
-          </div>
-        </details>
-      ))}
+          </details>
+        ) : (
+          <details key={row.line.lineId} className="overflow-hidden rounded-lg border border-stone-200 bg-stone-50">
+            <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 p-4 [&::-webkit-details-marker]:hidden">
+              <p className="truncate font-black">{row.line.name}</p>
+              <span className="font-black">Qty {row.line.quantity}</span>
+              <ChevronDown size={17} className="text-stone-500" />
+            </summary>
+            <div className="border-t border-stone-200 p-4">
+              <QuoteLineEditor line={row.line} onUpdateLine={onUpdateLine} onRemoveLine={onRemoveLine} />
+            </div>
+          </details>
+        ),
+      )}
+      {packageSelector ? (
+        <TemplateItemSelector
+          items={items}
+          onCancel={() => setPackageSelector("")}
+          onConfirm={(itemId) => {
+            const item = items.find((candidate) => candidate.id === itemId);
+            if (item) onAddItemToPackage(item, packageSelector, 1);
+            setPackageSelector("");
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function QuoteLineEditor({ line, onUpdateLine, onRemoveLine }: { line: QuoteLine; onUpdateLine: (lineId: string, patch: Partial<QuoteLine>) => void; onRemoveLine: (lineId: string) => void }) {
+  return (
+    <div className="grid gap-3 rounded-lg border border-stone-200 bg-white p-3 md:grid-cols-2">
+      <label className="field md:col-span-2">
+        <span>Item name</span>
+        <input className="input" value={line.name} onChange={(event) => onUpdateLine(line.lineId, { name: event.target.value })} />
+      </label>
+      <label className="field">
+        <span>Quantity</span>
+        <input className="input" type="number" min={0} value={line.quantity} onChange={(event) => onUpdateLine(line.lineId, { quantity: Number(event.target.value) })} />
+      </label>
+      <label className="field">
+        <span>Unit price</span>
+        <input className="input" type="number" min={0} step="0.01" value={line.unitPrice} onChange={(event) => onUpdateLine(line.lineId, { unitPrice: Number(event.target.value) })} />
+      </label>
+      <label className="field md:col-span-2">
+        <span>Notes</span>
+        <p className="min-h-16 rounded-md border border-stone-200 bg-stone-50 p-3 text-sm font-medium text-stone-700">{line.notes || "No notes"}</p>
+      </label>
+      <div className="flex items-center justify-between gap-3 md:col-span-2">
+        <strong>{money.format(line.quantity * line.unitPrice)}</strong>
+        <button className="button-ghost" onClick={() => onRemoveLine(line.lineId)}>
+          <Trash2 size={16} />
+          Remove
+        </button>
+      </div>
     </div>
   );
 }
@@ -1420,6 +1703,10 @@ function FinalizePanel({
             </label>
           </div>
         ) : null}
+        <label className="field md:col-span-2">
+          <span>Extra instructions / notes</span>
+          <textarea className="textarea" value={meta.notes ?? ""} onChange={(event) => setMeta((current) => ({ ...current, notes: event.target.value }))} placeholder="Installation notes, customer instructions, exclusions, or follow-up details" />
+        </label>
       </div>
       <div className="grid gap-3">
         {saveError ? <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-900">{saveError}</p> : null}
@@ -1471,15 +1758,28 @@ function exportQuote(quote: SavedQuote, format: ExportQuoteFormat) {
     return;
   }
 
-  const rows = [
+  const revisionNumber = (quote.revisions?.length ?? 0) + 1;
+  const isInstallList = format === "install";
+  const rows = isInstallList ? [
     ["Quote", quote.meta.quoteNumber],
+    ["Revision", String(revisionNumber)],
     ["Customer", quote.meta.customer],
     ["Project", quote.meta.project],
     ["Location", quote.meta.location ?? ""],
     ["Created", new Date(quote.createdAt).toLocaleString()],
     [],
-    ["Item", "SKU", "Package", "Quantity", "Unit Price", "Line Total", "Notes"],
-    ...quote.lines.map((line) => [line.name, line.sku, line.packageName ?? "", String(line.quantity), String(line.unitPrice), String(line.quantity * line.unitPrice), line.notes]),
+    ["Item", "SKU", "Package", "Quantity", "Notes"],
+    ...quote.lines.map((line) => [line.name, line.sku, line.packageName ?? "", String(line.quantity), line.notes]),
+  ] : [
+    ["Quote", quote.meta.quoteNumber],
+    ["Revision", String(revisionNumber)],
+    ["Customer", quote.meta.customer],
+    ["Project", quote.meta.project],
+    ["Location", quote.meta.location ?? ""],
+    ["Created", new Date(quote.createdAt).toLocaleString()],
+    [],
+    ["Item", "SKU", "Package", "Quantity", "ADI MSRP", "Unit Price", "Line Total", "Notes"],
+    ...quote.lines.map((line) => [line.name, line.sku, line.packageName ?? "", String(line.quantity), String(line.msrp ?? ""), String(line.unitPrice), String(line.quantity * line.unitPrice), line.notes]),
     [],
     ["Total", String(quote.total)],
   ];
@@ -1488,7 +1788,7 @@ function exportQuote(quote: SavedQuote, format: ExportQuoteFormat) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `${quote.meta.quoteNumber || "quote"}.csv`;
+  link.download = `${quote.meta.quoteNumber || "quote"}-${isInstallList ? "install-list" : "revision-" + revisionNumber}.csv`;
   link.click();
   URL.revokeObjectURL(url);
 }
@@ -1638,7 +1938,7 @@ function ItemsPage({
             <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto] items-center gap-3 p-4 [&::-webkit-details-marker]:hidden">
               <div>
                 <p className="font-black">{item.name}</p>
-                <p className="font-mono text-xs text-stone-500">{item.sku} / {item.category}</p>
+                <p className="font-mono text-xs text-stone-500">{item.category || "No category"} / {item.sku}</p>
               </div>
               <strong>{money.format(item.unitPrice)}</strong>
             </summary>
@@ -2097,20 +2397,38 @@ function TemplateCard({
   };
 
   return (
-    <article className="rounded-lg border border-stone-200 bg-stone-50 p-4">
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-        <input className="input font-black" value={template.name} onChange={(event) => updateTemplate({ name: event.target.value })} />
-        <button
-          className="icon-button hover:border-red-200 hover:bg-red-50 hover:text-red-800"
-          onClick={() => onDeleteTemplate(template)}
-          aria-label={`Delete ${template.name || "template"}`}
-        >
-          <X size={16} />
-        </button>
-      </div>
-      <textarea className="textarea mt-3" value={template.description} onChange={(event) => updateTemplate({ description: event.target.value })} placeholder="Template description" />
-      {requirements.length ? (
-        <div className="mt-3 grid gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+    <article className="rounded-lg border border-stone-200 bg-stone-50">
+      <details>
+        <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 p-4 [&::-webkit-details-marker]:hidden">
+          <div className="min-w-0">
+            <p className="truncate font-black">{template.name || "None"}</p>
+            <p className="mt-1 text-sm text-stone-600">{template.lines.length} items · Qty {template.lines.reduce((sum, line) => sum + line.quantity, 0)}</p>
+          </div>
+          <button
+            className="button-primary min-h-9 px-3 py-1"
+            onClick={(event) => {
+              event.preventDefault();
+              onAddTemplate(template);
+            }}
+          >
+            Add
+          </button>
+          <ChevronDown size={17} className="text-stone-500" />
+        </summary>
+        <div className="grid gap-3 border-t border-stone-200 p-4">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+            <input className="input font-black" value={template.name} onChange={(event) => updateTemplate({ name: event.target.value })} />
+            <button
+              className="icon-button hover:border-red-200 hover:bg-red-50 hover:text-red-800"
+              onClick={() => onDeleteTemplate(template)}
+              aria-label={`Delete ${template.name || "template"}`}
+            >
+              <X size={16} />
+            </button>
+          </div>
+          <textarea className="textarea" value={template.description} onChange={(event) => updateTemplate({ description: event.target.value })} placeholder="Template description" />
+          {requirements.length ? (
+        <div className="grid gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
           <div>
             <p className="text-sm font-black text-amber-950">Door template check</p>
             <p className="text-xs font-medium text-amber-900">Checks common door access prerequisites from the item database.</p>
@@ -2137,7 +2455,7 @@ function TemplateCard({
           </div>
         </div>
       ) : null}
-      <div className="mt-3 grid gap-2">
+      <div className="grid gap-2">
         {template.lines.map((line) => {
           const item = items.find((candidate) => candidate.id === line.itemId);
           if (!item) return null;
@@ -2162,13 +2480,12 @@ function TemplateCard({
           );
         })}
       </div>
-      <button className="button-secondary mt-3 w-full justify-start" onClick={() => setSelectorOpen(true)}>
+      <button className="button-secondary w-full justify-start" onClick={() => setSelectorOpen(true)}>
         <PackagePlus size={16} />
         Add item to list
       </button>
-      <button className="button-primary mt-4 w-full" onClick={() => onAddTemplate(template)}>
-        Add to Quote
-      </button>
+        </div>
+      </details>
       {selectorOpen ? (
         <TemplateItemSelector
           items={items}
@@ -2333,6 +2650,7 @@ function PreviousQuotes({
               <div className="rounded-lg bg-stone-50 p-4">
                 <p className="font-black">{selectedQuote.meta.customer || "Unnamed customer"}</p>
                 <p className="text-sm text-stone-600">Quote {selectedQuote.meta.quoteNumber} · Quoted {new Date(selectedQuote.createdAt).toLocaleString()}</p>
+                <p className="text-sm text-stone-600">Revision {(selectedQuote.revisions?.length ?? 0) + 1}</p>
                 {selectedQuote.meta.project ? <p className="mt-1 text-sm font-bold text-stone-700">{selectedQuote.meta.project}</p> : null}
                 {selectedQuote.meta.location ? <p className="text-sm text-stone-600">{selectedQuote.meta.location}</p> : null}
               </div>
@@ -2348,48 +2666,51 @@ function PreviousQuotes({
                   </div>
                 ))}
               </div>
-              <div className="flex flex-wrap gap-2">
-                <button className="button-primary" onClick={() => onEdit(selectedQuote)}>
-                  Edit Quote
-                </button>
-                <button className="button-secondary" onClick={() => onClientView(selectedQuote)}>
-                  Client View
-                </button>
-                <div className="relative">
-                  <button className="button-secondary" onClick={() => setPrintMenuOpen((open) => !open)}>
-                    <Printer size={16} />
-                    Print
-                    <ChevronDown size={16} />
-                  </button>
-                  {printMenuOpen ? (
-                    <div className="absolute left-0 top-12 z-20 grid w-44 gap-1 rounded-lg border border-stone-200 bg-white p-2 shadow-xl before:absolute before:-top-2 before:left-6 before:size-4 before:rotate-45 before:border-l before:border-t before:border-stone-200 before:bg-white">
-                      {[
-                        ["print", "Print"],
-                        ["pdf", "PDF"],
-                        ["excel", "Excel"],
-                      ].map(([format, label]) => (
-                        <button
-                          key={format}
-                          className="rounded-md px-3 py-2 text-left text-sm font-bold hover:bg-stone-100"
-                          onClick={() => {
-                            if (format === "excel") {
-                              exportQuote(selectedQuote, format as ExportQuoteFormat);
-                            } else {
-                              onPrintQuote(selectedQuote);
-                            }
-                            setPrintMenuOpen(false);
-                          }}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <button className="button-ghost" onClick={() => setDeleteQuote(selectedQuote)}>
                   <Trash2 size={16} />
                   Remove
                 </button>
+                <div className="ml-auto flex flex-wrap gap-2">
+                  <button className="button-primary" onClick={() => onEdit(selectedQuote)}>
+                    Edit Quote
+                  </button>
+                  <button className="button-secondary" onClick={() => onClientView(selectedQuote)}>
+                    Client View
+                  </button>
+                  <div className="relative">
+                    <button className="button-secondary" onClick={() => setPrintMenuOpen((open) => !open)}>
+                      <Printer size={16} />
+                      Print
+                      <ChevronDown size={16} />
+                    </button>
+                    {printMenuOpen ? (
+                      <div className="absolute right-0 top-12 z-20 grid w-52 gap-1 rounded-lg border border-stone-200 bg-white p-2 shadow-xl before:absolute before:-top-2 before:right-6 before:size-4 before:rotate-45 before:border-l before:border-t before:border-stone-200 before:bg-white">
+                        {[
+                          ["print", "Print"],
+                          ["pdf", "PDF"],
+                          ["excel", "Excel with MSRP"],
+                          ["install", "Install list no prices"],
+                        ].map(([format, label]) => (
+                          <button
+                            key={format}
+                            className="rounded-md px-3 py-2 text-left text-sm font-bold hover:bg-stone-100"
+                            onClick={() => {
+                              if (format === "excel" || format === "install") {
+                                exportQuote(selectedQuote, format as ExportQuoteFormat);
+                              } else {
+                                onPrintQuote(selectedQuote);
+                              }
+                              setPrintMenuOpen(false);
+                            }}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
               </div>
             </div>
           ) : (
@@ -2488,6 +2809,7 @@ function SettingsPage({
   setItems,
   quotes,
   setQuotes,
+  adminUnlocked,
 }: {
   settings: ServiceTitanSettings;
   setSettings: Dispatch<SetStateAction<ServiceTitanSettings>>;
@@ -2496,6 +2818,7 @@ function SettingsPage({
   setItems: Dispatch<SetStateAction<CatalogItem[]>>;
   quotes: SavedQuote[];
   setQuotes: Dispatch<SetStateAction<SavedQuote[]>>;
+  adminUnlocked: boolean;
 }) {
   const [activeSection, setActiveSection] = useState<SettingsSection>("account");
   const [databaseStatus, setDatabaseStatus] = useState<DatabaseStatus | null>(null);
@@ -2503,14 +2826,15 @@ function SettingsPage({
   const [recoverySearch, setRecoverySearch] = useState("");
   const [recoverySort, setRecoverySort] = useState<RecoverySort>("recent");
   const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<PermanentDeleteTarget | null>(null);
-  const sections: { id: SettingsSection; label: string }[] = [
+  const sections: { id: SettingsSection; label: string; admin?: boolean }[] = [
     { id: "account", label: "Account Info" },
     { id: "database", label: "Database" },
-    { id: "serviceTitan", label: "ServiceTitan" },
-    { id: "adi", label: "ADI MSRP" },
-    { id: "sync", label: "Sync" },
-    { id: "recovery", label: "Admin Recovery" },
+    { id: "serviceTitan", label: "ServiceTitan", admin: true },
+    { id: "adi", label: "ADI MSRP", admin: true },
+    { id: "sync", label: "Sync", admin: true },
+    { id: "recovery", label: "Admin Recovery", admin: true },
   ];
+  const visibleSections = sections.filter((section) => !section.admin || adminUnlocked);
   const deletedItems = useMemo(() => {
     const query = normalizeSearchValue(recoverySearch);
     const filtered = items.filter((item) => {
@@ -2546,6 +2870,12 @@ function SettingsPage({
     };
   }, []);
 
+  useEffect(() => {
+    if (!visibleSections.some((section) => section.id === activeSection)) {
+      setActiveSection("account");
+    }
+  }, [activeSection, adminUnlocked]);
+
   const confirmSync = () => {
     onSync();
     setSyncConfirmOpen(false);
@@ -2575,11 +2905,12 @@ function SettingsPage({
       </div>
       <div className="grid gap-4 p-4 lg:grid-cols-[260px_minmax(0,1fr)]">
         <div className="grid h-fit gap-2 rounded-lg bg-stone-50 p-3">
-          {sections.map((item) => (
+          {visibleSections.map((item) => (
             <button key={item.id} className={`rounded-md px-3 py-2 text-left font-bold transition ${activeSection === item.id ? "bg-white text-teal-800 shadow-sm" : "hover:bg-white"}`} onClick={() => setActiveSection(item.id)}>
               {item.label}
             </button>
           ))}
+          {!adminUnlocked ? <p className="rounded-md border border-dashed border-stone-300 bg-white p-3 text-xs font-bold text-stone-500">Hold the Settings nav button for 5 seconds to unlock admin sections.</p> : null}
         </div>
         <div className="grid gap-4">
           {activeSection === "account" ? (
@@ -2806,12 +3137,16 @@ function MobileMenu({
   setView,
   goToQuote,
   close,
+  onSettingsHoldStart,
+  onSettingsHoldEnd,
 }: {
   nav: { id: View; label: string; icon: LucideIcon }[];
   view: View;
   setView: (view: View) => void;
   goToQuote: () => void;
   close: () => void;
+  onSettingsHoldStart: () => void;
+  onSettingsHoldEnd: () => void;
 }) {
   return (
     <div className="fixed inset-0 z-50 bg-black/35 md:hidden" onClick={close}>
@@ -2836,6 +3171,9 @@ function MobileMenu({
             <button
               key={item.id}
               className={`nav-button justify-start ${view === item.id ? "nav-button-active" : ""}`}
+              onPointerDown={item.id === "settings" ? onSettingsHoldStart : undefined}
+              onPointerUp={item.id === "settings" ? onSettingsHoldEnd : undefined}
+              onPointerLeave={item.id === "settings" ? onSettingsHoldEnd : undefined}
               onClick={() => {
                 setView(item.id);
                 close();
