@@ -3,6 +3,10 @@
 import { useState } from "react";
 import { Lock, Mail } from "lucide-react";
 import { signIn } from "next-auth/react";
+import { writeDebugLog } from "@/lib/debug-log";
+
+const deviceIdStorageKey = "qqb.device.id.v1";
+const sessionStorageKey = "qqb.cache.sessions.v1";
 
 const demoUsers = [
   { label: "Admin User", email: "qqb.admin@example.com", password: "QuoteAdmin2026!" },
@@ -33,6 +37,14 @@ export function LoginForm({ error }: { error?: string }) {
       }
 
       if (body?.method === "azure") {
+        window.localStorage.removeItem(deviceIdStorageKey);
+        window.localStorage.removeItem(sessionStorageKey);
+        await writeDebugLog({
+          type: "auth",
+          level: "info",
+          message: "Microsoft sign-in started; local device session cache cleared.",
+          metadata: { email },
+        });
         const result = await signIn("microsoft-entra-id", { callbackUrl: "/", redirect: false }, { login_hint: email });
         if (result?.url) {
           window.location.href = result.url;
@@ -54,6 +66,14 @@ export function LoginForm({ error }: { error?: string }) {
     setLoading(true);
     setMessage("");
     try {
+      window.localStorage.removeItem(deviceIdStorageKey);
+      window.localStorage.removeItem(sessionStorageKey);
+      await writeDebugLog({
+        type: "auth",
+        level: "info",
+        message: "Password sign-in started; local device session cache cleared.",
+        metadata: { email },
+      });
       const result = await signIn("credentials", {
         email,
         password,
@@ -61,11 +81,29 @@ export function LoginForm({ error }: { error?: string }) {
         callbackUrl: "/",
       });
       if (result?.error) {
+        await writeDebugLog({
+          type: "auth",
+          level: "warning",
+          message: "Password sign-in failed.",
+          metadata: { email, error: result.error },
+        });
         setMessage("Invalid email or password.");
         return;
       }
+      await writeDebugLog({
+        type: "auth",
+        level: "info",
+        message: "Password sign-in succeeded.",
+        metadata: { email },
+      });
       window.location.href = result?.url || "/";
     } catch {
+      await writeDebugLog({
+        type: "auth",
+        level: "error",
+        message: "Password sign-in request failed.",
+        metadata: { email },
+      });
       setMessage("Sign-in service is not responding. Try refreshing the page.");
     } finally {
       setLoading(false);

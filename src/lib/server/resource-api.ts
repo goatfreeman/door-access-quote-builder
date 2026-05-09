@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
 import type { SessionUser } from "@/lib/auth-types";
-import type { CatalogItem, DraftQuote, QuoteTemplate, SavedQuote, UserSessionRecord } from "@/lib/types";
+import type { CatalogItem, DebugLogEntry, DraftQuote, QuoteTemplate, SavedQuote, UserSessionRecord } from "@/lib/types";
 import { readCollection, writeCollection, type StoreCollection } from "@/lib/server/nosql-store";
 
-export type ApiResourceName = "items" | "templates" | "quotes" | "drafts" | "sessions";
-type ResourceRecord = CatalogItem | QuoteTemplate | SavedQuote | DraftQuote | UserSessionRecord;
+export type ApiResourceName = "items" | "templates" | "quotes" | "drafts" | "sessions" | "debugLogs";
+type ResourceRecord = CatalogItem | QuoteTemplate | SavedQuote | DraftQuote | UserSessionRecord | DebugLogEntry;
 
-const resources = new Set<ApiResourceName>(["items", "templates", "quotes", "drafts", "sessions"]);
+const resources = new Set<ApiResourceName>(["items", "templates", "quotes", "drafts", "sessions", "debugLogs"]);
 const softDeleteResources = new Set<ApiResourceName>(["items", "quotes"]);
 const userScopedResources = new Set<ApiResourceName>(["drafts", "sessions"]);
 
@@ -105,6 +105,10 @@ function normalizeRecord(resource: ApiResourceName, body: unknown, user: Session
     return { ...value, id, createdAt: stringOr(value.createdAt, now), updatedAt: now, updatedBy: user.id, updatedByName: user.name } as SavedQuote;
   }
 
+  if (resource === "debugLogs") {
+    return { ...value, id, createdAt: stringOr(value.createdAt, now), userId: value.userId ?? user.id, userName: value.userName ?? user.name } as DebugLogEntry;
+  }
+
   if (resource === "templates") {
     return { ...value, id, createdBy: user.id, createdByName: user.name, updatedBy: user.id, updatedByName: user.name } as QuoteTemplate;
   }
@@ -117,6 +121,7 @@ function canWriteRecord(resource: ApiResourceName, record: ResourceRecord, user:
   if (!userScopedResources.has(resource)) return true;
   if (resource === "drafts") return "owner" in record && (record.owner === user.id || record.owner === user.name);
   if (resource === "sessions") return "userId" in record && record.userId === user.id;
+  if (resource === "debugLogs") return true;
   return false;
 }
 

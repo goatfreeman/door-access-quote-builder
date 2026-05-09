@@ -1,4 +1,4 @@
-export type DbCollection = "items" | "templates" | "quotes" | "settings" | "drafts" | "sessions";
+export type DbCollection = "items" | "templates" | "quotes" | "settings" | "drafts" | "sessions" | "debugLogs";
 type PendingWrite = {
   collection: DbCollection;
   value: unknown;

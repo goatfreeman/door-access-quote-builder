@@ -27,12 +27,13 @@ import type { Dispatch, SetStateAction } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { signOut as authSignOut } from "next-auth/react";
 import { getPendingWriteCount, readDb, syncPendingWrites, writeDb } from "@/lib/client-db";
+import { writeDebugLog } from "@/lib/debug-log";
 import type { SessionUser } from "@/lib/auth-types";
-import type { CatalogItem, DraftQuote, QuoteLine, QuoteMeta, QuoteTemplate, SavedQuote, ServiceTitanSettings, UserSessionRecord } from "@/lib/types";
+import type { CatalogItem, DebugLogEntry, DraftQuote, QuoteLine, QuoteMeta, QuoteTemplate, SavedQuote, ServiceTitanSettings, UserSessionRecord } from "@/lib/types";
 
 type View = "home" | "quote" | "items" | "templates" | "previous" | "settings" | "client";
 type QuoteStep = "pick" | "customize" | "review" | "finalize";
-type SettingsSection = "account" | "database" | "serviceTitan" | "adi" | "sync" | "recovery";
+type SettingsSection = "account" | "database" | "serviceTitan" | "adi" | "sync" | "debug" | "recovery";
 type AdiCatalogMatch = Omit<CatalogItem, "id"> & {
   imageUrl: string;
   manufacturerSku: string;
@@ -370,6 +371,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
     clientId: "",
     clientSecret: "",
   });
+  const [debugLogs, setDebugLogs] = useState<DebugLogEntry[]>([]);
   const [lines, setLines] = useState<QuoteLine[]>([]);
   const [meta, setMeta] = useState<QuoteMeta>(emptyMeta);
   const [search, setSearch] = useState("");
@@ -439,14 +441,16 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
       readDb<SavedQuote[]>("quotes", readStorage(STORAGE_KEYS.quotes, [])),
       readDb<DraftQuote[]>("drafts", readStorage(STORAGE_KEYS.draftQuotes, [])),
       readDb<UserSessionRecord[]>("sessions", readStorage(STORAGE_KEYS.sessions, [])),
+      readDb<DebugLogEntry[]>("debugLogs", []),
       readDb<ServiceTitanSettings>("settings", readStorage(STORAGE_KEYS.settings, { baseUrl: "", tenantId: "", clientId: "", clientSecret: "" })),
-    ]).then(([dbItems, dbTemplates, dbQuotes, dbDraftQuotes, dbSessions, dbSettings]) => {
+    ]).then(([dbItems, dbTemplates, dbQuotes, dbDraftQuotes, dbSessions, dbDebugLogs, dbSettings]) => {
       if (cancelled) return;
       setItems(dbItems);
       setTemplates(dbTemplates);
       setQuotes(dbQuotes);
       setDraftQuotes(Array.isArray(dbDraftQuotes) ? dbDraftQuotes : []);
       setSessions(Array.isArray(dbSessions) ? dbSessions : []);
+      setDebugLogs(Array.isArray(dbDebugLogs) ? dbDebugLogs : []);
       setSettings(dbSettings);
       setHydrated(true);
     });
@@ -658,6 +662,16 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
       const serverSessions = await readServerSessions([nextSession]);
       const serverCurrentSession = serverSessions.find((session) => session.id === sessionId && session.endedAt);
       if (serverCurrentSession?.endedAt) {
+        await writeDebugLog({
+          type: "session",
+          level: "warning",
+          message: "Current device session was revoked before heartbeat update.",
+          userId: sessionUser.id,
+          userName: sessionUser.name,
+          deviceId,
+          deviceName,
+          metadata: { sessionId, endedAt: serverCurrentSession.endedAt },
+        });
         await authSignOut({ callbackUrl: "/login?error=Session%20revoked" });
         return;
       }
@@ -667,6 +681,16 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
       const refreshedSessions = await readServerSessions([nextSession]);
       const refreshedCurrentSession = refreshedSessions.find((session) => session.id === sessionId && session.endedAt);
       if (refreshedCurrentSession?.endedAt) {
+        await writeDebugLog({
+          type: "session",
+          level: "warning",
+          message: "Current device session was revoked after heartbeat update.",
+          userId: sessionUser.id,
+          userName: sessionUser.name,
+          deviceId,
+          deviceName,
+          metadata: { sessionId, endedAt: refreshedCurrentSession.endedAt },
+        });
         await authSignOut({ callbackUrl: "/login?error=Session%20revoked" });
         return;
       }
@@ -1185,7 +1209,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
           />
         ) : null}
         {view === "client" ? <ClientQuoteView quote={selectedQuote} onPrintQuote={printSavedQuote} /> : null}
-        {view === "settings" ? <SettingsPage settings={settings} setSettings={setSettings} onSync={syncServiceTitan} items={items} setItems={setItems} quotes={quotes} setQuotes={setQuotes} sessions={userSessions} setSessions={setSessions} currentDeviceId={deviceId} adminUnlocked={adminUnlocked} user={sessionUser} onSignOut={signOut} /> : null}
+        {view === "settings" ? <SettingsPage settings={settings} setSettings={setSettings} onSync={syncServiceTitan} items={items} setItems={setItems} quotes={quotes} setQuotes={setQuotes} sessions={userSessions} setSessions={setSessions} debugLogs={debugLogs} currentDeviceId={deviceId} adminUnlocked={adminUnlocked} user={sessionUser} onSignOut={signOut} /> : null}
       </section>
 
       {startFreshPromptOpen ? (
@@ -3238,6 +3262,7 @@ function SettingsPage({
   setQuotes,
   sessions,
   setSessions,
+  debugLogs,
   currentDeviceId,
   adminUnlocked,
   user,
@@ -3252,6 +3277,7 @@ function SettingsPage({
   setQuotes: Dispatch<SetStateAction<SavedQuote[]>>;
   sessions: UserSessionRecord[];
   setSessions: Dispatch<SetStateAction<UserSessionRecord[]>>;
+  debugLogs: DebugLogEntry[];
   currentDeviceId: string;
   adminUnlocked: boolean;
   user: SessionUser;
@@ -3269,6 +3295,7 @@ function SettingsPage({
     { id: "serviceTitan", label: "ServiceTitan", admin: true },
     { id: "adi", label: "ADI MSRP", admin: true },
     { id: "sync", label: "Sync", admin: true },
+    { id: "debug", label: "Debug Logs", admin: true },
     { id: "recovery", label: "Admin Recovery", admin: true },
   ];
   const visibleSections = sections.filter((section) => !section.admin || adminUnlocked);
@@ -3476,6 +3503,32 @@ function SettingsPage({
                   Sync Now
                 </button>
                 <span className="text-sm text-stone-600">Last sync: {settings.lastSyncAt ? new Date(settings.lastSyncAt).toLocaleString() : "Never"}</span>
+              </div>
+            </section>
+          ) : null}
+          {activeSection === "debug" ? (
+            <section className="grid gap-4 rounded-lg border border-stone-200 bg-stone-50 p-4">
+              <div>
+                <h3 className="font-black">Debug Logs</h3>
+                <p className="mt-1 text-sm text-stone-600">Recent auth, session, sync, database, and UI events for troubleshooting.</p>
+              </div>
+              <div className="grid gap-2">
+                {debugLogs.length ? (
+                  debugLogs.slice(0, 50).map((log) => (
+                    <div key={log.id} className={`rounded-lg border bg-white p-3 ${log.level === "error" ? "border-red-200" : log.level === "warning" ? "border-amber-200" : "border-stone-200"}`}>
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <p className="font-black">{log.message}</p>
+                          <p className="mt-1 text-xs font-bold uppercase tracking-normal text-stone-500">{log.type} / {log.level}</p>
+                        </div>
+                        <span className="text-xs font-bold text-stone-500">{new Date(log.createdAt).toLocaleString()}</span>
+                      </div>
+                      <p className="mt-2 text-sm text-stone-600">{log.userName || log.userId || "Unknown user"}{log.deviceName ? ` / ${log.deviceName}` : ""}</p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="rounded-lg border border-dashed border-stone-300 bg-white p-4 text-sm text-stone-500">No debug logs yet.</p>
+                )}
               </div>
             </section>
           ) : null}

@@ -104,6 +104,19 @@ export type UserSessionRecord = {
   endedAt?: string;
 };
 
+export type DebugLogEntry = {
+  id: string;
+  type: "auth" | "session" | "sync" | "database" | "ui";
+  level: "info" | "warning" | "error";
+  message: string;
+  userId?: string;
+  userName?: string;
+  deviceId?: string;
+  deviceName?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+};
+
 export type ServiceTitanSettings = {
   baseUrl: string;
   tenantId: string;
