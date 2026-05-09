@@ -5,6 +5,7 @@ Next.js, React, TypeScript, and Tailwind CSS app for building quick equipment, l
 ## Features
 
 - Quote flow for picking items, customizing cart lines, reviewing, and finalizing
+- Admin console at `/admin` for admin users to oversee QQB and future managed apps
 - Editable item catalog with unit price, ADI MSRP, vendor, category, and inventory fields
 - Item catalog lives in `public/data/item-database.csv` so UI rewrites can leave item data alone
 - Template database starts empty, so templates can be built from the live item database
