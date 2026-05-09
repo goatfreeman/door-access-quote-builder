@@ -230,6 +230,35 @@ function writeStorage<T>(key: string, value: T) {
   if (typeof window !== "undefined") window.localStorage.setItem(key, JSON.stringify(value));
 }
 
+async function readServerSessions(fallback: UserSessionRecord[]) {
+  try {
+    const response = await fetch("/api/v1/sessions", { cache: "no-store" });
+    if (!response.ok) return fallback;
+    const payload = (await response.json()) as { data?: UserSessionRecord[] };
+    return Array.isArray(payload.data) ? payload.data : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+async function upsertServerSession(session: UserSessionRecord) {
+  const patchResponse = await fetch(`/api/v1/sessions/${encodeURIComponent(session.id)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(session),
+  }).catch(() => null);
+
+  if (patchResponse?.ok) return true;
+  if (patchResponse && patchResponse.status !== 404) return false;
+
+  const postResponse = await fetch("/api/v1/sessions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(session),
+  }).catch(() => null);
+  return Boolean(postResponse?.ok);
+}
+
 function daysUntilRecoveryPurge(deletedAt?: string) {
   if (!deletedAt) return recoveryRetentionDays;
   const deletedTime = new Date(deletedAt).getTime();
@@ -362,6 +391,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   const cartRef = useRef<HTMLDetailsElement>(null);
   const notificationRef = useRef<HTMLDivElement>(null);
   const settingsHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sessionsRef = useRef<UserSessionRecord[]>([]);
   const activeItems = useMemo(() => items.filter((item) => !item.deletedAt), [items]);
   const activeQuotes = useMemo(() => quotes.filter((quote) => !quote.deletedAt), [quotes]);
   const userDraftQuotes = useMemo(() => draftQuotes.filter((draft) => draft.owner === sessionUser.id || draft.owner === sessionUser.name), [draftQuotes, sessionUser.id, sessionUser.name]);
@@ -576,11 +606,17 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   }, [draftQuotes, hydrated]);
 
   useEffect(() => {
+    sessionsRef.current = sessions;
+  }, [sessions]);
+
+  useEffect(() => {
     if (!hydrated) return;
-    const now = new Date().toISOString();
     const sessionId = `${sessionUser.id}-${deviceId}`;
-    setSessions((current) => {
-      const existing = current.find((session) => session.id === sessionId);
+    let cancelled = false;
+
+    const heartbeat = async () => {
+      const now = new Date().toISOString();
+      const existing = sessionsRef.current.find((session) => session.id === sessionId);
       const nextSession: UserSessionRecord = {
         id: sessionId,
         userId: sessionUser.id,
@@ -590,14 +626,27 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
         createdAt: existing?.createdAt ?? now,
         lastSeenAt: now,
       };
-      return [nextSession, ...current.filter((session) => session.id !== sessionId)];
-    });
+
+      setSessions((current) => [nextSession, ...current.filter((session) => session.id !== sessionId)]);
+
+      if (typeof navigator !== "undefined" && !navigator.onLine) return;
+      const saved = await upsertServerSession(nextSession);
+      if (!saved || cancelled) return;
+      const serverSessions = await readServerSessions([nextSession]);
+      if (!cancelled) setSessions(serverSessions);
+    };
+
+    void heartbeat();
+    const interval = window.setInterval(() => void heartbeat(), 60 * 1000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
   }, [deviceId, deviceName, hydrated, sessionUser.id, sessionUser.name]);
 
   useEffect(() => {
     if (hydrated) {
       writeStorage(STORAGE_KEYS.sessions, sessions);
-      void writeDb("sessions", sessions).then(() => setPendingOfflineWrites(getPendingWriteCount()));
     }
   }, [hydrated, sessions]);
 
@@ -909,8 +958,20 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
 
   const signOut = async () => {
     const endedAt = new Date().toISOString();
-    setSessions((current) => current.map((session) => (session.id === `${sessionUser.id}-${deviceId}` ? { ...session, endedAt, lastSeenAt: endedAt } : session)));
-    await writeDb("sessions", sessions.map((session) => (session.id === `${sessionUser.id}-${deviceId}` ? { ...session, endedAt, lastSeenAt: endedAt } : session))).catch(() => undefined);
+    const sessionId = `${sessionUser.id}-${deviceId}`;
+    const existing = sessionsRef.current.find((session) => session.id === sessionId);
+    const endedSession: UserSessionRecord = {
+      id: sessionId,
+      userId: sessionUser.id,
+      userName: sessionUser.name,
+      deviceId,
+      deviceName,
+      createdAt: existing?.createdAt ?? endedAt,
+      lastSeenAt: endedAt,
+      endedAt,
+    };
+    setSessions((current) => [endedSession, ...current.filter((session) => session.id !== sessionId)]);
+    await upsertServerSession(endedSession).catch(() => undefined);
     await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
     window.location.href = "/login";
   };
