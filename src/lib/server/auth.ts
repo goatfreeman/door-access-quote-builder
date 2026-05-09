@@ -1,117 +1,21 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
-import { cookies } from "next/headers";
 import type { SessionUser } from "@/lib/auth-types";
+import { auth } from "@/auth";
+import { getLoginMethod, isAzureSsoEmail, tempUsers } from "@/lib/server/auth-config";
 
-const sessionCookieName = "qqb_session";
-const azureStateCookieName = "qqb_azure_state";
-
-export const tempUsers = [
-  {
-    id: "temp-admin",
-    name: "Admin User",
-    email: "qqb.admin@example.com",
-    password: "QuoteAdmin2026!",
-    provider: "password" as const,
-    role: "admin" as const,
-  },
-  {
-    id: "temp-tech",
-    name: "Tech User",
-    email: "qqb.tech@example.com",
-    password: "QuoteTech2026!",
-    provider: "password" as const,
-    role: "user" as const,
-  },
-];
-
-function splitEnvList(value?: string) {
-  return (value ?? "")
-    .split(",")
-    .map((item) => item.trim().toLowerCase())
-    .filter(Boolean);
-}
-
-export function isAzureSsoEmail(email: string) {
-  const normalizedEmail = email.trim().toLowerCase();
-  const domain = normalizedEmail.split("@")[1] ?? "";
-  const ssoEmails = splitEnvList(process.env.AZURE_SSO_EMAILS);
-  const ssoDomains = splitEnvList(process.env.AZURE_SSO_DOMAINS);
-  return ssoEmails.includes(normalizedEmail) || Boolean(domain && ssoDomains.includes(domain));
-}
-
-export function getLoginMethod(email: string): "password" | "azure" {
-  const normalizedEmail = email.trim().toLowerCase();
-  if (tempUsers.some((user) => user.email.toLowerCase() === normalizedEmail)) return "password";
-  return isAzureSsoEmail(normalizedEmail) ? "azure" : "password";
-}
-
-function authSecret() {
-  return process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || "qqb-dev-only-auth-secret";
-}
-
-function encodeBase64Url(value: string) {
-  return Buffer.from(value, "utf8").toString("base64url");
-}
-
-function decodeBase64Url(value: string) {
-  return Buffer.from(value, "base64url").toString("utf8");
-}
-
-function signPayload(payload: string) {
-  return createHmac("sha256", authSecret()).update(payload).digest("base64url");
-}
-
-export function createSessionToken(user: SessionUser) {
-  const payload = encodeBase64Url(JSON.stringify({ user, issuedAt: Date.now() }));
-  return `${payload}.${signPayload(payload)}`;
-}
-
-export function readSessionToken(token?: string): SessionUser | null {
-  if (!token) return null;
-  const [payload, signature] = token.split(".");
-  if (!payload || !signature) return null;
-  const expected = signPayload(payload);
-  const signatureBuffer = Buffer.from(signature);
-  const expectedBuffer = Buffer.from(expected);
-  if (signatureBuffer.length !== expectedBuffer.length || !timingSafeEqual(signatureBuffer, expectedBuffer)) return null;
-
-  try {
-    const parsed = JSON.parse(decodeBase64Url(payload)) as { user?: SessionUser };
-    return parsed.user?.id && parsed.user.name ? parsed.user : null;
-  } catch {
-    return null;
-  }
-}
-
-export async function getSessionUser() {
-  const cookieStore = await cookies();
-  return readSessionToken(cookieStore.get(sessionCookieName)?.value);
+export async function getSessionUser(): Promise<SessionUser | null> {
+  const session = await auth();
+  if (!session?.user?.id || !session.user.name) return null;
+  return {
+    id: session.user.id,
+    name: session.user.name,
+    email: session.user.email ?? undefined,
+    provider: session.user.provider,
+    role: session.user.role,
+  };
 }
 
 export async function requireSessionUser() {
-  const user = await getSessionUser();
-  if (!user) return null;
-  return user;
+  return getSessionUser();
 }
 
-export function sessionCookieOptions() {
-  return {
-    httpOnly: true,
-    sameSite: "lax" as const,
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 60 * 60 * 12,
-  };
-}
-
-export function clearSessionCookieOptions() {
-  return {
-    httpOnly: true,
-    sameSite: "lax" as const,
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 0,
-  };
-}
-
-export { azureStateCookieName, sessionCookieName };
+export { getLoginMethod, isAzureSsoEmail, tempUsers };

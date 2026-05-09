@@ -34,9 +34,20 @@ Import the GitHub repository into Vercel. Vercel will auto-detect Next.js and ru
 Add these environment variables in Vercel for persistent MongoDB storage:
 
 ```text
+AUTH_SECRET=generate-a-long-random-secret
 MONGODB_URI=mongodb+srv://...
 MONGODB_DB=quick_quote_builder
 NEXT_PUBLIC_APP_STAGE=development
+```
+
+For Microsoft Entra ID SSO with Auth.js, also add:
+
+```text
+AUTH_MICROSOFT_ENTRA_ID_ID=<Application client ID>
+AUTH_MICROSOFT_ENTRA_ID_SECRET=<Client secret value>
+AUTH_MICROSOFT_ENTRA_ID_ISSUER=https://login.microsoftonline.com/<Directory tenant ID>/v2.0/
+AZURE_SSO_EMAILS=user@example.com
+AZURE_SSO_DOMAINS=example.com
 ```
 
 Without `MONGODB_URI`, the app uses a temporary in-memory fallback for setup only. Production persistence needs MongoDB.

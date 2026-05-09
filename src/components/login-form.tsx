@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Lock, Mail } from "lucide-react";
+import { signIn } from "next-auth/react";
 
 const demoUsers = [
   { label: "Admin User", email: "qqb.admin@example.com", password: "QuoteAdmin2026!" },
@@ -32,7 +33,7 @@ export function LoginForm({ error }: { error?: string }) {
     }
 
     if (body?.method === "azure") {
-      window.location.href = `/api/auth/azure/start?email=${encodeURIComponent(email)}`;
+      await signIn("microsoft-entra-id", { callbackUrl: "/" }, { login_hint: email });
       return;
     }
 
@@ -42,15 +43,14 @@ export function LoginForm({ error }: { error?: string }) {
   const submitPassword = async () => {
     setLoading(true);
     setMessage("");
-    const response = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
+    const result = await signIn("credentials", {
+      email,
+      password,
+      redirect: false,
     });
-    const body = (await response.json().catch(() => null)) as { error?: string } | null;
     setLoading(false);
-    if (!response.ok) {
-      setMessage(body?.error ?? "Sign in failed.");
+    if (result?.error) {
+      setMessage("Invalid email or password.");
       return;
     }
     window.location.href = "/";

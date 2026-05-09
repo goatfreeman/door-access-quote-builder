@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import type { Dispatch, SetStateAction } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { signOut as authSignOut } from "next-auth/react";
 import { getPendingWriteCount, readDb, syncPendingWrites, writeDb } from "@/lib/client-db";
 import type { SessionUser } from "@/lib/auth-types";
 import type { CatalogItem, DraftQuote, QuoteLine, QuoteMeta, QuoteTemplate, SavedQuote, ServiceTitanSettings, UserSessionRecord } from "@/lib/types";
@@ -972,8 +973,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
     };
     setSessions((current) => [endedSession, ...current.filter((session) => session.id !== sessionId)]);
     await upsertServerSession(endedSession).catch(() => undefined);
-    await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
-    window.location.href = "/login";
+    await authSignOut({ callbackUrl: "/login" });
   };
 
   return (
