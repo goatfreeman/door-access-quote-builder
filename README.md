@@ -56,6 +56,43 @@ Current editable data is stored through the app API routes backed by MongoDB:
 /api/db/settings
 ```
 
+REST-style API routes are also available for future web, iOS, and Android clients:
+
+```text
+GET    /api/v1/items
+POST   /api/v1/items
+GET    /api/v1/items/:id
+PATCH  /api/v1/items/:id
+DELETE /api/v1/items/:id
+
+GET    /api/v1/templates
+POST   /api/v1/templates
+GET    /api/v1/templates/:id
+PATCH  /api/v1/templates/:id
+DELETE /api/v1/templates/:id
+
+GET    /api/v1/quotes
+POST   /api/v1/quotes
+GET    /api/v1/quotes/:id
+PATCH  /api/v1/quotes/:id
+DELETE /api/v1/quotes/:id
+GET    /api/v1/quotes/:id/revisions
+
+GET    /api/v1/drafts
+POST   /api/v1/drafts
+GET    /api/v1/drafts/:id
+PATCH  /api/v1/drafts/:id
+DELETE /api/v1/drafts/:id
+
+GET    /api/v1/sessions
+POST   /api/v1/sessions
+GET    /api/v1/sessions/:id
+PATCH  /api/v1/sessions/:id
+DELETE /api/v1/sessions/:id
+```
+
+These endpoints use the same login session as the web app. Items and quotes are soft-deleted; templates, drafts, and sessions are removed from their collections.
+
 The item catalog starts from `public/data/item-database.csv` only when the MongoDB `items` collection is empty. After that, MongoDB is the database. Deleting an item also removes that item from templates and the active quote.
 
 The MongoDB structure is:

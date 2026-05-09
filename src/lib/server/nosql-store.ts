@@ -4,17 +4,17 @@ import { attachDatabasePool } from "@vercel/functions";
 import { MongoClient } from "mongodb";
 import { parseCatalogItemsCsv } from "@/lib/item-csv";
 
-type Collection = "items" | "templates" | "quotes" | "settings" | "drafts" | "sessions";
+export type StoreCollection = "items" | "templates" | "quotes" | "settings" | "drafts" | "sessions";
 type StoreDocument = {
-  _id: Collection;
+  _id: StoreCollection;
   value?: unknown;
   updatedAt?: Date;
 };
 
-const collections = new Set<Collection>(["items", "templates", "quotes", "settings", "drafts", "sessions"]);
+const collections = new Set<StoreCollection>(["items", "templates", "quotes", "settings", "drafts", "sessions"]);
 const databaseName = process.env.MONGODB_DB ?? "quick_quote_builder";
 const memoryStore = globalThis as typeof globalThis & {
-  quickQuoteMemoryStore?: Partial<Record<Collection, unknown>>;
+  quickQuoteMemoryStore?: Partial<Record<StoreCollection, unknown>>;
   quickQuoteMongoClient?: Promise<MongoClient>;
 };
 
@@ -23,8 +23,8 @@ function getMemoryStore() {
   return memoryStore.quickQuoteMemoryStore;
 }
 
-export function isCollection(value: string): value is Collection {
-  return collections.has(value as Collection);
+export function isCollection(value: string): value is StoreCollection {
+  return collections.has(value as StoreCollection);
 }
 
 export function getStoreStatus() {
@@ -35,7 +35,7 @@ export function getStoreStatus() {
   };
 }
 
-export async function readCollection(collection: Collection) {
+export async function readCollection(collection: StoreCollection) {
   const stored = await readStoredValue(collection);
   if (stored !== null) return stored;
   if (collection === "items") return readSeedItems();
@@ -44,7 +44,7 @@ export async function readCollection(collection: Collection) {
   return [];
 }
 
-export async function writeCollection(collection: Collection, value: unknown) {
+export async function writeCollection(collection: StoreCollection, value: unknown) {
   const database = await getMongoDatabase();
 
   if (!database) {
@@ -55,7 +55,7 @@ export async function writeCollection(collection: Collection, value: unknown) {
   await database.collection<StoreDocument>(collection).updateOne({ _id: collection }, { $set: { value, updatedAt: new Date() } }, { upsert: true });
 }
 
-async function readStoredValue(collection: Collection) {
+async function readStoredValue(collection: StoreCollection) {
   const database = await getMongoDatabase();
 
   if (!database) {
