@@ -910,14 +910,11 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
                 </div>
               ) : null}
             </div>
-            <button className="icon-button" onClick={signOut} aria-label="Sign out">
-              <LogOut size={18} />
-            </button>
           </div> : null}
         </div>
       </header>
 
-      {menuOpen && !isClientView ? <MobileMenu nav={nav} view={view} setView={navigateToView} goToQuote={goToQuote} close={() => setMenuOpen(false)} onSettingsHoldStart={startSettingsHold} onSettingsHoldEnd={cancelSettingsHold} /> : null}
+      {menuOpen && !isClientView ? <MobileMenu nav={nav} view={view} setView={navigateToView} goToQuote={goToQuote} close={() => setMenuOpen(false)} onSignOut={signOut} onSettingsHoldStart={startSettingsHold} onSettingsHoldEnd={cancelSettingsHold} /> : null}
 
       <section className={`mx-auto grid max-w-7xl gap-4 px-4 py-4 ${view === "quote" && quoteStep !== "finalize" ? "lg:grid-cols-[320px_minmax(0,1fr)]" : ""}`}>
         {view === "home" ? <HomePage user={sessionUser} meta={meta} lines={activeLines} total={totals.total} drafts={userDraftQuotes} onContinue={goToQuote} onLoadDraft={loadDraftQuote} /> : null}
@@ -973,7 +970,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
           />
         ) : null}
         {view === "client" ? <ClientQuoteView quote={selectedQuote} onPrintQuote={printSavedQuote} /> : null}
-        {view === "settings" ? <SettingsPage settings={settings} setSettings={setSettings} onSync={syncServiceTitan} items={items} setItems={setItems} quotes={quotes} setQuotes={setQuotes} adminUnlocked={adminUnlocked} user={sessionUser} /> : null}
+        {view === "settings" ? <SettingsPage settings={settings} setSettings={setSettings} onSync={syncServiceTitan} items={items} setItems={setItems} quotes={quotes} setQuotes={setQuotes} adminUnlocked={adminUnlocked} user={sessionUser} onSignOut={signOut} /> : null}
       </section>
 
       {startFreshPromptOpen ? (
@@ -2884,6 +2881,7 @@ function SettingsPage({
   setQuotes,
   adminUnlocked,
   user,
+  onSignOut,
 }: {
   settings: ServiceTitanSettings;
   setSettings: Dispatch<SetStateAction<ServiceTitanSettings>>;
@@ -2894,6 +2892,7 @@ function SettingsPage({
   setQuotes: Dispatch<SetStateAction<SavedQuote[]>>;
   adminUnlocked: boolean;
   user: SessionUser;
+  onSignOut: () => void;
 }) {
   const [activeSection, setActiveSection] = useState<SettingsSection>("account");
   const [databaseStatus, setDatabaseStatus] = useState<DatabaseStatus | null>(null);
@@ -2998,9 +2997,13 @@ function SettingsPage({
                 </label>
                 <label className="field">
                   <span>Login provider</span>
-                  <input className="input" value="Microsoft Azure SSO placeholder" readOnly />
+                  <input className="input" value={user.provider === "azure" ? "Microsoft Azure SSO" : "Temporary password login"} readOnly />
                 </label>
               </div>
+              <button className="button-secondary mt-4" onClick={onSignOut}>
+                <LogOut size={16} />
+                Sign out
+              </button>
             </section>
           ) : null}
           {activeSection === "database" ? (
@@ -3212,6 +3215,7 @@ function MobileMenu({
   setView,
   goToQuote,
   close,
+  onSignOut,
   onSettingsHoldStart,
   onSettingsHoldEnd,
 }: {
@@ -3220,6 +3224,7 @@ function MobileMenu({
   setView: (view: View) => void;
   goToQuote: () => void;
   close: () => void;
+  onSignOut: () => void;
   onSettingsHoldStart: () => void;
   onSettingsHoldEnd: () => void;
 }) {
@@ -3258,6 +3263,16 @@ function MobileMenu({
               {item.label}
             </button>
           ))}
+          <button
+            className="nav-button justify-start text-red-800"
+            onClick={() => {
+              close();
+              onSignOut();
+            }}
+          >
+            <LogOut size={17} />
+            Sign out
+          </button>
         </div>
       </div>
     </div>
