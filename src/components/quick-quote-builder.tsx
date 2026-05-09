@@ -67,6 +67,7 @@ type ExportQuoteFormat = "print" | "pdf" | "excel" | "install";
 type RecoverySort = "recent" | "name";
 type PermanentDeleteTarget = { kind: "item"; id: string; label: string } | { kind: "quote"; id: string; label: string };
 type NotificationBlock = { id: string; title: string; message: string; createdAt: string };
+type QuoteHistoryChange = { kind: "added" | "removed" | "changed" | "same"; text: string };
 type QuoteHistoryEntry = {
   id: string;
   label: string;
@@ -75,7 +76,7 @@ type QuoteHistoryEntry = {
   meta: QuoteMeta;
   lines: QuoteLine[];
   total: number;
-  changes: string[];
+  changes: QuoteHistoryChange[];
 };
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
@@ -1933,29 +1934,29 @@ function exportQuote(quote: SavedQuote, format: ExportQuoteFormat) {
   URL.revokeObjectURL(url);
 }
 
-function describeQuoteChanges(previous: { meta: QuoteMeta; lines: QuoteLine[]; total: number } | null, next: { meta: QuoteMeta; lines: QuoteLine[]; total: number }) {
-  if (!previous) return ["Original saved version."];
-  const changes: string[] = [];
-  if (previous.meta.customer !== next.meta.customer) changes.push(`Customer changed from ${previous.meta.customer || "blank"} to ${next.meta.customer || "blank"}.`);
-  if (previous.meta.project !== next.meta.project) changes.push(`Project changed from ${previous.meta.project || "blank"} to ${next.meta.project || "blank"}.`);
-  if ((previous.meta.location ?? "") !== (next.meta.location ?? "")) changes.push("Location changed.");
-  if ((previous.meta.notes ?? "") !== (next.meta.notes ?? "")) changes.push("Quote notes changed.");
-  if (previous.lines.length !== next.lines.length) changes.push(`Line count changed from ${previous.lines.length} to ${next.lines.length}.`);
+function describeQuoteChanges(previous: { meta: QuoteMeta; lines: QuoteLine[]; total: number } | null, next: { meta: QuoteMeta; lines: QuoteLine[]; total: number }): QuoteHistoryChange[] {
+  if (!previous) return [{ kind: "same", text: "Original saved version." }];
+  const changes: QuoteHistoryChange[] = [];
+  if (previous.meta.customer !== next.meta.customer) changes.push({ kind: "changed", text: `Customer changed from ${previous.meta.customer || "blank"} to ${next.meta.customer || "blank"}.` });
+  if (previous.meta.project !== next.meta.project) changes.push({ kind: "changed", text: `Project changed from ${previous.meta.project || "blank"} to ${next.meta.project || "blank"}.` });
+  if ((previous.meta.location ?? "") !== (next.meta.location ?? "")) changes.push({ kind: "changed", text: "Location changed." });
+  if ((previous.meta.notes ?? "") !== (next.meta.notes ?? "")) changes.push({ kind: "changed", text: "Quote notes changed." });
+  if (previous.lines.length !== next.lines.length) changes.push({ kind: "changed", text: `Line count changed from ${previous.lines.length} to ${next.lines.length}.` });
   next.lines.forEach((line) => {
     const oldLine = previous.lines.find((candidate) => candidate.lineId === line.lineId || candidate.itemId === line.itemId);
     if (!oldLine) {
-      changes.push(`Added ${line.name} qty ${line.quantity}.`);
+      changes.push({ kind: "added", text: `Added ${line.name} qty ${line.quantity}.` });
       return;
     }
-    if (oldLine.quantity !== line.quantity) changes.push(`${line.name} quantity changed from ${oldLine.quantity} to ${line.quantity}.`);
-    if (oldLine.unitPrice !== line.unitPrice) changes.push(`${line.name} unit price changed from ${money.format(oldLine.unitPrice)} to ${money.format(line.unitPrice)}.`);
-    if ((oldLine.packageName ?? "") !== (line.packageName ?? "")) changes.push(`${line.name} setup nickname changed.`);
+    if (oldLine.quantity !== line.quantity) changes.push({ kind: "changed", text: `${line.name} quantity changed from ${oldLine.quantity} to ${line.quantity}.` });
+    if (oldLine.unitPrice !== line.unitPrice) changes.push({ kind: "changed", text: `${line.name} unit price changed from ${money.format(oldLine.unitPrice)} to ${money.format(line.unitPrice)}.` });
+    if ((oldLine.packageName ?? "") !== (line.packageName ?? "")) changes.push({ kind: "changed", text: `${line.name} setup nickname changed.` });
   });
   previous.lines.forEach((line) => {
-    if (!next.lines.some((candidate) => candidate.lineId === line.lineId || candidate.itemId === line.itemId)) changes.push(`Removed ${line.name}.`);
+    if (!next.lines.some((candidate) => candidate.lineId === line.lineId || candidate.itemId === line.itemId)) changes.push({ kind: "removed", text: `Removed ${line.name}.` });
   });
-  if (previous.total !== next.total) changes.push(`Total changed from ${money.format(previous.total)} to ${money.format(next.total)}.`);
-  return changes.length ? changes : ["No line, customer, project, note, or total changes detected."];
+  if (previous.total !== next.total) changes.push({ kind: "changed", text: `Total changed from ${money.format(previous.total)} to ${money.format(next.total)}.` });
+  return changes.length ? changes : [{ kind: "same", text: "No line, customer, project, note, or total changes detected." }];
 }
 
 function buildQuoteHistory(quote: SavedQuote): QuoteHistoryEntry[] {
@@ -2855,11 +2856,27 @@ function PreviousQuotes({
     if (selectedQuote?.id === deleteQuote.id) onClearQuote();
     setDeleteQuote(null);
   };
+  const openHistory = (quote: SavedQuote) => {
+    onSelectQuote(quote);
+    setHistoryIndex(Math.max(buildQuoteHistory(quote).length - 1, 0));
+    setHistoryOpen(true);
+  };
+  const changeClassName = (kind: QuoteHistoryChange["kind"]) => {
+    if (kind === "added") return "border-emerald-200 bg-emerald-50 text-emerald-950";
+    if (kind === "removed") return "border-red-200 bg-red-50 text-red-950";
+    if (kind === "changed") return "border-amber-200 bg-amber-50 text-amber-950";
+    return "border-stone-200 bg-stone-50 text-stone-700";
+  };
+  const changePrefix = (kind: QuoteHistoryChange["kind"]) => {
+    if (kind === "added") return "+";
+    if (kind === "removed") return "-";
+    if (kind === "changed") return "~";
+    return "";
+  };
 
   useEffect(() => {
-    setHistoryOpen(false);
-    setHistoryIndex(0);
-  }, [selectedQuote?.id]);
+    if (!historyOpen) setHistoryIndex(0);
+  }, [historyOpen, selectedQuote?.id]);
 
   return (
     <section className="grid gap-4 lg:col-span-2 lg:grid-cols-[360px_minmax(0,1fr)]">
@@ -2874,13 +2891,18 @@ function PreviousQuotes({
           <input className="input" value={quoteSearch} onChange={(event) => setQuoteSearch(event.target.value)} placeholder="Search customer, project, location, quote, or item" />
           {visibleQuotes.length ? (
             visibleQuotes.map((quote) => (
-              <button key={quote.id} className={`rounded-lg border p-3 text-left ${selectedQuote?.id === quote.id ? "border-teal-700 bg-teal-50" : "border-stone-200 bg-white"}`} onClick={() => onSelectQuote(quote)}>
-                <p className="font-black">{quote.meta.customer || "Unnamed customer"}</p>
+              <div key={quote.id} className={`grid grid-cols-[minmax(0,1fr)_auto] gap-2 rounded-lg border p-3 ${selectedQuote?.id === quote.id ? "border-teal-700 bg-teal-50" : "border-stone-200 bg-white"}`}>
+                <button className="min-w-0 text-left" onClick={() => onSelectQuote(quote)}>
+                  <p className="truncate font-black">{quote.meta.customer || "Unnamed customer"}</p>
                 <p className="text-sm text-stone-600">{new Date(quote.createdAt).toLocaleDateString()} · {quote.meta.quoteNumber}</p>
-                {quote.meta.project ? <p className="text-sm font-bold text-stone-700">{quote.meta.project}</p> : null}
-                {quote.meta.location ? <p className="text-sm text-stone-600">{quote.meta.location}</p> : null}
-                <p className="mt-2 font-black">{money.format(quote.total)}</p>
-              </button>
+                  {quote.meta.project ? <p className="truncate text-sm font-bold text-stone-700">{quote.meta.project}</p> : null}
+                  {quote.meta.location ? <p className="truncate text-sm text-stone-600">{quote.meta.location}</p> : null}
+                  <p className="mt-2 font-black">{money.format(quote.total)}</p>
+                </button>
+                <button className="icon-button self-start" onClick={() => openHistory(quote)} aria-label={`Open revision history for ${quote.meta.quoteNumber || quote.meta.customer || "quote"}`}>
+                  <History size={17} />
+                </button>
+              </div>
             ))
           ) : (
             <p className="rounded-lg border border-dashed border-stone-300 p-6 text-center text-stone-500">{quotes.length ? "No quotes match that search." : "No saved quotes yet."}</p>
@@ -2928,16 +2950,6 @@ function PreviousQuotes({
                   <button className="button-secondary" onClick={() => onClientView(selectedQuote)}>
                     Client View
                   </button>
-                  <button
-                    className="button-secondary"
-                    onClick={() => {
-                      setHistoryIndex(Math.max(buildQuoteHistory(selectedQuote).length - 1, 0));
-                      setHistoryOpen((open) => !open);
-                    }}
-                  >
-                    <History size={16} />
-                    Time wheel
-                  </button>
                   <div className="relative">
                     <button className="button-secondary" onClick={() => setPrintMenuOpen((open) => !open)}>
                       <Printer size={16} />
@@ -2972,60 +2984,70 @@ function PreviousQuotes({
                   </div>
                 </div>
               </div>
-              {historyOpen && selectedHistory ? (
-                <div className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="font-black">Quote time wheel</p>
-                      <p className="text-sm text-stone-600">See each saved version, who edited it, and what changed.</p>
-                    </div>
-                    <span className="rounded-full bg-white px-2 py-1 text-xs font-black text-stone-600">{historyEntries.length} version{historyEntries.length === 1 ? "" : "s"}</span>
-                  </div>
-                  <div className="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
-                    <div className="grid content-start gap-2">
-                      {historyEntries.map((entry, index) => (
-                        <button key={entry.id} className={`rounded-lg border p-3 text-left ${historyIndex === index ? "border-teal-700 bg-white text-teal-950" : "border-stone-200 bg-white/70 hover:bg-white"}`} onClick={() => setHistoryIndex(index)}>
-                          <p className="font-black">{entry.label}</p>
-                          <p className="text-xs text-stone-600">{new Date(entry.savedAt).toLocaleString()}</p>
-                          <p className="mt-1 text-xs font-bold text-stone-700">By {entry.editedByName}</p>
-                        </button>
-                      ))}
-                    </div>
-                    <div className="grid gap-3 rounded-lg border border-stone-200 bg-white p-3">
-                      <div className="grid gap-2 md:grid-cols-3">
-                        <InfoTile label="Customer" value={selectedHistory.meta.customer || "Blank"} />
-                        <InfoTile label="Project" value={selectedHistory.meta.project || "Blank"} />
-                        <InfoTile label="Total" value={money.format(selectedHistory.total)} />
-                      </div>
-                      <div>
-                        <p className="font-black">Changes</p>
-                        <ul className="mt-2 grid gap-1 text-sm text-stone-600">
-                          {selectedHistory.changes.map((change, index) => (
-                            <li key={`${change}-${index}`} className="rounded-md bg-stone-50 px-3 py-2">{change}</li>
-                          ))}
-                        </ul>
-                      </div>
-                      <div>
-                        <p className="font-black">Items in this version</p>
-                        <div className="mt-2 grid gap-2">
-                          {selectedHistory.lines.map((line) => (
-                            <div key={line.lineId} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-md bg-stone-50 p-2 text-sm">
-                              <span className="truncate font-bold">{line.packageName ? `${line.packageName} / ${line.name}` : line.name}</span>
-                              <span className="font-black">Qty {line.quantity}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
             </div>
           ) : (
             <p className="rounded-lg border border-dashed border-stone-300 p-10 text-center text-stone-500">Select a previous quote to view the cart summary.</p>
           )}
         </div>
       </div>
+      {historyOpen && selectedQuote && selectedHistory ? (
+        <div className="fixed inset-0 z-50 bg-black/45 p-3 sm:p-5" onClick={() => setHistoryOpen(false)}>
+          <div className="mx-auto grid h-full max-w-6xl grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-lg bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-stone-200 p-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <History size={20} />
+                  <h3 className="text-xl font-black">Quote time wheel</h3>
+                </div>
+                <p className="mt-1 text-sm text-stone-600">Quote {selectedQuote.meta.quoteNumber} - {historyEntries.length} version{historyEntries.length === 1 ? "" : "s"}</p>
+              </div>
+              <button className="icon-button" onClick={() => setHistoryOpen(false)} aria-label="Close revision history">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="grid min-h-0 gap-4 overflow-y-auto p-4 lg:grid-cols-[260px_minmax(0,1fr)]">
+              <div className="grid content-start gap-2">
+                {historyEntries.map((entry, index) => (
+                  <button key={entry.id} className={`rounded-lg border p-3 text-left ${historyIndex === index ? "border-teal-700 bg-teal-50 text-teal-950" : "border-stone-200 bg-white hover:bg-stone-50"}`} onClick={() => setHistoryIndex(index)}>
+                    <p className="font-black">{entry.label}</p>
+                    <p className="text-xs text-stone-600">{new Date(entry.savedAt).toLocaleString()}</p>
+                    <p className="mt-1 text-xs font-bold text-stone-700">By {entry.editedByName}</p>
+                  </button>
+                ))}
+              </div>
+              <div className="grid content-start gap-4">
+                <div className="grid gap-2 md:grid-cols-3">
+                  <InfoTile label="Customer" value={selectedHistory.meta.customer || "Blank"} />
+                  <InfoTile label="Project" value={selectedHistory.meta.project || "Blank"} />
+                  <InfoTile label="Total" value={money.format(selectedHistory.total)} />
+                </div>
+                <div className="rounded-lg border border-stone-200 bg-white p-4">
+                  <p className="font-black">Changes</p>
+                  <div className="mt-3 grid gap-2 text-sm">
+                    {selectedHistory.changes.map((change, index) => (
+                      <div key={`${change.text}-${index}`} className={`grid grid-cols-[24px_minmax(0,1fr)] gap-2 rounded-md border px-3 py-2 font-mono ${changeClassName(change.kind)}`}>
+                        <span className="font-black">{changePrefix(change.kind)}</span>
+                        <span>{change.text}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-stone-200 bg-white p-4">
+                  <p className="font-black">Items in this version</p>
+                  <div className="mt-3 grid gap-2">
+                    {selectedHistory.lines.map((line) => (
+                      <div key={line.lineId} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-md bg-stone-50 p-2 text-sm">
+                        <span className="truncate font-bold">{line.packageName ? `${line.packageName} / ${line.name}` : line.name}</span>
+                        <span className="font-black">Qty {line.quantity}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {deleteQuote ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onClick={() => setDeleteQuote(null)}>
           <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
