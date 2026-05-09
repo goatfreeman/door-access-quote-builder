@@ -6,6 +6,8 @@ function getBaseUrl(request: Request) {
 }
 
 export async function GET(request: Request) {
+  const requestUrl = new URL(request.url);
+  const email = requestUrl.searchParams.get("email")?.trim().toLowerCase();
   const tenantId = process.env.AZURE_TENANT_ID || process.env.AUTH_MICROSOFT_ENTRA_ID_TENANT_ID;
   const clientId = process.env.AZURE_CLIENT_ID || process.env.AUTH_MICROSOFT_ENTRA_ID_ID;
 
@@ -21,6 +23,7 @@ export async function GET(request: Request) {
   authorizeUrl.searchParams.set("response_mode", "query");
   authorizeUrl.searchParams.set("scope", "openid profile email");
   authorizeUrl.searchParams.set("state", state);
+  if (email) authorizeUrl.searchParams.set("login_hint", email);
 
   const response = Response.redirect(authorizeUrl);
   response.headers.append("Set-Cookie", `${azureStateCookieName}=${state}; Path=/; Max-Age=600; HttpOnly; SameSite=Lax${process.env.NODE_ENV === "production" ? "; Secure" : ""}`);

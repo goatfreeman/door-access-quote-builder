@@ -11,10 +11,35 @@ const demoUsers = [
 export function LoginForm({ error }: { error?: string }) {
   const [email, setEmail] = useState(demoUsers[0].email);
   const [password, setPassword] = useState(demoUsers[0].password);
+  const [mode, setMode] = useState<"email" | "password">("email");
   const [message, setMessage] = useState(error ?? "");
   const [loading, setLoading] = useState(false);
 
-  const submit = async () => {
+  const continueWithEmail = async () => {
+    setLoading(true);
+    setMessage("");
+    const response = await fetch("/api/auth/lookup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    const body = (await response.json().catch(() => null)) as { method?: "password" | "azure"; error?: string } | null;
+    setLoading(false);
+
+    if (!response.ok) {
+      setMessage(body?.error ?? "Enter a valid email address.");
+      return;
+    }
+
+    if (body?.method === "azure") {
+      window.location.href = `/api/auth/azure/start?email=${encodeURIComponent(email)}`;
+      return;
+    }
+
+    setMode("password");
+  };
+
+  const submitPassword = async () => {
     setLoading(true);
     setMessage("");
     const response = await fetch("/api/auth/login", {
@@ -37,7 +62,7 @@ export function LoginForm({ error }: { error?: string }) {
         <div>
           <div className="grid size-11 place-items-center rounded-lg bg-stone-900 text-xl font-black text-white">Q</div>
           <h1 className="mt-4 text-2xl font-black">Sign in to Quick Quote Builder</h1>
-          <p className="mt-2 text-sm text-stone-600">Use a temporary test account or Microsoft Azure SSO.</p>
+          <p className="mt-2 text-sm text-stone-600">Enter your email first. SSO users are sent to Microsoft; other users continue with a password.</p>
         </div>
 
         {message ? <p className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-900">{message}</p> : null}
@@ -47,22 +72,51 @@ export function LoginForm({ error }: { error?: string }) {
             <span>Email</span>
             <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2 rounded-md border border-stone-200 bg-white px-3">
               <Mail size={16} className="text-stone-500" />
-              <input className="min-h-11 min-w-0 bg-transparent text-sm font-bold outline-none" value={email} onChange={(event) => setEmail(event.target.value)} />
+              <input
+                className="min-h-11 min-w-0 bg-transparent text-sm font-bold outline-none"
+                value={email}
+                onChange={(event) => {
+                  setEmail(event.target.value);
+                  setMode("email");
+                  setMessage("");
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && mode === "email") void continueWithEmail();
+                }}
+              />
             </div>
           </label>
-          <label className="field">
-            <span>Password</span>
-            <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2 rounded-md border border-stone-200 bg-white px-3">
-              <Lock size={16} className="text-stone-500" />
-              <input className="min-h-11 min-w-0 bg-transparent text-sm font-bold outline-none" type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
+          {mode === "password" ? (
+            <label className="field">
+              <span>Password</span>
+              <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2 rounded-md border border-stone-200 bg-white px-3">
+                <Lock size={16} className="text-stone-500" />
+                <input
+                  className="min-h-11 min-w-0 bg-transparent text-sm font-bold outline-none"
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void submitPassword();
+                  }}
+                />
+              </div>
+            </label>
+          ) : null}
+          {mode === "email" ? (
+            <button className="button-primary" onClick={continueWithEmail} disabled={loading}>
+              {loading ? "Checking..." : "Continue"}
+            </button>
+          ) : (
+            <div className="grid gap-2">
+              <button className="button-primary" onClick={submitPassword} disabled={loading}>
+                {loading ? "Signing in..." : "Sign in"}
+              </button>
+              <button className="button-ghost justify-center" onClick={() => setMode("email")}>
+                Use a different email
+              </button>
             </div>
-          </label>
-          <button className="button-primary" onClick={submit} disabled={loading}>
-            {loading ? "Signing in..." : "Sign in"}
-          </button>
-          <a className="button-secondary justify-center" href="/api/auth/azure/start">
-            Sign in with Microsoft Azure
-          </a>
+          )}
         </div>
 
         <div className="mt-5 grid gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3">
@@ -74,6 +128,8 @@ export function LoginForm({ error }: { error?: string }) {
               onClick={() => {
                 setEmail(user.email);
                 setPassword(user.password);
+                setMode("password");
+                setMessage("");
               }}
             >
               <strong>{user.label}</strong>
