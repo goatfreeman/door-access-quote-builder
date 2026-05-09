@@ -645,14 +645,17 @@ export function QuickQuoteBuilder() {
   };
 
   const deleteItemEverywhere = (itemId: string) => {
-    const usedTemplate = templates.find((template) => template.lines.some((line) => line.itemId === itemId));
-    if (usedTemplate) {
-      pushNotification("Item delete blocked", `This item is still used in ${usedTemplate.name || "a template"}. Remove it from templates before deleting it.`);
-      return;
+    const usedTemplates = templates.filter((template) => template.lines.some((line) => line.itemId === itemId));
+    if (usedTemplates.length) {
+      const templateNames = usedTemplates.map((template) => template.name || "Unnamed template").join(", ");
+      const message = `This item is used by: ${templateNames}. Remove it from those templates before deleting it.`;
+      pushNotification("Item delete blocked", message);
+      return message;
     }
     const deletedAt = new Date().toISOString();
     setItems((current) => current.map((item) => (item.id === itemId ? { ...item, deletedAt } : item)));
     setLines((current) => current.filter((line) => line.itemId !== itemId));
+    return null;
   };
 
   const saveQuote = () => {
@@ -1800,7 +1803,7 @@ function ItemsPage({
 }: {
   items: CatalogItem[];
   setItems: Dispatch<SetStateAction<CatalogItem[]>>;
-  onDeleteItem: (itemId: string) => void;
+  onDeleteItem: (itemId: string) => string | null;
 }) {
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [sortMode, setSortMode] = useState<"category" | "name" | "price">("category");
@@ -1816,6 +1819,7 @@ function ItemsPage({
   });
   const [addItemOpen, setAddItemOpen] = useState(false);
   const [deleteItem, setDeleteItem] = useState<CatalogItem | null>(null);
+  const [deleteItemError, setDeleteItemError] = useState("");
   const [categoryEditor, setCategoryEditor] = useState<{ target: "draft" | "item"; itemId?: string } | null>(null);
   const [newCategoryName, setNewCategoryName] = useState("");
   const categories = useMemo(() => ["All", ...Array.from(new Set(items.map((item) => item.category).filter(Boolean))).sort((a, b) => a.localeCompare(b))], [items]);
@@ -1845,7 +1849,12 @@ function ItemsPage({
   }, [categoryFilter, itemCategoryOptions]);
   const updateItem = (id: string, patch: Partial<CatalogItem>) => setItems((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
   const confirmDeleteItem = (id: string) => {
-    onDeleteItem(id);
+    const error = onDeleteItem(id);
+    if (error) {
+      setDeleteItemError(error);
+      return;
+    }
+    setDeleteItemError("");
     setDeleteItem(null);
   };
   const openCategoryEditor = (target: "draft" | "item", itemId?: string) => {
@@ -1994,7 +2003,13 @@ function ItemsPage({
                 <textarea className="textarea" value={item.notes ?? ""} onChange={(event) => updateItem(item.id, { notes: event.target.value })} placeholder="Optional item notes" />
               </label>
               <div className="flex justify-end md:col-span-3">
-                <button className="button-ghost text-red-800 hover:bg-red-100" onClick={() => setDeleteItem(item)}>
+                <button
+                  className="button-ghost text-red-800 hover:bg-red-100"
+                  onClick={() => {
+                    setDeleteItem(item);
+                    setDeleteItemError("");
+                  }}
+                >
                   <Trash2 size={16} />
                   Delete item
                 </button>
@@ -2152,6 +2167,7 @@ function ItemsPage({
                 <X size={18} />
               </button>
             </div>
+            {deleteItemError ? <p className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-900">{deleteItemError}</p> : null}
             <div className="mt-5 flex justify-end gap-2">
               <button className="button-ghost" onClick={() => setDeleteItem(null)}>
                 Cancel
