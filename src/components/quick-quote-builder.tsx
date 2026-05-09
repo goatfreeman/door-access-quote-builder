@@ -216,6 +216,8 @@ const makeId = (prefix: string) => {
 };
 
 const makeShareToken = () => makeId("share");
+const currentDraftIdForUser = (userId: string) => `current-${userId}`;
+const legacyCurrentDraftIdPrefix = (userId: string) => `current-${userId}-`;
 
 function readStorage<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -399,7 +401,22 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   const sessionsRef = useRef<UserSessionRecord[]>([]);
   const activeItems = useMemo(() => items.filter((item) => !item.deletedAt), [items]);
   const activeQuotes = useMemo(() => quotes.filter((quote) => !quote.deletedAt), [quotes]);
-  const userDraftQuotes = useMemo(() => draftQuotes.filter((draft) => draft.owner === sessionUser.id || draft.owner === sessionUser.name), [draftQuotes, sessionUser.id, sessionUser.name]);
+  const userDraftQuotes = useMemo(() => {
+    const userDrafts = draftQuotes.filter((draft) => draft.owner === sessionUser.id || draft.owner === sessionUser.name);
+    const canonicalCurrentDraftId = currentDraftIdForUser(sessionUser.id);
+    const legacyPrefix = legacyCurrentDraftIdPrefix(sessionUser.id);
+    const liveDraft = userDrafts
+      .filter((draft) => draft.kind === "current")
+      .sort((a, b) => {
+        if (a.id === canonicalCurrentDraftId) return -1;
+        if (b.id === canonicalCurrentDraftId) return 1;
+        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      })[0];
+    return [
+      ...(liveDraft ? [liveDraft] : []),
+      ...userDrafts.filter((draft) => draft.kind !== "current" && !draft.id.startsWith(legacyPrefix)),
+    ];
+  }, [draftQuotes, sessionUser.id, sessionUser.name]);
   const userSessions = useMemo(() => sessions.filter((session) => session.userId === sessionUser.id && !session.endedAt && Date.now() - new Date(session.lastSeenAt).getTime() < 12 * 60 * 60 * 1000), [sessions, sessionUser.id]);
   const activeLines = useMemo(() => lines.filter((line) => !isLabor(line)), [lines]);
   const totals = useMemo(() => buildQuoteTotals(lines, meta), [lines, meta]);
@@ -494,8 +511,10 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   useEffect(() => {
     if (!hydrated || !draftHydrated || !serverDraftChecked) return;
     const now = new Date().toISOString();
+    const currentDraftId = currentDraftIdForUser(sessionUser.id);
+    const legacyPrefix = legacyCurrentDraftIdPrefix(sessionUser.id);
     const currentDraft: DraftQuote = {
-      id: `current-${sessionUser.id}-${deviceId}`,
+      id: currentDraftId,
       owner: sessionUser.id,
       ownerName: sessionUser.name,
       deviceId,
@@ -509,9 +528,12 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
       total: totals.total,
     };
     setDraftQuotes((current) => {
-      const existing = current.find((draft) => draft.id === currentDraft.id);
+      const existing = current.find((draft) => draft.id === currentDraftId || (draft.kind === "current" && draft.owner === sessionUser.id && draft.id.startsWith(legacyPrefix)));
       const nextDraft = existing ? { ...currentDraft, createdAt: existing.createdAt } : currentDraft;
-      return [nextDraft, ...current.filter((draft) => draft.id !== currentDraft.id)];
+      return [
+        nextDraft,
+        ...current.filter((draft) => !(draft.id === currentDraftId || (draft.kind === "current" && draft.owner === sessionUser.id && draft.id.startsWith(legacyPrefix)))),
+      ];
     });
   }, [activeLines, deviceId, deviceName, draftHydrated, hydrated, meta, quoteStep, serverDraftChecked, sessionUser.id, sessionUser.name, totals.total]);
 
