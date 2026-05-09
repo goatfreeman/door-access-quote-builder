@@ -4,14 +4,14 @@ import { attachDatabasePool } from "@vercel/functions";
 import { MongoClient } from "mongodb";
 import { parseCatalogItemsCsv } from "@/lib/item-csv";
 
-type Collection = "items" | "templates" | "quotes" | "settings" | "drafts";
+type Collection = "items" | "templates" | "quotes" | "settings" | "drafts" | "sessions";
 type StoreDocument = {
   _id: Collection;
   value?: unknown;
   updatedAt?: Date;
 };
 
-const collections = new Set<Collection>(["items", "templates", "quotes", "settings", "drafts"]);
+const collections = new Set<Collection>(["items", "templates", "quotes", "settings", "drafts", "sessions"]);
 const databaseName = process.env.MONGODB_DB ?? "quick_quote_builder";
 const memoryStore = globalThis as typeof globalThis & {
   quickQuoteMemoryStore?: Partial<Record<Collection, unknown>>;
@@ -40,7 +40,7 @@ export async function readCollection(collection: Collection) {
   if (stored !== null) return stored;
   if (collection === "items") return readSeedItems();
   if (collection === "settings") return {};
-  if (collection === "drafts") return [];
+  if (collection === "drafts" || collection === "sessions") return [];
   return [];
 }
 

@@ -6,14 +6,17 @@ import {
   ClipboardList,
   Database,
   FileText,
+  History,
   Mail,
   Minus,
   Menu,
+  Monitor,
   Plus,
   PackagePlus,
   Printer,
   Save,
   Settings,
+  ShieldCheck,
   ShoppingCart,
   LogOut,
   Trash2,
@@ -24,7 +27,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getPendingWriteCount, readDb, syncPendingWrites, writeDb } from "@/lib/client-db";
 import type { SessionUser } from "@/lib/auth-types";
-import type { CatalogItem, DraftQuote, QuoteLine, QuoteMeta, QuoteTemplate, SavedQuote, ServiceTitanSettings } from "@/lib/types";
+import type { CatalogItem, DraftQuote, QuoteLine, QuoteMeta, QuoteTemplate, SavedQuote, ServiceTitanSettings, UserSessionRecord } from "@/lib/types";
 
 type View = "home" | "quote" | "items" | "templates" | "previous" | "settings" | "client";
 type QuoteStep = "pick" | "customize" | "review" | "finalize";
@@ -64,6 +67,16 @@ type ExportQuoteFormat = "print" | "pdf" | "excel" | "install";
 type RecoverySort = "recent" | "name";
 type PermanentDeleteTarget = { kind: "item"; id: string; label: string } | { kind: "quote"; id: string; label: string };
 type NotificationBlock = { id: string; title: string; message: string; createdAt: string };
+type QuoteHistoryEntry = {
+  id: string;
+  label: string;
+  savedAt: string;
+  editedByName: string;
+  meta: QuoteMeta;
+  lines: QuoteLine[];
+  total: number;
+  changes: string[];
+};
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const appStage = process.env.NEXT_PUBLIC_APP_STAGE ?? "development";
@@ -80,6 +93,8 @@ const STORAGE_KEYS = {
   session: "qqb.session.v1",
   draftQuote: "qqb.draft.quote.v1",
   draftQuotes: "qqb.draft.quotes.v1",
+  sessions: "qqb.cache.sessions.v1",
+  deviceId: "qqb.device.id.v1",
 };
 
 const emptyMeta: QuoteMeta = {
@@ -114,6 +129,21 @@ const viewFromPath = () => {
   const segment = window.location.pathname.split("/").filter(Boolean)[0];
   return isView(segment) ? segment : window.location.pathname === "/" ? "home" : null;
 };
+
+function getOrCreateDeviceId() {
+  if (typeof window === "undefined") return "server";
+  const existing = window.localStorage.getItem(STORAGE_KEYS.deviceId);
+  if (existing) return existing;
+  const next = makeId("device");
+  window.localStorage.setItem(STORAGE_KEYS.deviceId, next);
+  return next;
+}
+
+function getDeviceName() {
+  if (typeof navigator === "undefined") return "Current device";
+  const platform = navigator.platform || "Browser";
+  return `${platform} / ${navigator.userAgent.includes("Mobile") ? "Mobile" : "Desktop"}`;
+}
 
 const adiCatalog: AdiCatalogMatch[] = [
   {
@@ -296,6 +326,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   const [templates, setTemplates] = useState<QuoteTemplate[]>([]);
   const [quotes, setQuotes] = useState<SavedQuote[]>([]);
   const [draftQuotes, setDraftQuotes] = useState<DraftQuote[]>([]);
+  const [sessions, setSessions] = useState<UserSessionRecord[]>([]);
   const [settings, setSettings] = useState<ServiceTitanSettings>({
     baseUrl: "",
     tenantId: "",
@@ -318,10 +349,14 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   const [adminUnlocked, setAdminUnlocked] = useState(false);
   const [startFreshPromptOpen, setStartFreshPromptOpen] = useState(false);
   const [sessionUser] = useState<SessionUser>(initialUser ?? placeholderUser);
+  const [deviceId] = useState(() => getOrCreateDeviceId());
+  const [deviceName] = useState(() => getDeviceName());
   const [databaseStatus, setDatabaseStatus] = useState<DatabaseStatus | null>(null);
   const [isOnline, setIsOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
   const [pendingOfflineWrites, setPendingOfflineWrites] = useState(0);
   const [draftHydrated, setDraftHydrated] = useState(false);
+  const [serverDraftChecked, setServerDraftChecked] = useState(false);
+  const [localDraftUpdatedAt, setLocalDraftUpdatedAt] = useState("");
   const [hydrated, setHydrated] = useState(false);
   const cartRef = useRef<HTMLDetailsElement>(null);
   const notificationRef = useRef<HTMLDivElement>(null);
@@ -329,6 +364,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   const activeItems = useMemo(() => items.filter((item) => !item.deletedAt), [items]);
   const activeQuotes = useMemo(() => quotes.filter((quote) => !quote.deletedAt), [quotes]);
   const userDraftQuotes = useMemo(() => draftQuotes.filter((draft) => draft.owner === sessionUser.id || draft.owner === sessionUser.name), [draftQuotes, sessionUser.id, sessionUser.name]);
+  const userSessions = useMemo(() => sessions.filter((session) => session.userId === sessionUser.id && !session.endedAt && Date.now() - new Date(session.lastSeenAt).getTime() < 12 * 60 * 60 * 1000), [sessions, sessionUser.id]);
 
   const navigateToView = (nextView: View, quote?: SavedQuote) => {
     setView(nextView);
@@ -346,13 +382,15 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
       readDb<QuoteTemplate[]>("templates", readStorage(STORAGE_KEYS.templates, [])),
       readDb<SavedQuote[]>("quotes", readStorage(STORAGE_KEYS.quotes, [])),
       readDb<DraftQuote[]>("drafts", readStorage(STORAGE_KEYS.draftQuotes, [])),
+      readDb<UserSessionRecord[]>("sessions", readStorage(STORAGE_KEYS.sessions, [])),
       readDb<ServiceTitanSettings>("settings", readStorage(STORAGE_KEYS.settings, { baseUrl: "", tenantId: "", clientId: "", clientSecret: "" })),
-    ]).then(([dbItems, dbTemplates, dbQuotes, dbDraftQuotes, dbSettings]) => {
+    ]).then(([dbItems, dbTemplates, dbQuotes, dbDraftQuotes, dbSessions, dbSettings]) => {
       if (cancelled) return;
       setItems(dbItems);
       setTemplates(dbTemplates);
       setQuotes(dbQuotes);
       setDraftQuotes(Array.isArray(dbDraftQuotes) ? dbDraftQuotes : []);
+      setSessions(Array.isArray(dbSessions) ? dbSessions : []);
       setSettings(dbSettings);
       setHydrated(true);
     });
@@ -363,12 +401,29 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   }, []);
 
   useEffect(() => {
-    const draft = readStorage<{ lines?: QuoteLine[]; meta?: Partial<QuoteMeta>; quoteStep?: unknown }>(STORAGE_KEYS.draftQuote, {});
+    const draft = readStorage<{ lines?: QuoteLine[]; meta?: Partial<QuoteMeta>; quoteStep?: unknown; updatedAt?: string }>(STORAGE_KEYS.draftQuote, {});
     setLines(Array.isArray(draft.lines) ? draft.lines : []);
     setMeta({ ...emptyMeta, ...(draft.meta ?? {}) });
     if (isQuoteStep(draft.quoteStep)) setQuoteStep(draft.quoteStep);
+    setLocalDraftUpdatedAt(draft.updatedAt ?? "");
     setDraftHydrated(true);
   }, []);
+
+  useEffect(() => {
+    if (!hydrated || !draftHydrated || serverDraftChecked) return;
+    const serverDraft = draftQuotes
+      .filter((draft) => draft.kind === "current" && draft.owner === sessionUser.id)
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
+    const localTime = localDraftUpdatedAt ? new Date(localDraftUpdatedAt).getTime() : 0;
+    const serverTime = serverDraft ? new Date(serverDraft.updatedAt).getTime() : 0;
+    if (serverDraft && serverTime > localTime) {
+      setLines(serverDraft.lines);
+      setMeta({ ...emptyMeta, ...serverDraft.meta });
+      if (serverDraft.quoteStep && isQuoteStep(serverDraft.quoteStep)) setQuoteStep(serverDraft.quoteStep);
+      pushNotification("Draft restored", `Loaded the latest server draft from ${serverDraft.deviceName || "another device"}.`);
+    }
+    setServerDraftChecked(true);
+  }, [draftHydrated, draftQuotes, hydrated, localDraftUpdatedAt, serverDraftChecked, sessionUser.id]);
 
   useEffect(() => {
     writeStorage(STORAGE_KEYS.session, { view, quoteStep, user: sessionUser });
@@ -396,6 +451,30 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
       writeStorage(STORAGE_KEYS.draftQuote, draft);
     }
   }, [draftHydrated, lines, meta, quoteStep]);
+
+  useEffect(() => {
+    if (!hydrated || !draftHydrated || !serverDraftChecked) return;
+    const now = new Date().toISOString();
+    const currentDraft: DraftQuote = {
+      id: `current-${sessionUser.id}-${deviceId}`,
+      owner: sessionUser.id,
+      ownerName: sessionUser.name,
+      deviceId,
+      deviceName,
+      kind: "current",
+      quoteStep,
+      createdAt: now,
+      updatedAt: now,
+      meta,
+      lines: activeLines,
+      total: totals.total,
+    };
+    setDraftQuotes((current) => {
+      const existing = current.find((draft) => draft.id === currentDraft.id);
+      const nextDraft = existing ? { ...currentDraft, createdAt: existing.createdAt } : currentDraft;
+      return [nextDraft, ...current.filter((draft) => draft.id !== currentDraft.id)];
+    });
+  }, [activeLines, deviceId, deviceName, draftHydrated, hydrated, meta, quoteStep, serverDraftChecked, sessionUser.id, sessionUser.name, totals.total]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
@@ -493,6 +572,32 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   }, [draftQuotes, hydrated]);
 
   useEffect(() => {
+    if (!hydrated) return;
+    const now = new Date().toISOString();
+    const sessionId = `${sessionUser.id}-${deviceId}`;
+    setSessions((current) => {
+      const existing = current.find((session) => session.id === sessionId);
+      const nextSession: UserSessionRecord = {
+        id: sessionId,
+        userId: sessionUser.id,
+        userName: sessionUser.name,
+        deviceId,
+        deviceName,
+        createdAt: existing?.createdAt ?? now,
+        lastSeenAt: now,
+      };
+      return [nextSession, ...current.filter((session) => session.id !== sessionId)];
+    });
+  }, [deviceId, deviceName, hydrated, sessionUser.id, sessionUser.name]);
+
+  useEffect(() => {
+    if (hydrated) {
+      writeStorage(STORAGE_KEYS.sessions, sessions);
+      void writeDb("sessions", sessions).then(() => setPendingOfflineWrites(getPendingWriteCount()));
+    }
+  }, [hydrated, sessions]);
+
+  useEffect(() => {
     if (hydrated) {
       writeStorage(STORAGE_KEYS.settings, settings);
       void writeDb("settings", settings).then(() => setPendingOfflineWrites(getPendingWriteCount()));
@@ -557,6 +662,10 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
       id: makeId("draft"),
       owner: sessionUser.id,
       ownerName: sessionUser.name,
+      deviceId,
+      deviceName,
+      kind: "saved",
+      quoteStep,
       createdAt: now,
       updatedAt: now,
       meta: { ...meta, project: meta.project.trim() || label },
@@ -697,6 +806,8 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
         meta: originalQuote.meta,
         lines: originalQuote.lines,
         total: originalQuote.total,
+        editedBy: originalQuote.updatedBy,
+        editedByName: originalQuote.updatedByName,
       };
       const updatedQuote: SavedQuote = {
         ...originalQuote,
@@ -705,6 +816,8 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
         lines: activeLines,
         total: totals.total,
         revisions: [...(originalQuote.revisions ?? []), revision],
+        updatedBy: sessionUser.id,
+        updatedByName: sessionUser.name,
       };
       setQuotes((current) => current.map((quote) => (quote.id === editingQuoteId ? updatedQuote : quote)));
       setQuoteSaveError("");
@@ -727,6 +840,8 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
       lines: activeLines,
       total: totals.total,
       revisions: [],
+      updatedBy: sessionUser.id,
+      updatedByName: sessionUser.name,
     };
     setQuoteSaveError("");
     setQuotes((current) => [saved, ...current]);
@@ -793,6 +908,9 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   };
 
   const signOut = async () => {
+    const endedAt = new Date().toISOString();
+    setSessions((current) => current.map((session) => (session.id === `${sessionUser.id}-${deviceId}` ? { ...session, endedAt, lastSeenAt: endedAt } : session)));
+    await writeDb("sessions", sessions.map((session) => (session.id === `${sessionUser.id}-${deviceId}` ? { ...session, endedAt, lastSeenAt: endedAt } : session))).catch(() => undefined);
     await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
     window.location.href = "/login";
   };
@@ -970,7 +1088,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
           />
         ) : null}
         {view === "client" ? <ClientQuoteView quote={selectedQuote} onPrintQuote={printSavedQuote} /> : null}
-        {view === "settings" ? <SettingsPage settings={settings} setSettings={setSettings} onSync={syncServiceTitan} items={items} setItems={setItems} quotes={quotes} setQuotes={setQuotes} adminUnlocked={adminUnlocked} user={sessionUser} onSignOut={signOut} /> : null}
+        {view === "settings" ? <SettingsPage settings={settings} setSettings={setSettings} onSync={syncServiceTitan} items={items} setItems={setItems} quotes={quotes} setQuotes={setQuotes} sessions={userSessions} currentDeviceId={deviceId} adminUnlocked={adminUnlocked} user={sessionUser} onSignOut={signOut} /> : null}
       </section>
 
       {startFreshPromptOpen ? (
@@ -1100,7 +1218,8 @@ function HomePage({ user, meta, lines, total, drafts, onContinue, onLoadDraft }:
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="truncate font-black">{draft.meta.customer || draft.meta.project || "Temporary quote"}</p>
-                    <p className="mt-1 text-sm text-stone-600">{draft.lines.length} lines · saved {new Date(draft.updatedAt).toLocaleString()}</p>
+                    <p className="mt-1 text-sm text-stone-600">{draft.lines.length} lines · {draft.kind === "current" ? "live draft" : "temp saved"} · {new Date(draft.updatedAt).toLocaleString()}</p>
+                    {draft.deviceName ? <p className="mt-1 text-xs font-bold text-stone-500">{draft.deviceName}</p> : null}
                   </div>
                   <strong>{money.format(draft.total)}</strong>
                 </div>
@@ -1813,6 +1932,59 @@ function exportQuote(quote: SavedQuote, format: ExportQuoteFormat) {
   link.download = `${quote.meta.quoteNumber || "quote"}-${isInstallList ? "install-list" : "revision-" + revisionNumber}.csv`;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function describeQuoteChanges(previous: { meta: QuoteMeta; lines: QuoteLine[]; total: number } | null, next: { meta: QuoteMeta; lines: QuoteLine[]; total: number }) {
+  if (!previous) return ["Original saved version."];
+  const changes: string[] = [];
+  if (previous.meta.customer !== next.meta.customer) changes.push(`Customer changed from ${previous.meta.customer || "blank"} to ${next.meta.customer || "blank"}.`);
+  if (previous.meta.project !== next.meta.project) changes.push(`Project changed from ${previous.meta.project || "blank"} to ${next.meta.project || "blank"}.`);
+  if ((previous.meta.location ?? "") !== (next.meta.location ?? "")) changes.push("Location changed.");
+  if ((previous.meta.notes ?? "") !== (next.meta.notes ?? "")) changes.push("Quote notes changed.");
+  if (previous.lines.length !== next.lines.length) changes.push(`Line count changed from ${previous.lines.length} to ${next.lines.length}.`);
+  next.lines.forEach((line) => {
+    const oldLine = previous.lines.find((candidate) => candidate.lineId === line.lineId || candidate.itemId === line.itemId);
+    if (!oldLine) {
+      changes.push(`Added ${line.name} qty ${line.quantity}.`);
+      return;
+    }
+    if (oldLine.quantity !== line.quantity) changes.push(`${line.name} quantity changed from ${oldLine.quantity} to ${line.quantity}.`);
+    if (oldLine.unitPrice !== line.unitPrice) changes.push(`${line.name} unit price changed from ${money.format(oldLine.unitPrice)} to ${money.format(line.unitPrice)}.`);
+    if ((oldLine.packageName ?? "") !== (line.packageName ?? "")) changes.push(`${line.name} setup nickname changed.`);
+  });
+  previous.lines.forEach((line) => {
+    if (!next.lines.some((candidate) => candidate.lineId === line.lineId || candidate.itemId === line.itemId)) changes.push(`Removed ${line.name}.`);
+  });
+  if (previous.total !== next.total) changes.push(`Total changed from ${money.format(previous.total)} to ${money.format(next.total)}.`);
+  return changes.length ? changes : ["No line, customer, project, note, or total changes detected."];
+}
+
+function buildQuoteHistory(quote: SavedQuote): QuoteHistoryEntry[] {
+  const snapshots = [
+    ...(quote.revisions ?? []).map((revision, index) => ({
+      id: revision.id,
+      label: `Revision ${index + 1}`,
+      savedAt: revision.savedAt,
+      editedByName: revision.editedByName ?? "Unknown",
+      meta: revision.meta,
+      lines: revision.lines,
+      total: revision.total,
+    })),
+    {
+      id: `${quote.id}-current`,
+      label: `Revision ${(quote.revisions?.length ?? 0) + 1}`,
+      savedAt: quote.updatedAt,
+      editedByName: quote.updatedByName ?? "Unknown",
+      meta: quote.meta,
+      lines: quote.lines,
+      total: quote.total,
+    },
+  ];
+
+  return snapshots.map((entry, index) => ({
+    ...entry,
+    changes: describeQuoteChanges(index ? snapshots[index - 1] : null, entry),
+  }));
 }
 
 function ItemsPage({
@@ -2664,7 +2836,11 @@ function PreviousQuotes({
 }) {
   const [deleteQuote, setDeleteQuote] = useState<SavedQuote | null>(null);
   const [printMenuOpen, setPrintMenuOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyIndex, setHistoryIndex] = useState(0);
   const [quoteSearch, setQuoteSearch] = useState("");
+  const historyEntries = useMemo(() => (selectedQuote ? buildQuoteHistory(selectedQuote) : []), [selectedQuote]);
+  const selectedHistory = historyEntries[historyIndex] ?? historyEntries[historyEntries.length - 1];
   const visibleQuotes = useMemo(() => {
     const query = normalizeSearchValue(quoteSearch);
     if (!query) return quotes;
@@ -2680,6 +2856,11 @@ function PreviousQuotes({
     if (selectedQuote?.id === deleteQuote.id) onClearQuote();
     setDeleteQuote(null);
   };
+
+  useEffect(() => {
+    setHistoryOpen(false);
+    setHistoryIndex(0);
+  }, [selectedQuote?.id]);
 
   return (
     <section className="grid gap-4 lg:col-span-2 lg:grid-cols-[360px_minmax(0,1fr)]">
@@ -2748,6 +2929,16 @@ function PreviousQuotes({
                   <button className="button-secondary" onClick={() => onClientView(selectedQuote)}>
                     Client View
                   </button>
+                  <button
+                    className="button-secondary"
+                    onClick={() => {
+                      setHistoryIndex(Math.max(buildQuoteHistory(selectedQuote).length - 1, 0));
+                      setHistoryOpen((open) => !open);
+                    }}
+                  >
+                    <History size={16} />
+                    Time wheel
+                  </button>
                   <div className="relative">
                     <button className="button-secondary" onClick={() => setPrintMenuOpen((open) => !open)}>
                       <Printer size={16} />
@@ -2782,6 +2973,54 @@ function PreviousQuotes({
                   </div>
                 </div>
               </div>
+              {historyOpen && selectedHistory ? (
+                <div className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="font-black">Quote time wheel</p>
+                      <p className="text-sm text-stone-600">See each saved version, who edited it, and what changed.</p>
+                    </div>
+                    <span className="rounded-full bg-white px-2 py-1 text-xs font-black text-stone-600">{historyEntries.length} version{historyEntries.length === 1 ? "" : "s"}</span>
+                  </div>
+                  <div className="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
+                    <div className="grid content-start gap-2">
+                      {historyEntries.map((entry, index) => (
+                        <button key={entry.id} className={`rounded-lg border p-3 text-left ${historyIndex === index ? "border-teal-700 bg-white text-teal-950" : "border-stone-200 bg-white/70 hover:bg-white"}`} onClick={() => setHistoryIndex(index)}>
+                          <p className="font-black">{entry.label}</p>
+                          <p className="text-xs text-stone-600">{new Date(entry.savedAt).toLocaleString()}</p>
+                          <p className="mt-1 text-xs font-bold text-stone-700">By {entry.editedByName}</p>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="grid gap-3 rounded-lg border border-stone-200 bg-white p-3">
+                      <div className="grid gap-2 md:grid-cols-3">
+                        <InfoTile label="Customer" value={selectedHistory.meta.customer || "Blank"} />
+                        <InfoTile label="Project" value={selectedHistory.meta.project || "Blank"} />
+                        <InfoTile label="Total" value={money.format(selectedHistory.total)} />
+                      </div>
+                      <div>
+                        <p className="font-black">Changes</p>
+                        <ul className="mt-2 grid gap-1 text-sm text-stone-600">
+                          {selectedHistory.changes.map((change, index) => (
+                            <li key={`${change}-${index}`} className="rounded-md bg-stone-50 px-3 py-2">{change}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div>
+                        <p className="font-black">Items in this version</p>
+                        <div className="mt-2 grid gap-2">
+                          {selectedHistory.lines.map((line) => (
+                            <div key={line.lineId} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-md bg-stone-50 p-2 text-sm">
+                              <span className="truncate font-bold">{line.packageName ? `${line.packageName} / ${line.name}` : line.name}</span>
+                              <span className="font-black">Qty {line.quantity}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : (
             <p className="rounded-lg border border-dashed border-stone-300 p-10 text-center text-stone-500">Select a previous quote to view the cart summary.</p>
@@ -2879,6 +3118,8 @@ function SettingsPage({
   setItems,
   quotes,
   setQuotes,
+  sessions,
+  currentDeviceId,
   adminUnlocked,
   user,
   onSignOut,
@@ -2890,6 +3131,8 @@ function SettingsPage({
   setItems: Dispatch<SetStateAction<CatalogItem[]>>;
   quotes: SavedQuote[];
   setQuotes: Dispatch<SetStateAction<SavedQuote[]>>;
+  sessions: UserSessionRecord[];
+  currentDeviceId: string;
   adminUnlocked: boolean;
   user: SessionUser;
   onSignOut: () => void;
@@ -3004,6 +3247,27 @@ function SettingsPage({
                 <LogOut size={16} />
                 Sign out
               </button>
+              <div className="mt-5 grid gap-2">
+                <div className="flex items-center gap-2">
+                  <Monitor size={17} />
+                  <h4 className="font-black">Logged-in devices</h4>
+                </div>
+                {sessions.length ? (
+                  sessions.map((session) => (
+                    <div key={session.id} className="rounded-lg border border-stone-200 bg-white p-3">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <p className="font-bold">{session.deviceName}</p>
+                          <p className="text-sm text-stone-600">Last seen {new Date(session.lastSeenAt).toLocaleString()}</p>
+                        </div>
+                        {session.deviceId === currentDeviceId ? <span className="rounded-full bg-teal-100 px-2 py-1 text-xs font-black text-teal-900">Current</span> : null}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="rounded-lg border border-dashed border-stone-300 bg-white p-4 text-sm text-stone-500">No active devices found yet.</p>
+                )}
+              </div>
             </section>
           ) : null}
           {activeSection === "database" ? (
@@ -3018,6 +3282,15 @@ function SettingsPage({
                 <InfoTile label="Current database" value={databaseStatus?.provider ?? "Checking"} />
                 <InfoTile label="Database name" value={databaseStatus?.databaseName ?? "Checking"} />
                 <InfoTile label="Persistent storage" value={databaseStatus ? (databaseStatus.persistent ? "Yes" : "No") : "Checking"} />
+              </div>
+              <div className="mt-4 rounded-lg border border-stone-200 bg-white p-3">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck size={17} className="text-teal-800" />
+                  <p className="font-black">Quote data protection</p>
+                </div>
+                <p className="mt-2 text-sm text-stone-600">
+                  MongoDB uses TLS in transit and provider-side encryption at rest. For production-grade breach protection, the next step is app-level field encryption for customer, project, pricing, and notes before writing quote records.
+                </p>
               </div>
             </section>
           ) : null}

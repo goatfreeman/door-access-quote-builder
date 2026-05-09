@@ -60,6 +60,8 @@ export type QuoteRevision = {
   meta: QuoteMeta;
   lines: QuoteLine[];
   total: number;
+  editedBy?: string;
+  editedByName?: string;
 };
 
 export type SavedQuote = {
@@ -71,6 +73,8 @@ export type SavedQuote = {
   lines: QuoteLine[];
   total: number;
   revisions?: QuoteRevision[];
+  updatedBy?: string;
+  updatedByName?: string;
   deletedAt?: string;
 };
 
@@ -78,11 +82,26 @@ export type DraftQuote = {
   id: string;
   owner: string;
   ownerName?: string;
+  deviceId?: string;
+  deviceName?: string;
+  kind?: "current" | "saved";
+  quoteStep?: "pick" | "customize" | "review" | "finalize";
   createdAt: string;
   updatedAt: string;
   meta: QuoteMeta;
   lines: QuoteLine[];
   total: number;
+};
+
+export type UserSessionRecord = {
+  id: string;
+  userId: string;
+  userName: string;
+  deviceId: string;
+  deviceName: string;
+  createdAt: string;
+  lastSeenAt: string;
+  endedAt?: string;
 };
 
 export type ServiceTitanSettings = {
