@@ -9,6 +9,8 @@ const microsoftTenantId = process.env.AUTH_MICROSOFT_ENTRA_ID_TENANT_ID || proce
 const microsoftIssuer = process.env.AUTH_MICROSOFT_ENTRA_ID_ISSUER || (microsoftTenantId ? `https://login.microsoftonline.com/${microsoftTenantId}/v2.0/` : undefined);
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || "qqb-dev-only-auth-secret",
+  trustHost: true,
   pages: {
     signIn: "/login",
   },

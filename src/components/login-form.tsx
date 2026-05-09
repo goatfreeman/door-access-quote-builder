@@ -19,41 +19,57 @@ export function LoginForm({ error }: { error?: string }) {
   const continueWithEmail = async () => {
     setLoading(true);
     setMessage("");
-    const response = await fetch("/api/auth/lookup", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
-    const body = (await response.json().catch(() => null)) as { method?: "password" | "azure"; error?: string } | null;
-    setLoading(false);
+    try {
+      const response = await fetch("/api/auth/lookup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const body = (await response.json().catch(() => null)) as { method?: "password" | "azure"; error?: string } | null;
 
-    if (!response.ok) {
-      setMessage(body?.error ?? "Enter a valid email address.");
-      return;
+      if (!response.ok) {
+        setMessage(body?.error ?? "Enter a valid email address.");
+        return;
+      }
+
+      if (body?.method === "azure") {
+        const result = await signIn("microsoft-entra-id", { callbackUrl: "/", redirect: false }, { login_hint: email });
+        if (result?.url) {
+          window.location.href = result.url;
+          return;
+        }
+        setMessage(result?.error ?? "Microsoft sign-in could not be started.");
+        return;
+      }
+
+      setMode("password");
+    } catch {
+      setMessage("Sign-in service is not responding. Try refreshing the page.");
+    } finally {
+      setLoading(false);
     }
-
-    if (body?.method === "azure") {
-      await signIn("microsoft-entra-id", { callbackUrl: "/" }, { login_hint: email });
-      return;
-    }
-
-    setMode("password");
   };
 
   const submitPassword = async () => {
     setLoading(true);
     setMessage("");
-    const result = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
-    setLoading(false);
-    if (result?.error) {
-      setMessage("Invalid email or password.");
-      return;
+    try {
+      const result = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+        callbackUrl: "/",
+      });
+      if (result?.error) {
+        setMessage("Invalid email or password.");
+        return;
+      }
+      window.location.href = result?.url || "/";
+    } catch {
+      setMessage("Sign-in service is not responding. Try refreshing the page.");
+    } finally {
+      setLoading(false);
     }
-    window.location.href = "/";
   };
 
   return (
