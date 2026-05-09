@@ -1,0 +1,7 @@
+export type SessionUser = {
+  id: string;
+  name: string;
+  email?: string;
+  provider?: "password" | "azure";
+  role?: "admin" | "user";
+};

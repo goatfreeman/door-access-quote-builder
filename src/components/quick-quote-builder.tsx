@@ -15,6 +15,7 @@ import {
   Save,
   Settings,
   ShoppingCart,
+  LogOut,
   Trash2,
   X,
   type LucideIcon,
@@ -22,6 +23,7 @@ import {
 import type { Dispatch, SetStateAction } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getPendingWriteCount, readDb, syncPendingWrites, writeDb } from "@/lib/client-db";
+import type { SessionUser } from "@/lib/auth-types";
 import type { CatalogItem, DraftQuote, QuoteLine, QuoteMeta, QuoteTemplate, SavedQuote, ServiceTitanSettings } from "@/lib/types";
 
 type View = "home" | "quote" | "items" | "templates" | "previous" | "settings" | "client";
@@ -62,7 +64,6 @@ type ExportQuoteFormat = "print" | "pdf" | "excel" | "install";
 type RecoverySort = "recent" | "name";
 type PermanentDeleteTarget = { kind: "item"; id: string; label: string } | { kind: "quote"; id: string; label: string };
 type NotificationBlock = { id: string; title: string; message: string; createdAt: string };
-type SessionUser = { id: string; name: string; email?: string };
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const appStage = process.env.NEXT_PUBLIC_APP_STAGE ?? "development";
@@ -278,7 +279,7 @@ function totalsFromSavedQuote(quote: SavedQuote): QuoteTotals {
   return { ...calculated, total: quote.total || calculated.total };
 }
 
-export function QuickQuoteBuilder() {
+export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser | null }) {
   const [view, setView] = useState<View>(() => {
     const pathView = viewFromPath();
     if (pathView) return pathView;
@@ -316,7 +317,7 @@ export function QuickQuoteBuilder() {
   const [notifications, setNotifications] = useState<NotificationBlock[]>([]);
   const [adminUnlocked, setAdminUnlocked] = useState(false);
   const [startFreshPromptOpen, setStartFreshPromptOpen] = useState(false);
-  const [sessionUser] = useState<SessionUser>(placeholderUser);
+  const [sessionUser] = useState<SessionUser>(initialUser ?? placeholderUser);
   const [databaseStatus, setDatabaseStatus] = useState<DatabaseStatus | null>(null);
   const [isOnline, setIsOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
   const [pendingOfflineWrites, setPendingOfflineWrites] = useState(0);
@@ -791,6 +792,11 @@ export function QuickQuoteBuilder() {
     setNotificationOpen(false);
   };
 
+  const signOut = async () => {
+    await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
+    window.location.href = "/login";
+  };
+
   return (
     <main className="min-h-screen bg-stone-100 text-stone-950">
       <header className="sticky top-0 z-40 border-b border-stone-200 bg-stone-100/95 px-4 py-3 backdrop-blur">
@@ -904,6 +910,9 @@ export function QuickQuoteBuilder() {
                 </div>
               ) : null}
             </div>
+            <button className="icon-button" onClick={signOut} aria-label="Sign out">
+              <LogOut size={18} />
+            </button>
           </div> : null}
         </div>
       </header>

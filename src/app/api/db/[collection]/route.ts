@@ -1,4 +1,5 @@
 import { isCollection, readCollection, writeCollection } from "@/lib/server/nosql-store";
+import { getSessionUser } from "@/lib/server/auth";
 
 export async function GET(_request: Request, context: { params: Promise<{ collection: string }> }) {
   const { collection } = await context.params;
@@ -14,6 +15,8 @@ export async function GET(_request: Request, context: { params: Promise<{ collec
 }
 
 export async function PUT(request: Request, context: { params: Promise<{ collection: string }> }) {
+  const user = await getSessionUser();
+  if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
   const { collection } = await context.params;
   if (!isCollection(collection)) {
     return Response.json({ error: "Unknown collection" }, { status: 404 });
