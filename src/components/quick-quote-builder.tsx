@@ -365,6 +365,9 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   const activeQuotes = useMemo(() => quotes.filter((quote) => !quote.deletedAt), [quotes]);
   const userDraftQuotes = useMemo(() => draftQuotes.filter((draft) => draft.owner === sessionUser.id || draft.owner === sessionUser.name), [draftQuotes, sessionUser.id, sessionUser.name]);
   const userSessions = useMemo(() => sessions.filter((session) => session.userId === sessionUser.id && !session.endedAt && Date.now() - new Date(session.lastSeenAt).getTime() < 12 * 60 * 60 * 1000), [sessions, sessionUser.id]);
+  const activeLines = useMemo(() => lines.filter((line) => !isLabor(line)), [lines]);
+  const totals = useMemo(() => buildQuoteTotals(lines, meta), [lines, meta]);
+  const cartCount = activeLines.reduce((sum, line) => sum + line.quantity, 0);
 
   const navigateToView = (nextView: View, quote?: SavedQuote) => {
     setView(nextView);
@@ -642,10 +645,6 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
       setCategory("All");
     }
   }, [catalogCategories, category]);
-
-  const activeLines = useMemo(() => lines.filter((line) => !isLabor(line)), [lines]);
-  const totals = useMemo(() => buildQuoteTotals(lines, meta), [lines, meta]);
-  const cartCount = activeLines.reduce((sum, line) => sum + line.quantity, 0);
 
   const pushNotification = (title: string, message: string) => {
     setNotifications((current) => [{ id: makeId("note"), title, message, createdAt: new Date().toISOString() }, ...current].slice(0, 8));
