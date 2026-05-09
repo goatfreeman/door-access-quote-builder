@@ -55,7 +55,7 @@ export async function GET(request: Request) {
   const tokenPayload = (await tokenResponse.json()) as { id_token?: string };
   const profile = tokenPayload.id_token ? decodeJwtPayload(tokenPayload.id_token) : null;
   const email = String(profile?.preferred_username ?? profile?.email ?? "");
-  const name = String(profile?.name ?? email || "Azure User");
+  const name = String(profile?.name ?? (email || "Azure User"));
   const user: SessionUser = {
     id: String(profile?.oid ?? profile?.sub ?? email),
     name,
