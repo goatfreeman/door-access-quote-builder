@@ -260,6 +260,10 @@ async function upsertServerSession(session: UserSessionRecord) {
   return Boolean(postResponse?.ok);
 }
 
+async function revokeServerSession(session: UserSessionRecord) {
+  return upsertServerSession({ ...session, endedAt: new Date().toISOString(), lastSeenAt: new Date().toISOString() });
+}
+
 function daysUntilRecoveryPurge(deletedAt?: string) {
   if (!deletedAt) return recoveryRetentionDays;
   const deletedTime = new Date(deletedAt).getTime();
@@ -628,13 +632,23 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
         lastSeenAt: now,
       };
 
-      setSessions((current) => [nextSession, ...current.filter((session) => session.id !== sessionId)]);
-
       if (typeof navigator !== "undefined" && !navigator.onLine) return;
+      const serverSessions = await readServerSessions([nextSession]);
+      const serverCurrentSession = serverSessions.find((session) => session.id === sessionId && session.endedAt);
+      if (serverCurrentSession?.endedAt) {
+        await authSignOut({ callbackUrl: "/login?error=Session%20revoked" });
+        return;
+      }
+      setSessions((current) => [nextSession, ...current.filter((session) => session.id !== sessionId)]);
       const saved = await upsertServerSession(nextSession);
       if (!saved || cancelled) return;
-      const serverSessions = await readServerSessions([nextSession]);
-      if (!cancelled) setSessions(serverSessions);
+      const refreshedSessions = await readServerSessions([nextSession]);
+      const refreshedCurrentSession = refreshedSessions.find((session) => session.id === sessionId && session.endedAt);
+      if (refreshedCurrentSession?.endedAt) {
+        await authSignOut({ callbackUrl: "/login?error=Session%20revoked" });
+        return;
+      }
+      if (!cancelled) setSessions(refreshedSessions);
     };
 
     void heartbeat();
@@ -1149,7 +1163,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
           />
         ) : null}
         {view === "client" ? <ClientQuoteView quote={selectedQuote} onPrintQuote={printSavedQuote} /> : null}
-        {view === "settings" ? <SettingsPage settings={settings} setSettings={setSettings} onSync={syncServiceTitan} items={items} setItems={setItems} quotes={quotes} setQuotes={setQuotes} sessions={userSessions} currentDeviceId={deviceId} adminUnlocked={adminUnlocked} user={sessionUser} onSignOut={signOut} /> : null}
+        {view === "settings" ? <SettingsPage settings={settings} setSettings={setSettings} onSync={syncServiceTitan} items={items} setItems={setItems} quotes={quotes} setQuotes={setQuotes} sessions={userSessions} setSessions={setSessions} currentDeviceId={deviceId} adminUnlocked={adminUnlocked} user={sessionUser} onSignOut={signOut} /> : null}
       </section>
 
       {startFreshPromptOpen ? (
@@ -3201,6 +3215,7 @@ function SettingsPage({
   quotes,
   setQuotes,
   sessions,
+  setSessions,
   currentDeviceId,
   adminUnlocked,
   user,
@@ -3214,6 +3229,7 @@ function SettingsPage({
   quotes: SavedQuote[];
   setQuotes: Dispatch<SetStateAction<SavedQuote[]>>;
   sessions: UserSessionRecord[];
+  setSessions: Dispatch<SetStateAction<UserSessionRecord[]>>;
   currentDeviceId: string;
   adminUnlocked: boolean;
   user: SessionUser;
@@ -3293,6 +3309,15 @@ function SettingsPage({
     }
     setPermanentDeleteTarget(null);
   };
+  const revokeSession = async (session: UserSessionRecord) => {
+    const endedAt = new Date().toISOString();
+    const revokedSession = { ...session, endedAt, lastSeenAt: endedAt };
+    setSessions((current) => [revokedSession, ...current.filter((item) => item.id !== session.id)]);
+    const saved = await revokeServerSession(session);
+    if (!saved) {
+      setSessions((current) => [session, ...current.filter((item) => item.id !== session.id)]);
+    }
+  };
 
   return (
     <section className="panel lg:col-span-2">
@@ -3342,7 +3367,13 @@ function SettingsPage({
                           <p className="font-bold">{session.deviceName}</p>
                           <p className="text-sm text-stone-600">Last seen {new Date(session.lastSeenAt).toLocaleString()}</p>
                         </div>
-                        {session.deviceId === currentDeviceId ? <span className="rounded-full bg-teal-100 px-2 py-1 text-xs font-black text-teal-900">Current</span> : null}
+                        {session.deviceId === currentDeviceId ? (
+                          <span className="rounded-full bg-teal-100 px-2 py-1 text-xs font-black text-teal-900">Current</span>
+                        ) : (
+                          <button className="button-ghost text-red-800 hover:bg-red-50" onClick={() => revokeSession(session)}>
+                            Revoke
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))
