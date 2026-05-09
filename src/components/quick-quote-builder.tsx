@@ -62,6 +62,7 @@ type ExportQuoteFormat = "print" | "pdf" | "excel" | "install";
 type RecoverySort = "recent" | "name";
 type PermanentDeleteTarget = { kind: "item"; id: string; label: string } | { kind: "quote"; id: string; label: string };
 type NotificationBlock = { id: string; title: string; message: string; createdAt: string };
+type SessionUser = { id: string; name: string; email?: string };
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const appStage = process.env.NEXT_PUBLIC_APP_STAGE ?? "development";
@@ -69,6 +70,7 @@ const isProductionStage = appStage.toLowerCase() === "production";
 const recoveryRetentionDays = 30;
 const dayInMs = 24 * 60 * 60 * 1000;
 const requiredQuoteDetailsError = "Add a customer name, project, and quote number before saving this quote.";
+const placeholderUser: SessionUser = { id: "local-user", name: "User" };
 const STORAGE_KEYS = {
   items: "qqb.cache.items.v1",
   templates: "qqb.cache.templates.v1",
@@ -314,6 +316,7 @@ export function QuickQuoteBuilder() {
   const [notifications, setNotifications] = useState<NotificationBlock[]>([]);
   const [adminUnlocked, setAdminUnlocked] = useState(false);
   const [startFreshPromptOpen, setStartFreshPromptOpen] = useState(false);
+  const [sessionUser] = useState<SessionUser>(placeholderUser);
   const [databaseStatus, setDatabaseStatus] = useState<DatabaseStatus | null>(null);
   const [isOnline, setIsOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
   const [pendingOfflineWrites, setPendingOfflineWrites] = useState(0);
@@ -324,6 +327,7 @@ export function QuickQuoteBuilder() {
   const settingsHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeItems = useMemo(() => items.filter((item) => !item.deletedAt), [items]);
   const activeQuotes = useMemo(() => quotes.filter((quote) => !quote.deletedAt), [quotes]);
+  const userDraftQuotes = useMemo(() => draftQuotes.filter((draft) => draft.owner === sessionUser.id || draft.owner === sessionUser.name), [draftQuotes, sessionUser.id, sessionUser.name]);
 
   const navigateToView = (nextView: View, quote?: SavedQuote) => {
     setView(nextView);
@@ -366,8 +370,8 @@ export function QuickQuoteBuilder() {
   }, []);
 
   useEffect(() => {
-    writeStorage(STORAGE_KEYS.session, { view, quoteStep });
-  }, [quoteStep, view]);
+    writeStorage(STORAGE_KEYS.session, { view, quoteStep, user: sessionUser });
+  }, [quoteStep, sessionUser, view]);
 
   useEffect(() => {
     const handlePopState = () => {
@@ -550,7 +554,8 @@ export function QuickQuoteBuilder() {
     const now = new Date().toISOString();
     const draft: DraftQuote = {
       id: makeId("draft"),
-      owner: "User",
+      owner: sessionUser.id,
+      ownerName: sessionUser.name,
       createdAt: now,
       updatedAt: now,
       meta: { ...meta, project: meta.project.trim() || label },
@@ -558,7 +563,7 @@ export function QuickQuoteBuilder() {
       total: totals.total,
     };
     setDraftQuotes((current) => [draft, ...current]);
-    pushNotification("Draft saved", "This quote was saved to your user workspace.");
+    pushNotification("Draft saved", `This quote was saved to ${sessionUser.name}'s workspace.`);
   };
 
   const clearCurrentQuote = () => {
@@ -906,7 +911,7 @@ export function QuickQuoteBuilder() {
       {menuOpen && !isClientView ? <MobileMenu nav={nav} view={view} setView={navigateToView} goToQuote={goToQuote} close={() => setMenuOpen(false)} onSettingsHoldStart={startSettingsHold} onSettingsHoldEnd={cancelSettingsHold} /> : null}
 
       <section className={`mx-auto grid max-w-7xl gap-4 px-4 py-4 ${view === "quote" && quoteStep !== "finalize" ? "lg:grid-cols-[320px_minmax(0,1fr)]" : ""}`}>
-        {view === "home" ? <HomePage meta={meta} lines={activeLines} total={totals.total} drafts={draftQuotes} onContinue={goToQuote} onLoadDraft={loadDraftQuote} /> : null}
+        {view === "home" ? <HomePage user={sessionUser} meta={meta} lines={activeLines} total={totals.total} drafts={userDraftQuotes} onContinue={goToQuote} onLoadDraft={loadDraftQuote} /> : null}
         {view === "quote" ? (
           <>
             {quoteStep !== "finalize" ? (
@@ -916,7 +921,6 @@ export function QuickQuoteBuilder() {
               step={quoteStep}
               setStep={setQuoteStep}
               lines={activeLines}
-              allLines={lines}
               meta={meta}
               setMeta={setMeta}
               totals={totals}
@@ -940,7 +944,7 @@ export function QuickQuoteBuilder() {
         ) : null}
 
         {view === "items" ? <ItemsPage items={activeItems} setItems={setItems} onDeleteItem={deleteItemEverywhere} /> : null}
-        {view === "templates" ? <TemplatesPage templates={templates} items={activeItems} setTemplates={setTemplates} onAddTemplate={addTemplate} /> : null}
+        {view === "templates" ? <TemplatesPage templates={templates} items={activeItems} user={sessionUser} setTemplates={setTemplates} onAddTemplate={addTemplate} /> : null}
         {view === "previous" ? (
           <PreviousQuotes
             quotes={activeQuotes}
@@ -960,7 +964,7 @@ export function QuickQuoteBuilder() {
           />
         ) : null}
         {view === "client" ? <ClientQuoteView quote={selectedQuote} onPrintQuote={printSavedQuote} /> : null}
-        {view === "settings" ? <SettingsPage settings={settings} setSettings={setSettings} onSync={syncServiceTitan} items={items} setItems={setItems} quotes={quotes} setQuotes={setQuotes} adminUnlocked={adminUnlocked} /> : null}
+        {view === "settings" ? <SettingsPage settings={settings} setSettings={setSettings} onSync={syncServiceTitan} items={items} setItems={setItems} quotes={quotes} setQuotes={setQuotes} adminUnlocked={adminUnlocked} user={sessionUser} /> : null}
       </section>
 
       {startFreshPromptOpen ? (
@@ -1035,14 +1039,35 @@ function previousStep(step: QuoteStep): QuoteStep {
   return "pick";
 }
 
-function HomePage({ meta, lines, total, drafts, onContinue, onLoadDraft }: { meta: QuoteMeta; lines: QuoteLine[]; total: number; drafts: DraftQuote[]; onContinue: () => void; onLoadDraft: (draft: DraftQuote) => void }) {
+function QuoteStageProgress({ steps, currentStep, setStep }: { steps: QuoteStep[]; currentStep: QuoteStep; setStep: (step: QuoteStep) => void }) {
+  return (
+    <div className="grid grid-cols-[auto_1fr_auto_1fr_auto_1fr_auto] items-start gap-2">
+      {steps.map((step, index) => {
+        const isActive = currentStep === step;
+        return (
+          <div key={step} className="contents">
+            <button className="group grid justify-items-center gap-1" onClick={() => setStep(step)} aria-current={isActive ? "step" : undefined}>
+              <span className={`grid size-9 place-items-center rounded-full border text-sm font-black transition ${isActive ? "border-teal-700 bg-teal-700 text-white" : "border-stone-300 bg-white text-stone-600 group-hover:border-teal-700 group-hover:text-teal-800"}`}>
+                {index + 1}
+              </span>
+              <span className={`text-xs font-black capitalize ${isActive ? "text-teal-800" : "text-stone-500 group-hover:text-teal-800"}`}>{step}</span>
+            </button>
+            {index < steps.length - 1 ? <span className="mt-4 h-px min-w-5 bg-stone-300" /> : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function HomePage({ user, meta, lines, total, drafts, onContinue, onLoadDraft }: { user: SessionUser; meta: QuoteMeta; lines: QuoteLine[]; total: number; drafts: DraftQuote[]; onContinue: () => void; onLoadDraft: (draft: DraftQuote) => void }) {
   const hasDraft = lines.length > 0 || Boolean(meta.customer || meta.project);
 
   return (
     <section className="panel lg:col-span-2">
       <div className="panel-header">
         <div>
-          <h2>Welcome back, User</h2>
+          <h2>Welcome back, {user.name}</h2>
           <p>Pick up ongoing quote work or start from the quote workspace.</p>
         </div>
       </div>
@@ -1063,7 +1088,7 @@ function HomePage({ meta, lines, total, drafts, onContinue, onLoadDraft }: { met
         )}
         {drafts.length ? (
           <div className="grid gap-2">
-            <p className="text-sm font-black uppercase tracking-normal text-stone-500">Draft quotes saved to User workspace</p>
+            <p className="text-sm font-black uppercase tracking-normal text-stone-500">Draft quotes saved to {user.name}'s workspace</p>
             {drafts.slice(0, 5).map((draft) => (
               <button key={draft.id} className="rounded-lg border border-stone-200 bg-white p-3 text-left transition hover:border-teal-700 hover:bg-teal-50" onClick={() => onLoadDraft(draft)}>
                 <div className="flex items-start justify-between gap-3">
@@ -1380,7 +1405,6 @@ function QuoteWorkspace(props: {
   step: QuoteStep;
   setStep: (step: QuoteStep) => void;
   lines: QuoteLine[];
-  allLines: QuoteLine[];
   meta: QuoteMeta;
   setMeta: Dispatch<SetStateAction<QuoteMeta>>;
   totals: QuoteTotals;
@@ -1418,24 +1442,13 @@ function QuoteWorkspace(props: {
             <h2>Quote Workspace</h2>
             <p>{props.step === "pick" ? "Start fresh or build from a saved template." : "Review cart details and finalize the quote."}</p>
           </div>
-          <div className="hidden items-center gap-2 sm:flex">
-            {steps.map((step, index) => (
-              <div key={step} className={`chip capitalize ${props.step === step ? "chip-active" : ""}`}>
-                {index + 1}. {step}
-              </div>
-            ))}
+          <div className="hidden min-w-[360px] sm:block">
+            <QuoteStageProgress steps={steps} currentStep={props.step} setStep={props.setStep} />
           </div>
         </div>
         <div className="grid gap-4 p-4">
-          <div className="grid grid-cols-[auto_1fr_auto_1fr_auto_1fr_auto] items-center gap-2 sm:hidden">
-            {steps.map((step, index) => (
-              <div key={step} className="contents">
-                <span className={`grid size-8 place-items-center rounded-full text-sm font-black ${props.step === step ? "bg-teal-700 text-white" : "bg-white text-stone-600"}`}>
-                  {index + 1}
-                </span>
-                {index < steps.length - 1 ? <span className="h-px bg-stone-300" /> : null}
-              </div>
-            ))}
+          <div className="sm:hidden">
+            <QuoteStageProgress steps={steps} currentStep={props.step} setStep={props.setStep} />
           </div>
 
           {props.step === "pick" ? (
@@ -2187,11 +2200,13 @@ function ItemsPage({
 function TemplatesPage({
   templates,
   items,
+  user,
   setTemplates,
   onAddTemplate,
 }: {
   templates: QuoteTemplate[];
   items: CatalogItem[];
+  user: SessionUser;
   setTemplates: Dispatch<SetStateAction<QuoteTemplate[]>>;
   onAddTemplate: (template: QuoteTemplate, jumpToCustomize?: boolean) => void;
 }) {
@@ -2216,7 +2231,18 @@ function TemplatesPage({
   };
   const saveDraftTemplate = () => {
     if (!draftTemplate) return;
-    setTemplates((current) => [...current, { ...draftTemplate, name: draftTemplate.name || "New Template" }]);
+    setTemplates((current) => [
+      ...current,
+      {
+        ...draftTemplate,
+        name: draftTemplate.name || "New Template",
+        createdBy: draftTemplate.createdBy ?? user.id,
+        createdByName: draftTemplate.createdByName ?? user.name,
+        updatedBy: user.id,
+        updatedByName: user.name,
+        collaborators: draftTemplate.collaborators ?? [],
+      },
+    ]);
     setDraftTemplate(null);
   };
 
@@ -2235,6 +2261,11 @@ function TemplatesPage({
               name: "",
               description: "",
               lines: [],
+              createdBy: user.id,
+              createdByName: user.name,
+              updatedBy: user.id,
+              updatedByName: user.name,
+              collaborators: [],
             })
           }
         >
@@ -2245,7 +2276,7 @@ function TemplatesPage({
       <div className="grid gap-3 p-4 md:grid-cols-3">
         {templates.length ? (
           templates.map((template) => (
-            <TemplateCard key={template.id} template={template} items={items} setTemplates={setTemplates} onAddTemplate={onAddTemplate} onDeleteTemplate={setDeleteTemplate} />
+            <TemplateCard key={template.id} template={template} items={items} user={user} setTemplates={setTemplates} onAddTemplate={onAddTemplate} onDeleteTemplate={setDeleteTemplate} />
           ))
         ) : (
           <div className="rounded-lg border border-dashed border-stone-300 bg-stone-50 p-8 text-center text-stone-500 md:col-span-3">No templates yet.</div>
@@ -2366,19 +2397,27 @@ function TemplatesPage({
 function TemplateCard({
   template,
   items,
+  user,
   setTemplates,
   onAddTemplate,
   onDeleteTemplate,
 }: {
   template: QuoteTemplate;
   items: CatalogItem[];
+  user: SessionUser;
   setTemplates: Dispatch<SetStateAction<QuoteTemplate[]>>;
   onAddTemplate: (template: QuoteTemplate, jumpToCustomize?: boolean) => void;
   onDeleteTemplate: (template: QuoteTemplate) => void;
 }) {
   const [selectorOpen, setSelectorOpen] = useState(false);
   const updateTemplate = (patch: Partial<QuoteTemplate>) => {
-    setTemplates((current) => current.map((candidate) => (candidate.id === template.id ? { ...candidate, ...patch } : candidate)));
+    setTemplates((current) =>
+      current.map((candidate) => {
+        if (candidate.id !== template.id) return candidate;
+        const collaborators = candidate.createdBy && candidate.createdBy !== user.id ? Array.from(new Set([...(candidate.collaborators ?? []), user.name])) : candidate.collaborators ?? [];
+        return { ...candidate, ...patch, updatedBy: user.id, updatedByName: user.name, collaborators };
+      }),
+    );
   };
   const addTemplateLine = (itemId: string) => {
     updateTemplate({
@@ -2418,6 +2457,10 @@ function TemplateCard({
         <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 p-4 [&::-webkit-details-marker]:hidden">
           <div className="min-w-0">
             <p className="truncate font-black">{template.name || "None"}</p>
+            <p className="mt-1 text-xs font-bold text-stone-500">
+              Created by {template.createdByName ?? "User"}
+              {template.updatedByName && template.updatedByName !== template.createdByName ? ` / Collaborator: ${template.updatedByName}` : ""}
+            </p>
             <p className="mt-1 text-sm text-stone-600">{template.lines.length} items · Qty {template.lines.reduce((sum, line) => sum + line.quantity, 0)}</p>
           </div>
           <button
@@ -2443,6 +2486,11 @@ function TemplateCard({
             </button>
           </div>
           <textarea className="textarea" value={template.description} onChange={(event) => updateTemplate({ description: event.target.value })} placeholder="Template description" />
+          <div className="grid gap-2 rounded-lg border border-stone-200 bg-white p-3 text-sm text-stone-600">
+            <p><strong className="text-stone-950">Creator:</strong> {template.createdByName ?? "User"}</p>
+            <p><strong className="text-stone-950">Last updated by:</strong> {template.updatedByName ?? template.createdByName ?? "User"}</p>
+            <p><strong className="text-stone-950">Collaborators:</strong> {template.collaborators?.length ? template.collaborators.join(", ") : "None"}</p>
+          </div>
           {requirements.length ? (
         <div className="grid gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
           <div>
@@ -2826,6 +2874,7 @@ function SettingsPage({
   quotes,
   setQuotes,
   adminUnlocked,
+  user,
 }: {
   settings: ServiceTitanSettings;
   setSettings: Dispatch<SetStateAction<ServiceTitanSettings>>;
@@ -2835,6 +2884,7 @@ function SettingsPage({
   quotes: SavedQuote[];
   setQuotes: Dispatch<SetStateAction<SavedQuote[]>>;
   adminUnlocked: boolean;
+  user: SessionUser;
 }) {
   const [activeSection, setActiveSection] = useState<SettingsSection>("account");
   const [databaseStatus, setDatabaseStatus] = useState<DatabaseStatus | null>(null);
@@ -2935,7 +2985,7 @@ function SettingsPage({
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 <label className="field">
                   <span>User</span>
-                  <input className="input" value="User" readOnly />
+                  <input className="input" value={user.name} readOnly />
                 </label>
                 <label className="field">
                   <span>Login provider</span>

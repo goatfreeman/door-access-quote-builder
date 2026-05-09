@@ -21,6 +21,11 @@ export type QuoteTemplate = {
   name: string;
   description: string;
   lines: TemplateLine[];
+  createdBy?: string;
+  createdByName?: string;
+  updatedBy?: string;
+  updatedByName?: string;
+  collaborators?: string[];
 };
 
 export type QuoteLine = {
@@ -72,6 +77,7 @@ export type SavedQuote = {
 export type DraftQuote = {
   id: string;
   owner: string;
+  ownerName?: string;
   createdAt: string;
   updatedAt: string;
   meta: QuoteMeta;
