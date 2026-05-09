@@ -1574,7 +1574,7 @@ function QuoteLines({
     <div className="grid gap-3">
       {rows.map((row) =>
         row.type === "package" ? (
-          <details key={row.packageName} className="overflow-hidden rounded-lg border border-teal-200 bg-teal-50">
+          <details key={`package-${row.lines[0]?.lineId ?? row.packageName}`} className="overflow-hidden rounded-lg border border-teal-200 bg-teal-50">
             <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 p-4 [&::-webkit-details-marker]:hidden">
               <div className="min-w-0">
                 <p className="truncate font-black">{row.packageName}</p>
