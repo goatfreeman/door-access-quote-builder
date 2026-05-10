@@ -1,6 +1,6 @@
 # Quick Quote Builder
 
-Next.js, React, TypeScript, and Tailwind CSS app for building quick equipment, labor, and template-based quotes.
+Next.js, React, TypeScript, Tailwind CSS, and shadcn/ui app for building quick equipment, labor, and template-based quotes.
 
 ## Features
 
@@ -32,7 +32,32 @@ http://localhost:3000
 
 Import the GitHub repository into Vercel. Vercel will auto-detect Next.js and run the standard build.
 
-Add these environment variables in Vercel for persistent MongoDB storage:
+### Supabase Migration Target
+
+The target production stack is:
+
+```text
+Frontend: Next.js + TypeScript + Tailwind CSS + shadcn/ui
+Backend: Next.js Server Actions and API routes
+Database: Supabase PostgreSQL
+Auth: Supabase Auth
+Security: Supabase Row Level Security
+Hosting: Vercel
+```
+
+Add these Supabase variables in Vercel when the Supabase project is ready:
+
+```text
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=server-only-service-role-key
+```
+
+Run [docs/supabase-schema.sql](docs/supabase-schema.sql) in Supabase SQL Editor to create the QQB tables, indexes, triggers, and RLS policies. Keep `SUPABASE_SERVICE_ROLE_KEY` server-only and never expose it to browser code.
+
+### Current MongoDB Runtime
+
+The current deployed runtime still supports MongoDB while the Supabase migration is being completed. Add these environment variables in Vercel for persistent MongoDB storage:
 
 ```text
 AUTH_SECRET=generate-a-long-random-secret
