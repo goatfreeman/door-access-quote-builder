@@ -159,6 +159,25 @@ export type Database = {
         Insert: Record<string, unknown>;
         Update: Record<string, unknown>;
       };
+      app_settings: {
+        Row: {
+          key: string;
+          value: Json;
+          updated_by: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          key: string;
+          value?: Json;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          value?: Json;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

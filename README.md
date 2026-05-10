@@ -57,6 +57,8 @@ Run [docs/supabase-schema.sql](docs/supabase-schema.sql) in Supabase SQL Editor 
 
 Supabase Auth is now the primary login path when Supabase env vars are present. During migration, Auth.js remains as a fallback for the existing temporary users.
 
+Supabase PostgreSQL is also the primary app database when `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are present. The current collection-shaped app data is stored in `public.app_settings` as `collection:*` JSON keys during the transition; if MongoDB has legacy data and Supabase is empty, the first read copies that collection into Supabase.
+
 In Supabase Auth, add the deployed site URL and callback URL:
 
 ```text

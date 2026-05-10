@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { attachDatabasePool } from "@vercel/functions";
 import { MongoClient } from "mongodb";
 import { parseCatalogItemsCsv } from "@/lib/item-csv";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import type { Json } from "@/lib/supabase/schema-types";
 
 export type StoreCollection = "items" | "templates" | "quotes" | "settings" | "drafts" | "sessions" | "debugLogs";
 type StoreDocument = {
@@ -28,6 +30,14 @@ export function isCollection(value: string): value is StoreCollection {
 }
 
 export function getStoreStatus() {
+  if (isSupabaseStoreEnabled()) {
+    return {
+      provider: "Supabase PostgreSQL",
+      databaseName: new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://supabase.local").hostname,
+      persistent: true,
+    };
+  }
+
   return {
     provider: process.env.MONGODB_URI ? "MongoDB" : "Local memory fallback",
     databaseName: process.env.MONGODB_URI ? databaseName : "Not connected",
@@ -45,6 +55,11 @@ export async function readCollection(collection: StoreCollection) {
 }
 
 export async function writeCollection(collection: StoreCollection, value: unknown) {
+  if (isSupabaseStoreEnabled()) {
+    const wroteToSupabase = await writeSupabaseStoredValue(collection, value);
+    if (wroteToSupabase) return;
+  }
+
   const database = await getMongoDatabase();
 
   if (!database) {
@@ -56,6 +71,23 @@ export async function writeCollection(collection: StoreCollection, value: unknow
 }
 
 async function readStoredValue(collection: StoreCollection) {
+  if (isSupabaseStoreEnabled()) {
+    const stored = await readSupabaseStoredValue(collection);
+    if (stored !== undefined && stored !== null) return stored;
+
+    const legacyStored = await readLegacyStoredValue(collection);
+    if (legacyStored !== null) {
+      await writeSupabaseStoredValue(collection, legacyStored);
+      return legacyStored;
+    }
+
+    if (stored === null) return null;
+  }
+
+  return readLegacyStoredValue(collection);
+}
+
+async function readLegacyStoredValue(collection: StoreCollection) {
   const database = await getMongoDatabase();
 
   if (!database) {
@@ -65,6 +97,40 @@ async function readStoredValue(collection: StoreCollection) {
 
   const document = await database.collection<StoreDocument>(collection).findOne({ _id: collection });
   return document?.value ?? null;
+}
+
+async function readSupabaseStoredValue(collection: StoreCollection) {
+  const supabase = createSupabaseAdminClient();
+  if (!supabase) return undefined;
+
+  const { data, error } = await supabase.from("app_settings").select("value").eq("key", storeKey(collection)).maybeSingle();
+  if (error) return undefined;
+  return data?.value ?? null;
+}
+
+async function writeSupabaseStoredValue(collection: StoreCollection, value: unknown) {
+  const supabase = createSupabaseAdminClient();
+  if (!supabase) return false;
+
+  const { error } = await supabase.from("app_settings").upsert({
+    key: storeKey(collection),
+    value: toJson(value),
+    updated_at: new Date().toISOString(),
+  });
+
+  return !error;
+}
+
+function isSupabaseStoreEnabled() {
+  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+}
+
+function storeKey(collection: StoreCollection) {
+  return `collection:${collection}`;
+}
+
+function toJson(value: unknown): Json {
+  return JSON.parse(JSON.stringify(value)) as Json;
 }
 
 async function readSeedItems() {
