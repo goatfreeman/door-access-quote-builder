@@ -11,7 +11,9 @@ type StoreDocument = {
   updatedAt?: Date;
 };
 
-type SupabaseClient = NonNullable<ReturnType<typeof createSupabaseAdminClient>>;
+type SupabaseClient = {
+  from: (tableName: string) => any;
+};
 type ProfileMap = Map<string, { name?: string; email?: string }>;
 
 const collections = new Set<StoreCollection>(["items", "templates", "quotes", "settings", "drafts", "sessions", "debugLogs"]);
@@ -455,16 +457,11 @@ async function readLegacyStoredValue(collection: StoreCollection) {
 function getSupabaseClient() {
   const supabase = createSupabaseAdminClient();
   if (!supabase) throw new Error("Supabase is not configured");
-  return supabase;
+  return supabase as unknown as SupabaseClient;
 }
 
 function table(supabase: SupabaseClient, tableName: string) {
-  return (supabase.from as unknown as (name: string) => {
-    delete: () => {
-      not: (column: string, operator: string, value: string) => Promise<{ error: { message: string } | null }>;
-      neq: (column: string, value: string) => Promise<{ error: { message: string } | null }>;
-    };
-  })(tableName);
+  return supabase.from(tableName);
 }
 
 function isSupabaseStoreEnabled() {
