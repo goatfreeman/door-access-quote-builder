@@ -51,6 +51,7 @@ Add these Supabase variables in Vercel when the Supabase project is ready:
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=server-only-service-role-key
+NEXT_PUBLIC_SITE_URL=https://your-vercel-domain.vercel.app
 ```
 
 Run [docs/supabase-schema.sql](docs/supabase-schema.sql) in Supabase SQL Editor to create the QQB tables, indexes, triggers, and RLS policies. Keep `SUPABASE_SERVICE_ROLE_KEY` server-only and never expose it to browser code.
@@ -64,7 +65,9 @@ In Supabase Auth, add the deployed site URL and callback URL:
 ```text
 Site URL: https://your-vercel-domain.vercel.app
 Redirect URL: https://your-vercel-domain.vercel.app/auth/callback
+Redirect URL: https://your-vercel-domain.vercel.app
 Local Redirect URL: http://localhost:3000/auth/callback
+Local Redirect URL: http://localhost:3000
 ```
 
 For temporary Supabase password testing, create users in Supabase Auth that match the demo emails:
