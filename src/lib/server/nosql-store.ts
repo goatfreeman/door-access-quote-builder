@@ -115,7 +115,10 @@ async function writeSupabaseStoredValue(collection: StoreCollection, value: unkn
   const supabase = createSupabaseAdminClient();
   if (!supabase) return false;
 
-  const { error } = await supabase.from("app_settings").upsert({
+  const table = supabase.from("app_settings") as unknown as {
+    upsert(payload: { key: string; value: Json; updated_at: string }): Promise<{ error: unknown }>;
+  };
+  const { error } = await table.upsert({
     key: storeKey(collection),
     value: toJson(value),
     updated_at: new Date().toISOString(),
