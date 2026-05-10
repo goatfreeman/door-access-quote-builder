@@ -56,10 +56,10 @@ export async function readDb<T>(collection: DbCollection, fallback: T): Promise<
       window.location.href = "/login";
       return fallback;
     }
-    if (!response.ok) return fallback;
+    if (!response.ok) throw new Error(`Database read failed for ${collection}`);
     return (await response.json()) as T;
-  } catch {
-    return fallback;
+  } catch (error) {
+    throw error instanceof Error ? error : new Error(`Database read failed for ${collection}`);
   }
 }
 

@@ -90,14 +90,8 @@ const dayInMs = 24 * 60 * 60 * 1000;
 const requiredQuoteDetailsError = "Add a customer name, project, and quote number before saving this quote.";
 const placeholderUser: SessionUser = { id: "local-user", name: "User" };
 const STORAGE_KEYS = {
-  items: "qqb.cache.items.v1",
-  templates: "qqb.cache.templates.v1",
-  quotes: "qqb.cache.quotes.v1",
-  settings: "qqb.cache.settings.v1",
   session: "qqb.session.v1",
   draftQuote: "qqb.draft.quote.v1",
-  draftQuotes: "qqb.draft.quotes.v1",
-  sessions: "qqb.cache.sessions.v1",
   deviceId: "qqb.device.id.v1",
 };
 
@@ -238,8 +232,6 @@ function writeStorage<T>(key: string, value: T) {
 function removeStorage(key: string) {
   if (typeof window !== "undefined") window.localStorage.removeItem(key);
 }
-
-const userDraftStorageKey = (userId: string) => `qqb.draft.quote.${userId}.v1`;
 
 async function readServerSessions(fallback: UserSessionRecord[]) {
   try {
@@ -402,7 +394,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   const [pendingOfflineWrites, setPendingOfflineWrites] = useState(0);
   const [draftHydrated, setDraftHydrated] = useState(false);
   const [serverDraftChecked, setServerDraftChecked] = useState(false);
-  const [localDraftUpdatedAt, setLocalDraftUpdatedAt] = useState("");
+  const [databaseLoadFailed, setDatabaseLoadFailed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const cartRef = useRef<HTMLDetailsElement>(null);
   const notificationRef = useRef<HTMLDivElement>(null);
@@ -443,13 +435,13 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
     let cancelled = false;
 
     Promise.all([
-      readDb<CatalogItem[]>("items", readStorage(STORAGE_KEYS.items, [])),
-      readDb<QuoteTemplate[]>("templates", readStorage(STORAGE_KEYS.templates, [])),
-      readDb<SavedQuote[]>("quotes", readStorage(STORAGE_KEYS.quotes, [])),
-      readDb<DraftQuote[]>("drafts", readStorage(STORAGE_KEYS.draftQuotes, [])),
-      readDb<UserSessionRecord[]>("sessions", readStorage(STORAGE_KEYS.sessions, [])),
+      readDb<CatalogItem[]>("items", []),
+      readDb<QuoteTemplate[]>("templates", []),
+      readDb<SavedQuote[]>("quotes", []),
+      readDb<DraftQuote[]>("drafts", []),
+      readDb<UserSessionRecord[]>("sessions", []),
       readDb<DebugLogEntry[]>("debugLogs", []),
-      readDb<ServiceTitanSettings>("settings", readStorage(STORAGE_KEYS.settings, { baseUrl: "", tenantId: "", clientId: "", clientSecret: "" })),
+      readDb<ServiceTitanSettings>("settings", { baseUrl: "", tenantId: "", clientId: "", clientSecret: "" }),
     ]).then(([dbItems, dbTemplates, dbQuotes, dbDraftQuotes, dbSessions, dbDebugLogs, dbSettings]) => {
       if (cancelled) return;
       setItems(dbItems);
@@ -459,6 +451,20 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
       setSessions(Array.isArray(dbSessions) ? dbSessions : []);
       setDebugLogs(Array.isArray(dbDebugLogs) ? dbDebugLogs : []);
       setSettings(dbSettings);
+      setDatabaseLoadFailed(false);
+      setHydrated(true);
+    }).catch((error) => {
+      if (cancelled) return;
+      setDatabaseLoadFailed(true);
+      setNotifications((current) => [
+        {
+          id: makeId("notice"),
+          title: "Database load failed",
+          message: error instanceof Error ? error.message : "The app could not read the database.",
+          createdAt: new Date().toISOString(),
+        },
+        ...current,
+      ]);
       setHydrated(true);
     });
 
@@ -468,35 +474,26 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   }, []);
 
   useEffect(() => {
-    const draftKey = userDraftStorageKey(sessionUser.id);
-    const savedSession = readStorage<{ user?: { id?: string } }>(STORAGE_KEYS.session, {});
-    const userDraft = readStorage<{ lines?: QuoteLine[]; meta?: Partial<QuoteMeta>; quoteStep?: unknown; updatedAt?: string } | null>(draftKey, null);
-    const legacyDraft = savedSession.user?.id === sessionUser.id ? readStorage<{ lines?: QuoteLine[]; meta?: Partial<QuoteMeta>; quoteStep?: unknown; updatedAt?: string }>(STORAGE_KEYS.draftQuote, {}) : {};
-    const draft = userDraft ?? legacyDraft;
-    if (!userDraft && savedSession.user?.id === sessionUser.id && (legacyDraft.lines || legacyDraft.meta)) writeStorage(draftKey, legacyDraft);
     removeStorage(STORAGE_KEYS.draftQuote);
-    setLines(Array.isArray(draft.lines) ? draft.lines : []);
-    setMeta({ ...emptyMeta, ...(draft.meta ?? {}) });
-    if (isQuoteStep(draft.quoteStep)) setQuoteStep(draft.quoteStep);
-    setLocalDraftUpdatedAt(draft.updatedAt ?? "");
+    setLines([]);
+    setMeta(emptyMeta);
     setDraftHydrated(true);
-  }, [sessionUser.id]);
+  }, []);
 
   useEffect(() => {
     if (!hydrated || !draftHydrated || serverDraftChecked) return;
     const serverDraft = draftQuotes
       .filter((draft) => draft.kind === "current" && draft.owner === sessionUser.id)
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
-    const localTime = localDraftUpdatedAt ? new Date(localDraftUpdatedAt).getTime() : 0;
     const serverTime = serverDraft ? new Date(serverDraft.updatedAt).getTime() : 0;
-    if (serverDraft && serverTime > localTime) {
+    if (serverDraft && serverTime > 0) {
       setLines(serverDraft.lines);
       setMeta({ ...emptyMeta, ...serverDraft.meta });
       if (serverDraft.quoteStep && isQuoteStep(serverDraft.quoteStep)) setQuoteStep(serverDraft.quoteStep);
       pushNotification("Draft restored", `Loaded the latest server draft from ${serverDraft.deviceName || "another device"}.`);
     }
     setServerDraftChecked(true);
-  }, [draftHydrated, draftQuotes, hydrated, localDraftUpdatedAt, serverDraftChecked, sessionUser.id]);
+  }, [draftHydrated, draftQuotes, hydrated, serverDraftChecked, sessionUser.id]);
 
   useEffect(() => {
     writeStorage(STORAGE_KEYS.session, { view, quoteStep, user: sessionUser });
@@ -517,13 +514,6 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
     const quote = findQuoteByShareToken(activeQuotes, routeQuoteSlug);
     if (quote && selectedQuote?.id !== quote.id) setSelectedQuote(quote);
   }, [activeQuotes, routeQuoteSlug, selectedQuote?.id, view]);
-
-  useEffect(() => {
-    if (draftHydrated) {
-      const draft = { lines, meta, quoteStep, updatedAt: new Date().toISOString() };
-      writeStorage(userDraftStorageKey(sessionUser.id), draft);
-    }
-  }, [draftHydrated, lines, meta, quoteStep, sessionUser.id]);
 
   useEffect(() => {
     if (!hydrated || !draftHydrated || !serverDraftChecked) return;
@@ -622,32 +612,28 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   }, []);
 
   useEffect(() => {
-    if (hydrated) {
-      writeStorage(STORAGE_KEYS.items, items);
+    if (hydrated && !databaseLoadFailed) {
       void writeDb("items", items).then(() => setPendingOfflineWrites(getPendingWriteCount()));
     }
-  }, [hydrated, items]);
+  }, [databaseLoadFailed, hydrated, items]);
 
   useEffect(() => {
-    if (hydrated) {
-      writeStorage(STORAGE_KEYS.templates, templates);
+    if (hydrated && !databaseLoadFailed) {
       void writeDb("templates", templates).then(() => setPendingOfflineWrites(getPendingWriteCount()));
     }
-  }, [hydrated, templates]);
+  }, [databaseLoadFailed, hydrated, templates]);
 
   useEffect(() => {
-    if (hydrated) {
-      writeStorage(STORAGE_KEYS.quotes, quotes);
+    if (hydrated && !databaseLoadFailed) {
       void writeDb("quotes", quotes).then(() => setPendingOfflineWrites(getPendingWriteCount()));
     }
-  }, [hydrated, quotes]);
+  }, [databaseLoadFailed, hydrated, quotes]);
 
   useEffect(() => {
-    if (hydrated) {
-      writeStorage(STORAGE_KEYS.draftQuotes, draftQuotes);
+    if (hydrated && !databaseLoadFailed) {
       void writeDb("drafts", draftQuotes).then(() => setPendingOfflineWrites(getPendingWriteCount()));
     }
-  }, [draftQuotes, hydrated]);
+  }, [databaseLoadFailed, draftQuotes, hydrated]);
 
   useEffect(() => {
     sessionsRef.current = sessions;
@@ -725,17 +711,10 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   }, [deviceId, deviceName, hydrated, sessionUser.id, sessionUser.name]);
 
   useEffect(() => {
-    if (hydrated) {
-      writeStorage(STORAGE_KEYS.sessions, sessions);
-    }
-  }, [hydrated, sessions]);
-
-  useEffect(() => {
-    if (hydrated) {
-      writeStorage(STORAGE_KEYS.settings, settings);
+    if (hydrated && !databaseLoadFailed) {
       void writeDb("settings", settings).then(() => setPendingOfflineWrites(getPendingWriteCount()));
     }
-  }, [hydrated, settings]);
+  }, [databaseLoadFailed, hydrated, settings]);
 
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent | TouchEvent) => {
@@ -3470,7 +3449,7 @@ function SettingsPage({
                   <p className="font-black">Quote data protection</p>
                 </div>
                 <p className="mt-2 text-sm text-stone-600">
-                  MongoDB uses TLS in transit and provider-side encryption at rest. For production-grade breach protection, the next step is app-level field encryption for customer, project, pricing, and notes before writing quote records.
+                  Supabase PostgreSQL uses TLS in transit and provider-side encryption at rest. For production-grade breach protection, the next step is app-level field encryption for customer, project, pricing, and notes before writing quote records.
                 </p>
               </div>
             </section>

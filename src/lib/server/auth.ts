@@ -11,6 +11,7 @@ type SupabaseProfile = {
 export async function getSessionUser(): Promise<SessionUser | null> {
   const supabaseUser = await getSupabaseSessionUser();
   if (supabaseUser) return supabaseUser;
+  if (isSupabaseAuthEnabled()) return null;
 
   const session = await auth();
   if (!session?.user?.id || !session.user.name) return null;
@@ -24,7 +25,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 }
 
 async function getSupabaseSessionUser(): Promise<SessionUser | null> {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) return null;
+  if (!isSupabaseAuthEnabled()) return null;
 
   try {
     const supabase = await createSupabaseServerClient();
@@ -50,6 +51,10 @@ async function getSupabaseSessionUser(): Promise<SessionUser | null> {
   } catch {
     return null;
   }
+}
+
+function isSupabaseAuthEnabled() {
+  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 }
 
 export async function requireSessionUser() {

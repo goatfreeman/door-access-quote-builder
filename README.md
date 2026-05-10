@@ -7,8 +7,8 @@ Next.js, React, TypeScript, Tailwind CSS, and shadcn/ui app for building quick e
 - Quote flow for picking items, customizing cart lines, reviewing, and finalizing
 - Admin console at `/admin` for admin users to oversee QQB and future managed apps
 - Editable item catalog with unit price, ADI MSRP, vendor, category, and inventory fields
-- Item catalog lives in `public/data/item-database.csv` so UI rewrites can leave item data alone
-- Template database starts empty, so templates can be built from the live item database
+- Item catalog, templates, quotes, drafts, sessions, settings, and debug logs are read from the configured database
+- Template database starts empty, so templates can be built from the live item catalog
 - Expandable quote rows that show item name and quantity first, with price and notes inside the dropdown
 - Saved previous quote summaries with original quote date and edit/remove actions
 - Settings page with account placeholder, database placeholder, ServiceTitan admin fields, sync button, and last sync time
@@ -151,14 +151,7 @@ DELETE /api/v1/sessions/:id
 
 These endpoints use the same login session as the web app. Items and quotes are soft-deleted; templates, drafts, and sessions are removed from their collections.
 
-The item catalog starts from `public/data/item-database.csv` only when the MongoDB `items` collection is empty. After that, MongoDB is the database. Deleting an item also removes that item from templates and the active quote.
-
-The MongoDB structure is:
-
-- `items`
-- `templates`
-- `quotes`
-- `settings`
+Supabase PostgreSQL is the source of truth when `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are configured. The app no longer seeds items from a bundled CSV file or reads stale browser caches as database fallbacks.
 
 Templates should store item IDs in their line records. When an item is deleted, the backend should cascade that item ID out of every template line before saving.
 

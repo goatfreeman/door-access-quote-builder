@@ -1,8 +1,5 @@
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 import { attachDatabasePool } from "@vercel/functions";
 import { MongoClient } from "mongodb";
-import { parseCatalogItemsCsv } from "@/lib/item-csv";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/schema-types";
 
@@ -48,7 +45,6 @@ export function getStoreStatus() {
 export async function readCollection(collection: StoreCollection) {
   const stored = await readStoredValue(collection);
   if (stored !== null) return stored;
-  if (collection === "items") return readSeedItems();
   if (collection === "settings") return {};
   if (collection === "drafts" || collection === "sessions" || collection === "debugLogs") return [];
   return [];
@@ -58,6 +54,7 @@ export async function writeCollection(collection: StoreCollection, value: unknow
   if (isSupabaseStoreEnabled()) {
     const wroteToSupabase = await writeSupabaseStoredValue(collection, value);
     if (wroteToSupabase) return;
+    throw new Error("Supabase write failed");
   }
 
   const database = await getMongoDatabase();
@@ -74,14 +71,8 @@ async function readStoredValue(collection: StoreCollection) {
   if (isSupabaseStoreEnabled()) {
     const stored = await readSupabaseStoredValue(collection);
     if (stored !== undefined && stored !== null) return stored;
-
-    const legacyStored = await readLegacyStoredValue(collection);
-    if (legacyStored !== null) {
-      await writeSupabaseStoredValue(collection, legacyStored);
-      return legacyStored;
-    }
-
-    if (stored === null) return null;
+    if (stored === undefined) throw new Error("Supabase read failed");
+    return null;
   }
 
   return readLegacyStoredValue(collection);
@@ -137,11 +128,6 @@ function storeKey(collection: StoreCollection) {
 
 function toJson(value: unknown): Json {
   return JSON.parse(JSON.stringify(value)) as Json;
-}
-
-async function readSeedItems() {
-  const csv = await readFile(join(process.cwd(), "public", "data", "item-database.csv"), "utf8");
-  return parseCatalogItemsCsv(csv);
 }
 
 async function getMongoDatabase() {

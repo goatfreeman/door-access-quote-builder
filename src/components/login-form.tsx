@@ -56,6 +56,8 @@ export function LoginForm({ error }: { error?: string }) {
             },
           });
           if (!supabaseError) return;
+          setMessage("Microsoft sign-in could not be started.");
+          return;
         }
         const result = await signIn("microsoft-entra-id", { callbackUrl: "/", redirect: false }, { login_hint: email });
         if (result?.url) {
@@ -99,6 +101,14 @@ export function LoginForm({ error }: { error?: string }) {
           window.location.href = "/";
           return;
         }
+        await writeDebugLog({
+          type: "auth",
+          level: "warning",
+          message: "Supabase password sign-in failed.",
+          metadata: { email, error: supabaseError.message },
+        });
+        setMessage("Invalid email or password.");
+        return;
       }
 
       const result = await signIn("credentials", {

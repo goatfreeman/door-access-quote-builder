@@ -106,7 +106,7 @@ export function AdminConsole({ projects, databaseStatus, items, quotes, drafts, 
               <HealthRow label="Deleted quotes in recovery" value={statFormatter.format(deletedQuotes.length)} />
               <HealthRow label="Quote revisions tracked" value={statFormatter.format(activeQuotes.reduce((sum, quote) => sum + (quote.revisions?.length ?? 0), 0))} />
               <HealthRow label="Server-tracked devices" value={statFormatter.format(sessions.length)} />
-              <HealthRow label="Database mode" value={databaseStatus.persistent ? "Persistent MongoDB" : "Local fallback"} />
+              <HealthRow label="Database mode" value={databaseStatus.persistent ? databaseStatus.provider : "Not connected"} />
             </div>
           </section>
         </div>
