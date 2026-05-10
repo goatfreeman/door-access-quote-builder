@@ -235,6 +235,12 @@ function writeStorage<T>(key: string, value: T) {
   if (typeof window !== "undefined") window.localStorage.setItem(key, JSON.stringify(value));
 }
 
+function removeStorage(key: string) {
+  if (typeof window !== "undefined") window.localStorage.removeItem(key);
+}
+
+const userDraftStorageKey = (userId: string) => `qqb.draft.quote.${userId}.v1`;
+
 async function readServerSessions(fallback: UserSessionRecord[]) {
   try {
     const response = await fetch("/api/v1/sessions", { cache: "no-store" });
@@ -462,13 +468,19 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   }, []);
 
   useEffect(() => {
-    const draft = readStorage<{ lines?: QuoteLine[]; meta?: Partial<QuoteMeta>; quoteStep?: unknown; updatedAt?: string }>(STORAGE_KEYS.draftQuote, {});
+    const draftKey = userDraftStorageKey(sessionUser.id);
+    const savedSession = readStorage<{ user?: { id?: string } }>(STORAGE_KEYS.session, {});
+    const userDraft = readStorage<{ lines?: QuoteLine[]; meta?: Partial<QuoteMeta>; quoteStep?: unknown; updatedAt?: string } | null>(draftKey, null);
+    const legacyDraft = savedSession.user?.id === sessionUser.id ? readStorage<{ lines?: QuoteLine[]; meta?: Partial<QuoteMeta>; quoteStep?: unknown; updatedAt?: string }>(STORAGE_KEYS.draftQuote, {}) : {};
+    const draft = userDraft ?? legacyDraft;
+    if (!userDraft && savedSession.user?.id === sessionUser.id && (legacyDraft.lines || legacyDraft.meta)) writeStorage(draftKey, legacyDraft);
+    removeStorage(STORAGE_KEYS.draftQuote);
     setLines(Array.isArray(draft.lines) ? draft.lines : []);
     setMeta({ ...emptyMeta, ...(draft.meta ?? {}) });
     if (isQuoteStep(draft.quoteStep)) setQuoteStep(draft.quoteStep);
     setLocalDraftUpdatedAt(draft.updatedAt ?? "");
     setDraftHydrated(true);
-  }, []);
+  }, [sessionUser.id]);
 
   useEffect(() => {
     if (!hydrated || !draftHydrated || serverDraftChecked) return;
@@ -509,9 +521,9 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   useEffect(() => {
     if (draftHydrated) {
       const draft = { lines, meta, quoteStep, updatedAt: new Date().toISOString() };
-      writeStorage(STORAGE_KEYS.draftQuote, draft);
+      writeStorage(userDraftStorageKey(sessionUser.id), draft);
     }
-  }, [draftHydrated, lines, meta, quoteStep]);
+  }, [draftHydrated, lines, meta, quoteStep, sessionUser.id]);
 
   useEffect(() => {
     if (!hydrated || !draftHydrated || !serverDraftChecked) return;
