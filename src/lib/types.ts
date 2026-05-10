@@ -33,7 +33,9 @@ export type QuoteLine = {
   itemId: string;
   name: string;
   sku: string;
+  packageId?: string;
   packageName?: string;
+  packageSourceName?: string;
   quantity: number;
   unitPrice: number;
   msrp?: number;

@@ -1,6 +1,5 @@
 import type { SessionUser } from "@/lib/auth-types";
-import { auth } from "@/auth";
-import { getLoginMethod, isAzureSsoEmail, tempUsers } from "@/lib/server/auth-config";
+import { getLoginMethod, isAzureSsoEmail } from "@/lib/server/auth-config";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type SupabaseProfile = {
@@ -9,19 +8,7 @@ type SupabaseProfile = {
 };
 
 export async function getSessionUser(): Promise<SessionUser | null> {
-  const supabaseUser = await getSupabaseSessionUser();
-  if (supabaseUser) return supabaseUser;
-  if (isSupabaseAuthEnabled()) return null;
-
-  const session = await auth();
-  if (!session?.user?.id || !session.user.name) return null;
-  return {
-    id: session.user.id,
-    name: session.user.name,
-    email: session.user.email ?? undefined,
-    provider: session.user.provider,
-    role: session.user.role,
-  };
+  return getSupabaseSessionUser();
 }
 
 async function getSupabaseSessionUser(): Promise<SessionUser | null> {
@@ -61,4 +48,4 @@ export async function requireSessionUser() {
   return getSessionUser();
 }
 
-export { getLoginMethod, isAzureSsoEmail, tempUsers };
+export { getLoginMethod, isAzureSsoEmail };

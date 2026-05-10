@@ -1,16 +1,8 @@
-import { attachDatabasePool } from "@vercel/functions";
-import { MongoClient } from "mongodb";
 import type { CatalogItem, DebugLogEntry, DraftQuote, QuoteMeta, QuoteRevision, QuoteTemplate, SavedQuote, ServiceTitanSettings, UserSessionRecord } from "@/lib/types";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/schema-types";
 
 export type StoreCollection = "items" | "templates" | "quotes" | "settings" | "drafts" | "sessions" | "debugLogs";
-type StoreDocument = {
-  _id: StoreCollection;
-  value?: unknown;
-  updatedAt?: Date;
-};
-
 type SupabaseClient = {
   from: (tableName: string) => any;
 };
@@ -18,18 +10,8 @@ type DbRow = Record<string, any>;
 type ProfileMap = Map<string, { name?: string; email?: string }>;
 
 const collections = new Set<StoreCollection>(["items", "templates", "quotes", "settings", "drafts", "sessions", "debugLogs"]);
-const databaseName = process.env.MONGODB_DB ?? "quick_quote_builder";
 const nilUuid = "00000000-0000-0000-0000-000000000000";
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const memoryStore = globalThis as typeof globalThis & {
-  quickQuoteMemoryStore?: Partial<Record<StoreCollection, unknown>>;
-  quickQuoteMongoClient?: Promise<MongoClient>;
-};
-
-function getMemoryStore() {
-  memoryStore.quickQuoteMemoryStore ??= {};
-  return memoryStore.quickQuoteMemoryStore;
-}
 
 export function isCollection(value: string): value is StoreCollection {
   return collections.has(value as StoreCollection);
@@ -39,41 +21,24 @@ export function getStoreStatus() {
   if (isSupabaseStoreEnabled()) {
     return {
       provider: "Supabase PostgreSQL",
-      databaseName: new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://supabase.local").hostname,
       persistent: true,
     };
   }
 
   return {
-    provider: process.env.MONGODB_URI ? "MongoDB" : "Local memory fallback",
-    databaseName: process.env.MONGODB_URI ? databaseName : "Not connected",
-    persistent: Boolean(process.env.MONGODB_URI),
+    provider: "Not configured",
+    persistent: false,
   };
 }
 
 export async function readCollection(collection: StoreCollection) {
-  if (isSupabaseStoreEnabled()) return readSupabaseCollection(collection);
-
-  const stored = await readLegacyStoredValue(collection);
-  if (stored !== null) return stored;
-  if (collection === "settings") return {};
-  return [];
+  if (!isSupabaseStoreEnabled()) throw new Error("Supabase is not configured");
+  return readSupabaseCollection(collection);
 }
 
 export async function writeCollection(collection: StoreCollection, value: unknown) {
-  if (isSupabaseStoreEnabled()) {
-    await writeSupabaseCollection(collection, value);
-    return;
-  }
-
-  const database = await getMongoDatabase();
-
-  if (!database) {
-    getMemoryStore()[collection] = value;
-    return;
-  }
-
-  await database.collection<StoreDocument>(collection).updateOne({ _id: collection }, { $set: { value, updatedAt: new Date() } }, { upsert: true });
+  if (!isSupabaseStoreEnabled()) throw new Error("Supabase is not configured");
+  await writeSupabaseCollection(collection, value);
 }
 
 async function readSupabaseCollection(collection: StoreCollection) {
@@ -443,18 +408,6 @@ async function deleteAllRows(supabase: SupabaseClient, tableName: string) {
   if (error) throw new Error(error.message);
 }
 
-async function readLegacyStoredValue(collection: StoreCollection) {
-  const database = await getMongoDatabase();
-
-  if (!database) {
-    const value = getMemoryStore()[collection];
-    return value === undefined ? null : value;
-  }
-
-  const document = await database.collection<StoreDocument>(collection).findOne({ _id: collection });
-  return document?.value ?? null;
-}
-
 function getSupabaseClient() {
   const supabase = createSupabaseAdminClient();
   if (!supabase) throw new Error("Supabase is not configured");
@@ -552,18 +505,4 @@ function isObject(value: unknown): value is Record<string, unknown> {
 
 function toJson(value: unknown): Json {
   return JSON.parse(JSON.stringify(value)) as Json;
-}
-
-async function getMongoDatabase() {
-  const uri = process.env.MONGODB_URI;
-  if (!uri) return null;
-
-  if (!memoryStore.quickQuoteMongoClient) {
-    const client = new MongoClient(uri);
-    attachDatabasePool(client);
-    memoryStore.quickQuoteMongoClient = client.connect();
-  }
-
-  const client = await memoryStore.quickQuoteMongoClient;
-  return client.db(databaseName);
 }

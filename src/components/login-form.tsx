@@ -1,22 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { Lock, Mail } from "lucide-react";
-import { signIn } from "next-auth/react";
+import { KeyRound, Lock, Mail } from "lucide-react";
 import { writeDebugLog } from "@/lib/debug-log";
 import { getAuthRedirectUrl, getSupabaseAuthClient } from "@/lib/supabase/auth-client";
 
 const deviceIdStorageKey = "qqb.device.id.v1";
 const sessionStorageKey = "qqb.cache.sessions.v1";
 
-const demoUsers = [
-  { label: "Admin User", email: "qqb.admin@example.com", password: "QuoteAdmin2026!" },
-  { label: "Tech User", email: "qqb.tech@example.com", password: "QuoteTech2026!" },
-];
-
 export function LoginForm({ error }: { error?: string }) {
-  const [email, setEmail] = useState(demoUsers[0].email);
-  const [password, setPassword] = useState(demoUsers[0].password);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [mode, setMode] = useState<"email" | "password">("email");
   const [message, setMessage] = useState(error ?? "");
   const [loading, setLoading] = useState(false);
@@ -59,12 +53,7 @@ export function LoginForm({ error }: { error?: string }) {
           setMessage("Microsoft sign-in could not be started.");
           return;
         }
-        const result = await signIn("microsoft-entra-id", { callbackUrl: "/", redirect: false }, { login_hint: email });
-        if (result?.url) {
-          window.location.href = result.url;
-          return;
-        }
-        setMessage(result?.error ?? "Microsoft sign-in could not be started.");
+        setMessage("Supabase Auth is not configured for Microsoft sign-in.");
         return;
       }
 
@@ -89,56 +78,85 @@ export function LoginForm({ error }: { error?: string }) {
         metadata: { email },
       });
       const supabase = getSupabaseAuthClient();
-      if (supabase) {
-        const { error: supabaseError } = await supabase.auth.signInWithPassword({ email, password });
-        if (!supabaseError) {
-          await writeDebugLog({
-            type: "auth",
-            level: "info",
-            message: "Supabase password sign-in succeeded.",
-            metadata: { email },
-          });
-          window.location.href = "/";
-          return;
-        }
-        await writeDebugLog({
-          type: "auth",
-          level: "warning",
-          message: "Supabase password sign-in failed.",
-          metadata: { email, error: supabaseError.message },
-        });
-        setMessage("Invalid email or password.");
+      if (!supabase) {
+        setMessage("Supabase Auth is not configured.");
         return;
       }
-
-      const result = await signIn("credentials", {
-        email,
-        password,
-        redirect: false,
-        callbackUrl: "/",
-      });
-      if (result?.error) {
+      const { error: supabaseError } = await supabase.auth.signInWithPassword({ email, password });
+      if (!supabaseError) {
         await writeDebugLog({
           type: "auth",
-          level: "warning",
-          message: "Password sign-in failed.",
-          metadata: { email, error: result.error },
+          level: "info",
+          message: "Supabase password sign-in succeeded.",
+          metadata: { email },
         });
-        setMessage("Invalid email or password.");
+        window.location.replace("/");
         return;
       }
       await writeDebugLog({
         type: "auth",
-        level: "info",
-        message: "Password sign-in succeeded.",
-        metadata: { email },
+        level: "warning",
+        message: "Supabase password sign-in failed.",
+        metadata: { email, error: supabaseError.message },
       });
-      window.location.href = result?.url || "/";
+      setMessage("Invalid email or password.");
     } catch {
       await writeDebugLog({
         type: "auth",
         level: "error",
         message: "Password sign-in request failed.",
+        metadata: { email },
+      });
+      setMessage("Sign-in service is not responding. Try refreshing the page.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const sendMagicLink = async () => {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes("@")) {
+      setMessage("Enter a valid email address first.");
+      return;
+    }
+    setLoading(true);
+    setMessage("");
+    try {
+      window.localStorage.removeItem(deviceIdStorageKey);
+      window.localStorage.removeItem(sessionStorageKey);
+      const supabase = getSupabaseAuthClient();
+      if (!supabase) {
+        setMessage("Supabase Auth is not configured.");
+        return;
+      }
+      const { error: magicLinkError } = await supabase.auth.signInWithOtp({
+        email: cleanEmail,
+        options: {
+          emailRedirectTo: getAuthRedirectUrl(),
+        },
+      });
+      if (magicLinkError) {
+        await writeDebugLog({
+          type: "auth",
+          level: "warning",
+          message: "Supabase magic link sign-in failed.",
+          metadata: { email: cleanEmail, error: magicLinkError.message },
+        });
+        setMessage("Magic link could not be sent.");
+        return;
+      }
+      await writeDebugLog({
+        type: "auth",
+        level: "info",
+        message: "Supabase magic link sent.",
+        metadata: { email: cleanEmail },
+      });
+      setMessage("Magic link sent. Check your email to sign in.");
+    } catch {
+      await writeDebugLog({
+        type: "auth",
+        level: "error",
+        message: "Magic link request failed.",
         metadata: { email },
       });
       setMessage("Sign-in service is not responding. Try refreshing the page.");
@@ -153,7 +171,7 @@ export function LoginForm({ error }: { error?: string }) {
         <div>
           <div className="grid size-11 place-items-center rounded-lg bg-stone-900 text-xl font-black text-white">Q</div>
           <h1 className="mt-4 text-2xl font-black">Sign in to Quick Quote Builder</h1>
-          <p className="mt-2 text-sm text-stone-600">Enter your email first. SSO users are sent to Microsoft; other users continue with a password.</p>
+          <p className="mt-2 text-sm text-stone-600">Enter your email first. SSO users are sent to Microsoft; other users can use a password or magic link.</p>
         </div>
 
         {message ? <p className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-900">{message}</p> : null}
@@ -195,38 +213,29 @@ export function LoginForm({ error }: { error?: string }) {
             </label>
           ) : null}
           {mode === "email" ? (
-            <button className="button-primary" onClick={continueWithEmail} disabled={loading}>
-              {loading ? "Checking..." : "Continue"}
-            </button>
+            <div className="grid gap-2">
+              <button className="button-primary" onClick={continueWithEmail} disabled={loading}>
+                {loading ? "Checking..." : "Continue"}
+              </button>
+              <button className="button-secondary justify-center" onClick={sendMagicLink} disabled={loading}>
+                <KeyRound size={16} />
+                Email magic link
+              </button>
+            </div>
           ) : (
             <div className="grid gap-2">
               <button className="button-primary" onClick={submitPassword} disabled={loading}>
                 {loading ? "Signing in..." : "Sign in"}
+              </button>
+              <button className="button-secondary justify-center" onClick={sendMagicLink} disabled={loading}>
+                <KeyRound size={16} />
+                Email magic link instead
               </button>
               <button className="button-ghost justify-center" onClick={() => setMode("email")}>
                 Use a different email
               </button>
             </div>
           )}
-        </div>
-
-        <div className="mt-5 grid gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3">
-          <p className="text-xs font-black uppercase tracking-normal text-stone-500">Temporary test users</p>
-          {demoUsers.map((user) => (
-            <button
-              key={user.email}
-              className="rounded-md bg-white p-2 text-left text-sm hover:bg-teal-50"
-              onClick={() => {
-                setEmail(user.email);
-                setPassword(user.password);
-                setMode("password");
-                setMessage("");
-              }}
-            >
-              <strong>{user.label}</strong>
-              <span className="block text-stone-600">{user.email}</span>
-            </button>
-          ))}
         </div>
       </section>
     </main>

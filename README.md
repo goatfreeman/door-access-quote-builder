@@ -55,7 +55,7 @@ SUPABASE_SERVICE_ROLE_KEY=server-only-service-role-key
 
 Run [docs/supabase-schema.sql](docs/supabase-schema.sql) in Supabase SQL Editor to create the QQB tables, indexes, triggers, and RLS policies. Keep `SUPABASE_SERVICE_ROLE_KEY` server-only and never expose it to browser code.
 
-Supabase Auth is the primary login path when Supabase env vars are present. Auth.js is only kept for non-Supabase local development.
+Supabase Auth is the login path. Password login, magic-link login, and Azure SSO all go through Supabase.
 
 Supabase PostgreSQL is also the primary app database when `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are present. Items, templates, quotes, drafts, sessions, and debug logs are stored in their matching Supabase tables. Settings are stored in `public.app_settings` under the `settings` key.
 
@@ -76,36 +76,18 @@ qqb.tech@example.com
 
 Set the admin user's `profiles.role` to `admin` after that profile is created.
 
-### Current MongoDB Runtime
-
-The current deployed runtime still supports MongoDB while the Supabase migration is being completed. Add these environment variables in Vercel for persistent MongoDB storage:
+For Microsoft Entra ID SSO routing, configure Azure as a Supabase Auth provider and add:
 
 ```text
-AUTH_SECRET=generate-a-long-random-secret
-MONGODB_URI=mongodb+srv://...
-MONGODB_DB=quick_quote_builder
-NEXT_PUBLIC_APP_STAGE=development
-```
-
-For Microsoft Entra ID SSO with Auth.js, also add:
-
-```text
-AUTH_MICROSOFT_ENTRA_ID_ID=<Application client ID>
-AUTH_MICROSOFT_ENTRA_ID_SECRET=<Client secret value>
-AUTH_MICROSOFT_ENTRA_ID_ISSUER=https://login.microsoftonline.com/<Directory tenant ID>/v2.0/
 AZURE_SSO_EMAILS=user@example.com
 AZURE_SSO_DOMAINS=example.com
 ```
 
-Without `MONGODB_URI`, the app uses a temporary in-memory fallback for setup only. Production persistence needs MongoDB.
-
 The UI shows a `Dev Build` badge unless `NEXT_PUBLIC_APP_STAGE` is set to `production`.
-
-MongoDB connections are managed with `attachDatabasePool` from `@vercel/functions` for Vercel Functions.
 
 ## Future Database and Integrations
 
-Current editable data is stored through the app API routes backed by MongoDB:
+Current editable data is stored through the app API routes backed by Supabase PostgreSQL:
 
 ```text
 /api/db/items

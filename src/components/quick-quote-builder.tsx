@@ -7,6 +7,8 @@ import {
   Database,
   FileText,
   History,
+  Info,
+  KeyRound,
   Mail,
   Minus,
   Menu,
@@ -25,7 +27,6 @@ import {
 } from "lucide-react";
 import type { Dispatch, SetStateAction } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { signOut as authSignOut } from "next-auth/react";
 import { getPendingWriteCount, readDb, syncPendingWrites, writeDb } from "@/lib/client-db";
 import { writeDebugLog } from "@/lib/debug-log";
 import { getSupabaseAuthClient } from "@/lib/supabase/auth-client";
@@ -35,14 +36,8 @@ import type { CatalogItem, DebugLogEntry, DraftQuote, QuoteLine, QuoteMeta, Quot
 type View = "home" | "quote" | "items" | "templates" | "previous" | "settings" | "client";
 type QuoteStep = "pick" | "customize" | "review" | "finalize";
 type SettingsSection = "account" | "database" | "serviceTitan" | "adi" | "sync" | "debug" | "recovery";
-type AdiCatalogMatch = Omit<CatalogItem, "id"> & {
-  imageUrl: string;
-  manufacturerSku: string;
-  matchScore?: number;
-};
 type DatabaseStatus = {
   provider: string;
-  databaseName: string;
   persistent: boolean;
 };
 type QuoteTotals = {
@@ -143,69 +138,6 @@ function getDeviceName() {
   return `${platform} / ${navigator.userAgent.includes("Mobile") ? "Mobile" : "Desktop"}`;
 }
 
-const adiCatalog: AdiCatalogMatch[] = [
-  {
-    sku: "AXIS-P3265-LVE",
-    manufacturerSku: "P3265-LVE",
-    name: "Axis P3265-LVE Outdoor Dome Network Camera",
-    category: "Camera",
-    unitPrice: 724,
-    msrp: 899,
-    vendor: "ADI",
-    inventory: 12,
-    notes: "ADI placeholder match. Replace with live ADI API data when credentials are connected.",
-    imageUrl: "https://placehold.co/180x135/e7f5f2/0f766e?text=Axis+Camera",
-  },
-  {
-    sku: "HON-PW6K1IC",
-    manufacturerSku: "PW6K1IC",
-    name: "Honeywell Pro-Watch Intelligent Controller",
-    category: "Access Control",
-    unitPrice: 930,
-    msrp: 1195,
-    vendor: "ADI",
-    inventory: 5,
-    notes: "ADI placeholder match. Replace with live ADI API data when credentials are connected.",
-    imageUrl: "https://placehold.co/180x135/f2f4f7/334155?text=Honeywell+Panel",
-  },
-  {
-    sku: "HID-920NTNNEK00000",
-    manufacturerSku: "920NTNNEK00000",
-    name: "HID Signo 20 Mullion Smart Card Reader",
-    category: "Access Control",
-    unitPrice: 185,
-    msrp: 245,
-    vendor: "ADI",
-    inventory: 28,
-    notes: "ADI placeholder match. Replace with live ADI API data when credentials are connected.",
-    imageUrl: "https://placehold.co/180x135/f8fafc/1f2937?text=HID+Reader",
-  },
-  {
-    sku: "ASSA-9600-LBM",
-    manufacturerSku: "9600-LBM",
-    name: "ASSA ABLOY HES 9600 Electric Strike",
-    category: "Door Hardware",
-    unitPrice: 318,
-    msrp: 415,
-    vendor: "ADI",
-    inventory: 18,
-    notes: "ADI placeholder match. Replace with live ADI API data when credentials are connected.",
-    imageUrl: "https://placehold.co/180x135/f4f4f5/525252?text=9600+Strike",
-  },
-  {
-    sku: "ALTRONIX-AL600ULACM",
-    manufacturerSku: "AL600ULACM",
-    name: "Altronix Access Power Controller with Power Supply",
-    category: "Power",
-    unitPrice: 265,
-    msrp: 349,
-    vendor: "ADI",
-    inventory: 9,
-    notes: "ADI placeholder match. Replace with live ADI API data when credentials are connected.",
-    imageUrl: "https://placehold.co/180x135/fff7ed/9a3412?text=Power+Supply",
-  },
-];
-
 const makeId = (prefix: string) => {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return `${prefix}-${crypto.randomUUID()}`;
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -302,26 +234,6 @@ function normalizeSearchValue(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
-function fuzzyScore(query: string, candidate: AdiCatalogMatch) {
-  const normalizedQuery = normalizeSearchValue(query);
-  if (normalizedQuery.length < 2) return 0;
-  const searchable = normalizeSearchValue(`${candidate.name} ${candidate.sku} ${candidate.manufacturerSku} ${candidate.category}`);
-  const compactSearchable = searchable.replace(/\s/g, "");
-  const compactQuery = normalizedQuery.replace(/\s/g, "");
-  let score = 0;
-
-  if (searchable.includes(normalizedQuery)) score += 70;
-  if (compactSearchable.includes(compactQuery)) score += 45;
-
-  const tokens = normalizedQuery.split(" ").filter(Boolean);
-  tokens.forEach((token) => {
-    if (searchable.includes(token)) score += token.length > 3 ? 16 : 8;
-  });
-
-  if (candidate.sku.toLowerCase().includes(compactQuery) || candidate.manufacturerSku.toLowerCase().includes(compactQuery)) score += 40;
-  return Math.min(score, 100);
-}
-
 function getDoorTemplateRequirements(template: QuoteTemplate): TemplateRequirement[] {
   const text = normalizeSearchValue(`${template.name} ${template.description}`);
   if (!text.includes("door") && !text.includes("access")) return [];
@@ -406,6 +318,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   const [serverDraftChecked, setServerDraftChecked] = useState(false);
   const [databaseLoadFailed, setDatabaseLoadFailed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const cartRef = useRef<HTMLDetailsElement>(null);
   const notificationRef = useRef<HTMLDivElement>(null);
   const settingsHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -656,9 +569,10 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   }, [sessions]);
 
   const signOutEverywhere = async (callbackUrl = "/login") => {
+    setSigningOut(true);
     const supabase = getSupabaseAuthClient();
     if (supabase) await supabase.auth.signOut();
-    await authSignOut({ callbackUrl });
+    window.location.replace(callbackUrl);
   };
 
   useEffect(() => {
@@ -825,6 +739,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   };
 
   const startSettingsHold = () => {
+    if (sessionUser.role !== "admin") return;
     if (adminUnlocked) return;
     if (settingsHoldTimer.current) clearTimeout(settingsHoldTimer.current);
     settingsHoldTimer.current = setTimeout(() => {
@@ -839,9 +754,9 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
     settingsHoldTimer.current = null;
   };
 
-  const addItem = (item: CatalogItem, packageName?: string, quantity = 1) => {
+  const addItem = (item: CatalogItem, packageName?: string, quantity = 1, packageId?: string, packageSourceName?: string) => {
     setLines((current) => {
-      const existing = current.find((line) => line.itemId === item.id && line.packageName === packageName);
+      const existing = current.find((line) => line.itemId === item.id && (packageId ? line.packageId === packageId : line.packageName === packageName));
       if (existing) {
         return current.map((line) => (line.lineId === existing.lineId ? { ...line, quantity: line.quantity + quantity } : line));
       }
@@ -852,7 +767,9 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
           itemId: item.id,
           name: item.name,
           sku: item.sku,
+          packageId,
           packageName,
+          packageSourceName,
           quantity,
           unitPrice: item.unitPrice,
           msrp: item.msrp,
@@ -863,9 +780,10 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   };
 
   const addTemplate = (template: QuoteTemplate, jumpToCustomize = true) => {
+    const packageId = makeId("setup");
     template.lines.forEach((line) => {
       const item = activeItems.find((candidate) => candidate.id === line.itemId);
-      if (item) addItem(item, template.name, line.quantity);
+      if (item) addItem(item, template.name, line.quantity, packageId, template.name);
     });
     pushNotification("Template added", `${template.name || "Template"} was added to the quote workspace.`);
     if (jumpToCustomize) {
@@ -878,9 +796,13 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
     setLines((current) => current.map((line) => (line.lineId === lineId ? { ...line, ...patch } : line)));
   };
 
-  const renamePackage = (packageName: string, nextName: string) => {
-    const cleanName = nextName.trim() || packageName;
-    setLines((current) => current.map((line) => (line.packageName === packageName ? { ...line, packageName: cleanName } : line)));
+  const renamePackage = (packageKey: string, nextName: string) => {
+    setLines((current) =>
+      current.map((line) => {
+        const lineKey = line.packageId ?? line.packageName;
+        return lineKey === packageKey ? { ...line, packageName: nextName } : line;
+      }),
+    );
   };
 
   const deleteItemEverywhere = (itemId: string) => {
@@ -1032,6 +954,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   };
 
   const signOut = async () => {
+    setSigningOut(true);
     const endedAt = new Date().toISOString();
     const sessionId = `${sessionUser.id}-${deviceId}`;
     const existing = sessionsRef.current.find((session) => session.id === sessionId);
@@ -1049,6 +972,14 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
     await upsertServerSession(endedSession).catch(() => undefined);
     await signOutEverywhere("/login");
   };
+
+  if (signingOut) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-stone-100 text-stone-950">
+        <div className="rounded-lg border border-stone-200 bg-white p-5 text-sm font-bold shadow-xl">Signing out...</div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-stone-100 text-stone-950">
@@ -1155,7 +1086,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
                       </div>
                     ))}
                     <div className="rounded-lg border border-stone-200 bg-white p-3">
-                      <p>{isOnline ? "Online. Database changes sync automatically." : "Offline. Changes are saved locally and will sync when the browser is online again."}</p>
+                      <p>{isOnline ? "Online. Database changes sync automatically." : "Offline. Supabase writes are paused until the browser is online again."}</p>
                       <p className="mt-1">{pendingOfflineWrites ? `${pendingOfflineWrites} database update${pendingOfflineWrites === 1 ? "" : "s"} waiting to sync.` : "No offline database updates waiting."}</p>
                     </div>
                     <div className="rounded-lg border border-stone-200 bg-white p-3">ServiceTitan sync is in placeholder mode until production credentials are connected.</div>
@@ -1174,7 +1105,18 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
         {view === "quote" ? (
           <>
             {quoteStep !== "finalize" ? (
-              <CatalogPanel items={visibleItems} categories={catalogCategories} category={category} search={search} setSearch={setSearch} setCategory={setCategory} onAdd={addItem} />
+              <CatalogPanel
+                items={visibleItems}
+                categories={catalogCategories}
+                category={category}
+                search={search}
+                setSearch={setSearch}
+                setCategory={setCategory}
+                onAdd={(item) => {
+                  addItem(item);
+                  setQuoteStep("customize");
+                }}
+              />
             ) : null}
             <QuoteWorkspace
               step={quoteStep}
@@ -1672,7 +1614,7 @@ function QuoteWorkspace(props: {
   templates: QuoteTemplate[];
   onAddTemplate: (template: QuoteTemplate, jumpToCustomize?: boolean) => void;
   onStartFresh: () => void;
-  onAddItemToPackage: (item: CatalogItem, packageName?: string, quantity?: number) => void;
+  onAddItemToPackage: (item: CatalogItem, packageName?: string, quantity?: number, packageId?: string, packageSourceName?: string) => void;
   onUpdateLine: (lineId: string, patch: Partial<QuoteLine>) => void;
   onRenamePackage: (packageName: string, nextName: string) => void;
   onRemoveLine: (lineId: string) => void;
@@ -1683,6 +1625,7 @@ function QuoteWorkspace(props: {
 }) {
   const steps: QuoteStep[] = ["pick", "customize", "review", "finalize"];
   const [addedTemplateId, setAddedTemplateId] = useState<string | null>(null);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
 
   const addTemplateFromPicker = (template: QuoteTemplate) => {
     if (addedTemplateId) return;
@@ -1719,11 +1662,16 @@ function QuoteWorkspace(props: {
                   <p className="mt-2 text-sm text-stone-600">Build a quote by adding catalog items from scratch.</p>
                 </button>
                 <div className="rounded-lg border border-stone-200 bg-stone-50 p-5">
-                  <p className="font-black">From Templates</p>
-                  <p className="mt-2 text-sm text-stone-600">Choose a saved setup to prefill the quote.</p>
+                  <button className="flex w-full items-center justify-between gap-3 text-left" onClick={() => setTemplatesOpen((open) => !open)}>
+                    <span>
+                      <span className="block font-black">From Templates</span>
+                      <span className="mt-2 block text-sm text-stone-600">Choose a saved setup to prefill the quote.</span>
+                    </span>
+                    <ChevronDown size={18} className={`transition ${templatesOpen ? "rotate-180" : ""}`} />
+                  </button>
                 </div>
               </div>
-              <div className="grid gap-3 md:grid-cols-3">
+              {templatesOpen ? <div className="grid gap-3 rounded-lg border border-stone-200 bg-white p-3 md:grid-cols-3">
                 {props.templates.length ? (
                   props.templates.map((template) => {
                     const isAdded = addedTemplateId === template.id;
@@ -1743,19 +1691,21 @@ function QuoteWorkspace(props: {
                 ) : (
                   <p className="rounded-lg border border-dashed border-stone-300 bg-stone-50 p-5 text-center text-stone-500 md:col-span-3">No templates yet.</p>
                 )}
-              </div>
+              </div> : null}
             </div>
           ) : null}
 
           {props.step === "customize" || props.step === "review" || props.step === "finalize" ? (
-            <QuoteLines lines={props.lines} items={props.items} onAddItemToPackage={props.onAddItemToPackage} onUpdateLine={props.onUpdateLine} onRenamePackage={props.onRenamePackage} onRemoveLine={props.onRemoveLine} />
+            <div className="max-h-[calc(100vh-290px)] overflow-y-auto pr-1">
+              <QuoteLines lines={props.lines} items={props.items} onAddItemToPackage={props.onAddItemToPackage} onUpdateLine={props.onUpdateLine} onRenamePackage={props.onRenamePackage} onRemoveLine={props.onRemoveLine} />
+            </div>
           ) : null}
 
           {props.step === "finalize" ? (
             <FinalizePanel meta={props.meta} setMeta={props.setMeta} totals={props.totals} onSave={props.onSave} saveError={props.saveError} onPrint={props.onPrint} onEmail={props.onEmail} />
           ) : null}
           {props.step !== "pick" ? (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3">
+            <div className="sticky bottom-3 z-10 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-stone-200 bg-stone-50/95 p-3 shadow-sm backdrop-blur">
               <button className="button-secondary" onClick={() => props.setStep(previousStep(props.step))}>
                 Back
               </button>
@@ -1793,14 +1743,14 @@ function QuoteLines({
 }: {
   lines: QuoteLine[];
   items: CatalogItem[];
-  onAddItemToPackage: (item: CatalogItem, packageName?: string, quantity?: number) => void;
+  onAddItemToPackage: (item: CatalogItem, packageName?: string, quantity?: number, packageId?: string, packageSourceName?: string) => void;
   onUpdateLine: (lineId: string, patch: Partial<QuoteLine>) => void;
   onRenamePackage: (packageName: string, nextName: string) => void;
   onRemoveLine: (lineId: string) => void;
 }) {
   const [packageSelector, setPackageSelector] = useState("");
   const rows = useMemo(() => {
-    const result: Array<{ type: "package"; packageName: string; lines: QuoteLine[] } | { type: "line"; line: QuoteLine }> = [];
+    const result: Array<{ type: "package"; packageKey: string; packageName: string; packageSourceName?: string; lines: QuoteLine[] } | { type: "line"; line: QuoteLine }> = [];
     const packageIndexes = new Map<string, number>();
 
     lines.forEach((line) => {
@@ -1808,10 +1758,11 @@ function QuoteLines({
         result.push({ type: "line", line });
         return;
       }
-      const existingIndex = packageIndexes.get(line.packageName);
+      const packageKey = line.packageId ?? line.packageName;
+      const existingIndex = packageIndexes.get(packageKey);
       if (existingIndex === undefined) {
-        packageIndexes.set(line.packageName, result.length);
-        result.push({ type: "package", packageName: line.packageName, lines: [line] });
+        packageIndexes.set(packageKey, result.length);
+        result.push({ type: "package", packageKey, packageName: line.packageName, packageSourceName: line.packageSourceName, lines: [line] });
         return;
       }
       const existing = result[existingIndex];
@@ -1828,7 +1779,7 @@ function QuoteLines({
     <div className="grid gap-3">
       {rows.map((row) =>
         row.type === "package" ? (
-          <details key={`package-${row.lines[0]?.lineId ?? row.packageName}`} className="overflow-hidden rounded-lg border border-teal-200 bg-teal-50">
+          <details key={`package-${row.packageKey}`} className="overflow-hidden rounded-lg border border-teal-200 bg-teal-50">
             <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 p-4 [&::-webkit-details-marker]:hidden">
               <div className="min-w-0">
                 <p className="truncate font-black">{row.packageName}</p>
@@ -1838,16 +1789,22 @@ function QuoteLines({
               <ChevronDown size={17} className="text-stone-500" />
             </summary>
             <div className="grid gap-3 border-t border-teal-200 p-4">
-              <label className="field">
-                <span>Setup nickname</span>
-                <input className="input border-teal-200 bg-white font-black text-teal-950" value={row.packageName} onChange={(event) => onRenamePackage(row.packageName, event.target.value)} />
-              </label>
+              <div className="grid gap-3 md:grid-cols-[minmax(220px,0.4fr)_minmax(0,1fr)]">
+                <label className="field">
+                  <span>Setup nickname</span>
+                  <input className="input border-teal-200 bg-white font-black text-teal-950" value={row.packageName} onChange={(event) => onRenamePackage(row.packageKey, event.target.value)} />
+                </label>
+                <label className="field">
+                  <span>Template source</span>
+                  <input className="input bg-white" value={row.packageSourceName ?? row.packageName} readOnly />
+                </label>
+              </div>
               <div className="grid gap-2">
                 {row.lines.map((line) => (
                   <QuoteLineEditor key={line.lineId} line={line} onUpdateLine={onUpdateLine} onRemoveLine={onRemoveLine} />
                 ))}
               </div>
-              <button className="button-secondary w-fit" onClick={() => setPackageSelector(row.packageName)}>
+              <button className="button-secondary w-fit" onClick={() => setPackageSelector(row.packageKey)}>
                 <PackagePlus size={16} />
                 Add more item
               </button>
@@ -1872,7 +1829,8 @@ function QuoteLines({
           onCancel={() => setPackageSelector("")}
           onConfirm={(itemId) => {
             const item = items.find((candidate) => candidate.id === itemId);
-            if (item) onAddItemToPackage(item, packageSelector, 1);
+            const packageRow = rows.find((row): row is Extract<(typeof rows)[number], { type: "package" }> => row.type === "package" && row.packageKey === packageSelector);
+            if (item && packageRow) onAddItemToPackage(item, packageRow.packageName, 1, packageRow.packageKey, packageRow.packageSourceName);
             setPackageSelector("");
           }}
         />
@@ -2150,14 +2108,6 @@ function ItemsPage({
   const [newCategoryName, setNewCategoryName] = useState("");
   const categories = useMemo(() => ["All", ...Array.from(new Set(items.map((item) => item.category).filter(Boolean))).sort((a, b) => a.localeCompare(b))], [items]);
   const itemCategoryOptions = categories.filter((option) => option !== "All");
-  const adiQuery = `${draftItem.name} ${draftItem.sku}`.trim();
-  const adiMatches = useMemo(() => {
-    return adiCatalog
-      .map((match) => ({ ...match, matchScore: fuzzyScore(adiQuery, match) }))
-      .filter((match) => (match.matchScore ?? 0) >= 35)
-      .sort((a, b) => (b.matchScore ?? 0) - (a.matchScore ?? 0))
-      .slice(0, 3);
-  }, [adiQuery]);
   const sortedItems = useMemo(() => {
     return items
       .filter((item) => categoryFilter === "All" || item.category === categoryFilter)
@@ -2200,19 +2150,6 @@ function ItemsPage({
       updateItem(categoryEditor.itemId, { category });
     }
     closeCategoryEditor();
-  };
-  const applyAdiMatch = (match: AdiCatalogMatch) => {
-    setDraftItem((current) => ({
-      ...current,
-      sku: match.sku,
-      name: match.name,
-      category: match.category,
-      unitPrice: match.unitPrice,
-      msrp: match.msrp,
-      vendor: match.vendor,
-      inventory: match.inventory,
-      notes: match.notes,
-    }));
   };
   const addDraftItem = () => {
     setItems((current) => [
@@ -2365,34 +2302,6 @@ function ItemsPage({
                 <span>SKU</span>
                 <input className="input" value={draftItem.sku} onChange={(event) => setDraftItem((current) => ({ ...current, sku: event.target.value }))} placeholder="SKU" />
               </label>
-              {adiMatches.length ? (
-                <div className="grid gap-2 rounded-lg border border-teal-200 bg-teal-50 p-3 md:col-span-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-black text-teal-950">Possible ADI match</p>
-                      <p className="text-xs font-medium text-teal-900">Trying to add one of these items?</p>
-                    </div>
-                    <span className="rounded-full bg-white px-2 py-1 text-xs font-black text-teal-900">Fuzzy search</span>
-                  </div>
-                  <div className="grid gap-2 md:grid-cols-3">
-                    {adiMatches.map((match) => (
-                      <button
-                        key={match.sku}
-                        type="button"
-                        className="grid grid-cols-[76px_minmax(0,1fr)] gap-3 rounded-lg border border-teal-100 bg-white p-2 text-left transition hover:border-teal-700 hover:shadow-sm"
-                        onClick={() => applyAdiMatch(match)}
-                      >
-                        <img className="h-16 w-20 rounded-md border border-stone-200 object-cover" src={match.imageUrl} alt={match.name} />
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-black text-stone-950">{match.name}</span>
-                          <span className="mt-1 block font-mono text-xs text-stone-500">{match.sku}</span>
-                          <span className="mt-1 block text-xs font-bold text-stone-700">MSRP {money.format(match.msrp ?? 0)} / {match.matchScore}% match</span>
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
               <label className="field">
                 <span>Category</span>
                 {itemCategoryOptions.length ? (
@@ -2487,7 +2396,7 @@ function ItemsPage({
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="text-2xl font-black text-red-900">Delete item?</h3>
-                <p className="mt-2 text-sm text-stone-600">This removes {deleteItem.name} from the editable item database in this browser.</p>
+                <p className="mt-2 text-sm text-stone-600">This moves {deleteItem.name} to item recovery in Supabase.</p>
               </div>
               <button className="icon-button" onClick={() => setDeleteItem(null)} aria-label="Cancel delete">
                 <X size={18} />
@@ -2723,11 +2632,12 @@ function TemplateCard({
   onDeleteTemplate: (template: QuoteTemplate) => void;
 }) {
   const [selectorOpen, setSelectorOpen] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
   const updateTemplate = (patch: Partial<QuoteTemplate>) => {
     setTemplates((current) =>
       current.map((candidate) => {
         if (candidate.id !== template.id) return candidate;
-        const collaborators = candidate.createdBy && candidate.createdBy !== user.id ? Array.from(new Set([...(candidate.collaborators ?? []), user.name])) : candidate.collaborators ?? [];
+        const collaborators = candidate.createdBy && candidate.createdBy !== user.id ? Array.from(new Set([...(candidate.collaborators ?? []), user.id])) : candidate.collaborators ?? [];
         return { ...candidate, ...patch, updatedBy: user.id, updatedByName: user.name, collaborators };
       }),
     );
@@ -2767,15 +2677,25 @@ function TemplateCard({
   return (
     <article className="rounded-lg border border-stone-200 bg-stone-50">
       <details>
-        <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 p-4 [&::-webkit-details-marker]:hidden">
+        <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-3 p-4 [&::-webkit-details-marker]:hidden">
           <div className="min-w-0">
             <p className="truncate font-black">{template.name || "None"}</p>
             <p className="mt-1 text-xs font-bold text-stone-500">
               Created by {template.createdByName ?? "User"}
-              {template.updatedByName && template.updatedByName !== template.createdByName ? ` / Collaborator: ${template.updatedByName}` : ""}
+              {template.collaborators?.length ? ` / ${template.collaborators.length} collaborator${template.collaborators.length === 1 ? "" : "s"}` : ""}
             </p>
             <p className="mt-1 text-sm text-stone-600">{template.lines.length} items · Qty {template.lines.reduce((sum, line) => sum + line.quantity, 0)}</p>
           </div>
+          <button
+            className="icon-button min-h-9 min-w-9"
+            onClick={(event) => {
+              event.preventDefault();
+              setInfoOpen(true);
+            }}
+            aria-label="Template info"
+          >
+            <Info size={16} />
+          </button>
           <button
             className="button-primary min-h-9 px-3 py-1"
             onClick={(event) => {
@@ -2799,11 +2719,6 @@ function TemplateCard({
             </button>
           </div>
           <textarea className="textarea" value={template.description} onChange={(event) => updateTemplate({ description: event.target.value })} placeholder="Template description" />
-          <div className="grid gap-2 rounded-lg border border-stone-200 bg-white p-3 text-sm text-stone-600">
-            <p><strong className="text-stone-950">Creator:</strong> {template.createdByName ?? "User"}</p>
-            <p><strong className="text-stone-950">Last updated by:</strong> {template.updatedByName ?? template.createdByName ?? "User"}</p>
-            <p><strong className="text-stone-950">Collaborators:</strong> {template.collaborators?.length ? template.collaborators.join(", ") : "None"}</p>
-          </div>
           {requirements.length ? (
         <div className="grid gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
           <div>
@@ -2872,6 +2787,26 @@ function TemplateCard({
             setSelectorOpen(false);
           }}
         />
+      ) : null}
+      {infoOpen ? (
+        <div className="fixed inset-0 z-[60] grid place-items-center bg-black/45 p-4" onClick={() => setInfoOpen(false)}>
+          <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-2xl font-black">Template Info</h3>
+                <p className="mt-1 text-sm text-stone-600">{template.name || "Untitled template"}</p>
+              </div>
+              <button className="icon-button" onClick={() => setInfoOpen(false)} aria-label="Close template info">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="mt-5 grid gap-2 text-sm">
+              <InfoTile label="Creator" value={template.createdByName ?? "User"} />
+              <InfoTile label="Last updated by" value={template.updatedByName ?? template.createdByName ?? "User"} />
+              <InfoTile label="Collaborators" value={`${template.collaborators?.length ?? 0}`} />
+            </div>
+          </div>
+        </div>
       ) : null}
     </article>
   );
@@ -3303,6 +3238,7 @@ function SettingsPage({
   const [recoverySearch, setRecoverySearch] = useState("");
   const [recoverySort, setRecoverySort] = useState<RecoverySort>("recent");
   const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<PermanentDeleteTarget | null>(null);
+  const [passwordChange, setPasswordChange] = useState({ next: "", confirm: "", message: "" });
   const sections: { id: SettingsSection; label: string; admin?: boolean }[] = [
     { id: "account", label: "Account Info" },
     { id: "database", label: "Database" },
@@ -3312,7 +3248,7 @@ function SettingsPage({
     { id: "debug", label: "Debug Logs", admin: true },
     { id: "recovery", label: "Admin Recovery", admin: true },
   ];
-  const visibleSections = sections.filter((section) => !section.admin || adminUnlocked);
+  const visibleSections = sections.filter((section) => !section.admin || (adminUnlocked && user.role === "admin"));
   const deletedItems = useMemo(() => {
     const query = normalizeSearchValue(recoverySearch);
     const filtered = items.filter((item) => {
@@ -3381,6 +3317,23 @@ function SettingsPage({
       setSessions((current) => [session, ...current.filter((item) => item.id !== session.id)]);
     }
   };
+  const changePassword = async () => {
+    if (passwordChange.next.length < 8) {
+      setPasswordChange((current) => ({ ...current, message: "Password must be at least 8 characters." }));
+      return;
+    }
+    if (passwordChange.next !== passwordChange.confirm) {
+      setPasswordChange((current) => ({ ...current, message: "Passwords do not match." }));
+      return;
+    }
+    const supabase = getSupabaseAuthClient();
+    if (!supabase) {
+      setPasswordChange((current) => ({ ...current, message: "Supabase Auth is not configured." }));
+      return;
+    }
+    const { error } = await supabase.auth.updateUser({ password: passwordChange.next });
+    setPasswordChange({ next: "", confirm: "", message: error ? "Password could not be changed." : "Password changed." });
+  };
 
   return (
     <section className="panel lg:col-span-2">
@@ -3397,7 +3350,7 @@ function SettingsPage({
               {item.label}
             </button>
           ))}
-          {!adminUnlocked ? <p className="rounded-md border border-dashed border-stone-300 bg-white p-3 text-xs font-bold text-stone-500">Hold the Settings nav button for 5 seconds to unlock admin sections.</p> : null}
+          {user.role === "admin" && !adminUnlocked ? <p className="rounded-md border border-dashed border-stone-300 bg-white p-3 text-xs font-bold text-stone-500">Hold the Settings nav button for 5 seconds to unlock admin sections.</p> : null}
         </div>
         <div className="grid gap-4">
           {activeSection === "account" ? (
@@ -3417,6 +3370,27 @@ function SettingsPage({
                 <LogOut size={16} />
                 Sign out
               </button>
+              <div className="mt-5 grid gap-3 rounded-lg border border-stone-200 bg-white p-3 md:grid-cols-2">
+                <div className="md:col-span-2">
+                  <div className="flex items-center gap-2">
+                    <KeyRound size={17} />
+                    <h4 className="font-black">Change Password</h4>
+                  </div>
+                  <p className="mt-1 text-sm text-stone-600">Updates the password on the current Supabase Auth account.</p>
+                </div>
+                <label className="field">
+                  <span>New password</span>
+                  <input className="input" type="password" value={passwordChange.next} onChange={(event) => setPasswordChange((current) => ({ ...current, next: event.target.value, message: "" }))} />
+                </label>
+                <label className="field">
+                  <span>Confirm password</span>
+                  <input className="input" type="password" value={passwordChange.confirm} onChange={(event) => setPasswordChange((current) => ({ ...current, confirm: event.target.value, message: "" }))} />
+                </label>
+                <div className="flex flex-wrap items-center gap-3 md:col-span-2">
+                  <button className="button-secondary" onClick={changePassword}>Change password</button>
+                  {passwordChange.message ? <span className="text-sm font-bold text-stone-600">{passwordChange.message}</span> : null}
+                </div>
+              </div>
               <div className="mt-5 grid gap-2">
                 <div className="flex items-center gap-2">
                   <Monitor size={17} />
@@ -3454,9 +3428,8 @@ function SettingsPage({
                   {databaseStatus?.persistent ? "Database connected" : "Database offline"}
                 </span>
               </div>
-              <div className="mt-4 grid gap-3 md:grid-cols-3">
-                <InfoTile label="Current database" value={databaseStatus?.provider ?? "Checking"} />
-                <InfoTile label="Database name" value={databaseStatus?.databaseName ?? "Checking"} />
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <InfoTile label="Database provider" value={databaseStatus?.persistent ? "Supabase PostgreSQL" : "Checking"} />
                 <InfoTile label="Persistent storage" value={databaseStatus ? (databaseStatus.persistent ? "Yes" : "No") : "Checking"} />
               </div>
               <div className="mt-4 rounded-lg border border-stone-200 bg-white p-3">

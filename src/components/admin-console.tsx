@@ -7,7 +7,6 @@ type AdminConsoleProps = {
   projects: AdminProject[];
   databaseStatus: {
     provider: string;
-    databaseName: string;
     persistent: boolean;
   };
   items: CatalogItem[];
@@ -52,7 +51,7 @@ export function AdminConsole({ projects, databaseStatus, items, quotes, drafts, 
 
       <section className="mx-auto grid max-w-7xl gap-4 p-4">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <AdminStat icon={Database} label="Database" value={databaseStatus.persistent ? "Connected" : "Offline"} detail={`${databaseStatus.provider} / ${databaseStatus.databaseName}`} tone={databaseStatus.persistent ? "good" : "warn"} />
+          <AdminStat icon={Database} label="Database" value={databaseStatus.persistent ? "Connected" : "Offline"} detail={databaseStatus.provider} tone={databaseStatus.persistent ? "good" : "warn"} />
           <AdminStat icon={FileText} label="Active quotes" value={statFormatter.format(activeQuotes.length)} detail={`${moneyFormatter.format(totalQuoted)} quoted`} />
           <AdminStat icon={Monitor} label="Live sessions" value={statFormatter.format(liveSessions.length)} detail={`${statFormatter.format(activeDrafts.length)} draft workspaces`} />
           <AdminStat icon={Package} label="Catalog items" value={statFormatter.format(activeItems.length)} detail={`${statFormatter.format(items.length - activeItems.length)} deleted/recovery`} />
