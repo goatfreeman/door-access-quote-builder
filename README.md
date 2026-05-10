@@ -55,6 +55,25 @@ SUPABASE_SERVICE_ROLE_KEY=server-only-service-role-key
 
 Run [docs/supabase-schema.sql](docs/supabase-schema.sql) in Supabase SQL Editor to create the QQB tables, indexes, triggers, and RLS policies. Keep `SUPABASE_SERVICE_ROLE_KEY` server-only and never expose it to browser code.
 
+Supabase Auth is now the primary login path when Supabase env vars are present. During migration, Auth.js remains as a fallback for the existing temporary users.
+
+In Supabase Auth, add the deployed site URL and callback URL:
+
+```text
+Site URL: https://your-vercel-domain.vercel.app
+Redirect URL: https://your-vercel-domain.vercel.app/auth/callback
+Local Redirect URL: http://localhost:3000/auth/callback
+```
+
+For temporary Supabase password testing, create users in Supabase Auth that match the demo emails:
+
+```text
+qqb.admin@example.com
+qqb.tech@example.com
+```
+
+Set the admin user's `profiles.role` to `admin` after that profile is created.
+
 ### Current MongoDB Runtime
 
 The current deployed runtime still supports MongoDB while the Supabase migration is being completed. Add these environment variables in Vercel for persistent MongoDB storage:

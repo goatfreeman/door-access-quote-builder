@@ -28,6 +28,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { signOut as authSignOut } from "next-auth/react";
 import { getPendingWriteCount, readDb, syncPendingWrites, writeDb } from "@/lib/client-db";
 import { writeDebugLog } from "@/lib/debug-log";
+import { getSupabaseAuthClient } from "@/lib/supabase/auth-client";
 import type { SessionUser } from "@/lib/auth-types";
 import type { CatalogItem, DebugLogEntry, DraftQuote, QuoteLine, QuoteMeta, QuoteTemplate, SavedQuote, ServiceTitanSettings, UserSessionRecord } from "@/lib/types";
 
@@ -640,6 +641,12 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
     sessionsRef.current = sessions;
   }, [sessions]);
 
+  const signOutEverywhere = async (callbackUrl = "/login") => {
+    const supabase = getSupabaseAuthClient();
+    if (supabase) await supabase.auth.signOut();
+    await authSignOut({ callbackUrl });
+  };
+
   useEffect(() => {
     if (!hydrated) return;
     const sessionId = `${sessionUser.id}-${deviceId}`;
@@ -672,7 +679,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
           deviceName,
           metadata: { sessionId, endedAt: serverCurrentSession.endedAt },
         });
-        await authSignOut({ callbackUrl: "/login?error=Session%20revoked" });
+        await signOutEverywhere("/login?error=Session%20revoked");
         return;
       }
       setSessions((current) => [nextSession, ...current.filter((session) => session.id !== sessionId)]);
@@ -691,7 +698,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
           deviceName,
           metadata: { sessionId, endedAt: refreshedCurrentSession.endedAt },
         });
-        await authSignOut({ callbackUrl: "/login?error=Session%20revoked" });
+        await signOutEverywhere("/login?error=Session%20revoked");
         return;
       }
       if (!cancelled) setSessions(refreshedSessions);
@@ -1033,7 +1040,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
     };
     setSessions((current) => [endedSession, ...current.filter((session) => session.id !== sessionId)]);
     await upsertServerSession(endedSession).catch(() => undefined);
-    await authSignOut({ callbackUrl: "/login" });
+    await signOutEverywhere("/login");
   };
 
   return (

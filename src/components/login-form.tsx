@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Lock, Mail } from "lucide-react";
 import { signIn } from "next-auth/react";
 import { writeDebugLog } from "@/lib/debug-log";
+import { getAuthRedirectUrl, getSupabaseAuthClient } from "@/lib/supabase/auth-client";
 
 const deviceIdStorageKey = "qqb.device.id.v1";
 const sessionStorageKey = "qqb.cache.sessions.v1";
@@ -45,6 +46,17 @@ export function LoginForm({ error }: { error?: string }) {
           message: "Microsoft sign-in started; local device session cache cleared.",
           metadata: { email },
         });
+        const supabase = getSupabaseAuthClient();
+        if (supabase) {
+          const { error: supabaseError } = await supabase.auth.signInWithOAuth({
+            provider: "azure",
+            options: {
+              redirectTo: getAuthRedirectUrl(),
+              queryParams: { login_hint: email },
+            },
+          });
+          if (!supabaseError) return;
+        }
         const result = await signIn("microsoft-entra-id", { callbackUrl: "/", redirect: false }, { login_hint: email });
         if (result?.url) {
           window.location.href = result.url;
@@ -71,9 +83,24 @@ export function LoginForm({ error }: { error?: string }) {
       await writeDebugLog({
         type: "auth",
         level: "info",
-        message: "Password sign-in started; local device session cache cleared.",
+        message: "Supabase password sign-in started; local device session cache cleared.",
         metadata: { email },
       });
+      const supabase = getSupabaseAuthClient();
+      if (supabase) {
+        const { error: supabaseError } = await supabase.auth.signInWithPassword({ email, password });
+        if (!supabaseError) {
+          await writeDebugLog({
+            type: "auth",
+            level: "info",
+            message: "Supabase password sign-in succeeded.",
+            metadata: { email },
+          });
+          window.location.href = "/";
+          return;
+        }
+      }
+
       const result = await signIn("credentials", {
         email,
         password,
