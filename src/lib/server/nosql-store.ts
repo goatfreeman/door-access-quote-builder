@@ -92,7 +92,7 @@ async function writeSupabaseCollection(collection: StoreCollection, value: unkno
   if (collection === "drafts") return writeSupabaseDrafts(supabase, asArray<DraftQuote>(value).filter((draft) => draft.lines.length > 0));
   if (collection === "sessions") return writeSupabaseSessions(supabase, asArray<UserSessionRecord>(value));
   if (collection === "debugLogs") return writeSupabaseDebugLogs(supabase, asArray<DebugLogEntry>(value));
-  return writeSupabaseSettings(supabase, isObject(value) ? (value as ServiceTitanSettings) : {});
+  return writeSupabaseSettings(supabase, isObject(value) ? ({ ...emptySettings(), ...value } as ServiceTitanSettings) : emptySettings());
 }
 
 async function readSupabaseItems(supabase: SupabaseClient): Promise<CatalogItem[]> {
@@ -415,7 +415,7 @@ async function writeSupabaseDebugLogs(supabase: SupabaseClient, logs: DebugLogEn
 async function readSupabaseSettings(supabase: SupabaseClient): Promise<ServiceTitanSettings> {
   const { data, error } = await supabase.from("app_settings").select("value").eq("key", "settings").maybeSingle();
   if (error) throw new Error(error.message);
-  return isObject(data?.value) ? (data.value as ServiceTitanSettings) : { baseUrl: "", tenantId: "", clientId: "", clientSecret: "" };
+  return isObject(data?.value) ? ({ ...emptySettings(), ...data.value } as ServiceTitanSettings) : emptySettings();
 }
 
 async function writeSupabaseSettings(supabase: SupabaseClient, settings: ServiceTitanSettings) {
@@ -529,6 +529,10 @@ function asMeta(value: unknown): QuoteMeta {
     laborRate: number(meta.laborRate, 0),
     notes: text(meta.notes),
   };
+}
+
+function emptySettings(): ServiceTitanSettings {
+  return { baseUrl: "", tenantId: "", clientId: "", clientSecret: "" };
 }
 
 function nullableNumber(value: unknown) {
