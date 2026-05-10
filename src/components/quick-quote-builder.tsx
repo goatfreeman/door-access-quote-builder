@@ -229,8 +229,18 @@ function writeStorage<T>(key: string, value: T) {
   if (typeof window !== "undefined") window.localStorage.setItem(key, JSON.stringify(value));
 }
 
-function removeStorage(key: string) {
-  if (typeof window !== "undefined") window.localStorage.removeItem(key);
+function purgeLegacyBrowserData() {
+  if (typeof window === "undefined") return;
+  [
+    "qqb.cache.items.v1",
+    "qqb.cache.templates.v1",
+    "qqb.cache.quotes.v1",
+    "qqb.cache.settings.v1",
+    "qqb.draft.quotes.v1",
+    "qqb.cache.sessions.v1",
+    "qqb.offline.writeQueue.v1",
+    STORAGE_KEYS.draftQuote,
+  ].forEach((key) => window.localStorage.removeItem(key));
 }
 
 async function readServerSessions(fallback: UserSessionRecord[]) {
@@ -474,7 +484,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   }, []);
 
   useEffect(() => {
-    removeStorage(STORAGE_KEYS.draftQuote);
+    purgeLegacyBrowserData();
     setLines([]);
     setMeta(emptyMeta);
     setDraftHydrated(true);
@@ -520,6 +530,12 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
     const now = new Date().toISOString();
     const currentDraftId = currentDraftIdForUser(sessionUser.id);
     const legacyPrefix = legacyCurrentDraftIdPrefix(sessionUser.id);
+    if (activeLines.length === 0) {
+      setDraftQuotes((current) =>
+        current.filter((draft) => !(draft.id === currentDraftId || (draft.kind === "current" && draft.owner === sessionUser.id && draft.id.startsWith(legacyPrefix)))),
+      );
+      return;
+    }
     const currentDraft: DraftQuote = {
       id: currentDraftId,
       owner: sessionUser.id,

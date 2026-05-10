@@ -55,9 +55,9 @@ SUPABASE_SERVICE_ROLE_KEY=server-only-service-role-key
 
 Run [docs/supabase-schema.sql](docs/supabase-schema.sql) in Supabase SQL Editor to create the QQB tables, indexes, triggers, and RLS policies. Keep `SUPABASE_SERVICE_ROLE_KEY` server-only and never expose it to browser code.
 
-Supabase Auth is now the primary login path when Supabase env vars are present. During migration, Auth.js remains as a fallback for the existing temporary users.
+Supabase Auth is the primary login path when Supabase env vars are present. Auth.js is only kept for non-Supabase local development.
 
-Supabase PostgreSQL is also the primary app database when `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are present. The current collection-shaped app data is stored in `public.app_settings` as `collection:*` JSON keys during the transition; if MongoDB has legacy data and Supabase is empty, the first read copies that collection into Supabase.
+Supabase PostgreSQL is also the primary app database when `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are present. Items, templates, quotes, drafts, sessions, and debug logs are stored in their matching Supabase tables. Settings are stored in `public.app_settings` under the `settings` key.
 
 In Supabase Auth, add the deployed site URL and callback URL:
 
