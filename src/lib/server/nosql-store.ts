@@ -14,6 +14,7 @@ type StoreDocument = {
 type SupabaseClient = {
   from: (tableName: string) => any;
 };
+type DbRow = Record<string, any>;
 type ProfileMap = Map<string, { name?: string; email?: string }>;
 
 const collections = new Set<StoreCollection>(["items", "templates", "quotes", "settings", "drafts", "sessions", "debugLogs"]);
@@ -100,7 +101,7 @@ async function writeSupabaseCollection(collection: StoreCollection, value: unkno
 async function readSupabaseItems(supabase: SupabaseClient): Promise<CatalogItem[]> {
   const { data, error } = await supabase.from("catalog_items").select("*").order("updated_at", { ascending: false });
   if (error) throw new Error(error.message);
-  return (data ?? []).map((row) => ({
+  return ((data ?? []) as DbRow[]).map((row: DbRow) => ({
     id: appId("item", row.id),
     sku: row.sku,
     name: row.name,
@@ -145,13 +146,13 @@ async function readSupabaseTemplates(supabase: SupabaseClient): Promise<QuoteTem
   if (linesResult.error) throw new Error(linesResult.error.message);
 
   const linesByTemplate = new Map<string, { itemId: string; quantity: number }[]>();
-  for (const line of linesResult.data ?? []) {
+  for (const line of (linesResult.data ?? []) as DbRow[]) {
     const current = linesByTemplate.get(line.template_id) ?? [];
     current.push({ itemId: appId("item", line.item_id), quantity: line.quantity });
     linesByTemplate.set(line.template_id, current);
   }
 
-  return (templatesResult.data ?? []).map((template) => ({
+  return ((templatesResult.data ?? []) as DbRow[]).map((template: DbRow) => ({
     id: appId("template", template.id),
     name: template.name,
     description: template.description ?? "",
@@ -208,7 +209,7 @@ async function readSupabaseQuotes(supabase: SupabaseClient): Promise<SavedQuote[
   if (revisionsResult.error) throw new Error(revisionsResult.error.message);
 
   const revisionsByQuote = new Map<string, QuoteRevision[]>();
-  for (const revision of revisionsResult.data ?? []) {
+  for (const revision of (revisionsResult.data ?? []) as DbRow[]) {
     const current = revisionsByQuote.get(revision.quote_id) ?? [];
     current.push({
       id: appId("revision", revision.id),
@@ -222,7 +223,7 @@ async function readSupabaseQuotes(supabase: SupabaseClient): Promise<SavedQuote[
     revisionsByQuote.set(revision.quote_id, current);
   }
 
-  return (quotesResult.data ?? []).map((quote) => ({
+  return ((quotesResult.data ?? []) as DbRow[]).map((quote: DbRow) => ({
     id: appId("quote", quote.id),
     shareToken: appId("share", quote.share_token),
     createdAt: quote.created_at,
@@ -302,8 +303,8 @@ async function writeSupabaseQuotes(supabase: SupabaseClient, quotes: SavedQuote[
 async function readSupabaseDrafts(supabase: SupabaseClient): Promise<DraftQuote[]> {
   const [draftsResult, profiles] = await Promise.all([supabase.from("draft_quotes").select("*").order("updated_at", { ascending: false }), readProfiles(supabase)]);
   if (draftsResult.error) throw new Error(draftsResult.error.message);
-  return (draftsResult.data ?? [])
-    .map((draft) => ({
+  return ((draftsResult.data ?? []) as DbRow[])
+    .map((draft: DbRow) => ({
       id: draft.kind === "current" ? `current-${draft.owner_id}` : appId("draft", draft.id),
       owner: draft.owner_id,
       ownerName: displayName(profiles, draft.owner_id),
@@ -345,7 +346,7 @@ async function writeSupabaseDrafts(supabase: SupabaseClient, drafts: DraftQuote[
 async function readSupabaseSessions(supabase: SupabaseClient): Promise<UserSessionRecord[]> {
   const [sessionsResult, profiles] = await Promise.all([supabase.from("user_sessions").select("*").order("last_seen_at", { ascending: false }), readProfiles(supabase)]);
   if (sessionsResult.error) throw new Error(sessionsResult.error.message);
-  return (sessionsResult.data ?? []).map((session) => ({
+  return ((sessionsResult.data ?? []) as DbRow[]).map((session: DbRow) => ({
     id: `${session.user_id}-${session.device_id}`,
     userId: session.user_id,
     userName: displayName(profiles, session.user_id) ?? "User",
@@ -381,7 +382,7 @@ async function writeSupabaseSessions(supabase: SupabaseClient, sessions: UserSes
 async function readSupabaseDebugLogs(supabase: SupabaseClient): Promise<DebugLogEntry[]> {
   const [logsResult, profiles] = await Promise.all([supabase.from("debug_logs").select("*").order("created_at", { ascending: false }).limit(200), readProfiles(supabase)]);
   if (logsResult.error) throw new Error(logsResult.error.message);
-  return (logsResult.data ?? []).map((log) => ({
+  return ((logsResult.data ?? []) as DbRow[]).map((log: DbRow) => ({
     id: appId("log", log.id),
     type: log.type,
     level: log.level,
@@ -428,7 +429,7 @@ async function writeSupabaseSettings(supabase: SupabaseClient, settings: Service
 async function readProfiles(supabase: SupabaseClient): Promise<ProfileMap> {
   const { data, error } = await supabase.from("profiles").select("id, email, display_name");
   if (error) return new Map();
-  return new Map((data ?? []).map((profile) => [profile.id, { name: profile.display_name ?? undefined, email: profile.email ?? undefined }]));
+  return new Map(((data ?? []) as DbRow[]).map((profile: DbRow) => [profile.id, { name: profile.display_name ?? undefined, email: profile.email ?? undefined }]));
 }
 
 async function deleteMissingUuidRows(supabase: SupabaseClient, tableName: string, keepIds: string[]) {
