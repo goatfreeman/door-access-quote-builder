@@ -103,9 +103,12 @@ async function readSupabaseStoredValue(collection: StoreCollection) {
   const supabase = createSupabaseAdminClient();
   if (!supabase) return undefined;
 
-  const { data, error } = await supabase.from("app_settings").select("value").eq("key", storeKey(collection)).maybeSingle();
-  if (error) return undefined;
-  return data?.value ?? null;
+  const result = (await supabase.from("app_settings").select("value").eq("key", storeKey(collection)).maybeSingle()) as {
+    data: { value?: unknown } | null;
+    error: unknown;
+  };
+  if (result.error) return undefined;
+  return result.data?.value ?? null;
 }
 
 async function writeSupabaseStoredValue(collection: StoreCollection, value: unknown) {
