@@ -769,6 +769,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
           sku: item.sku,
           packageId,
           packageName,
+          packageNickname: "",
           packageSourceName,
           quantity,
           unitPrice: item.unitPrice,
@@ -800,7 +801,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
     setLines((current) =>
       current.map((line) => {
         const lineKey = line.packageId ?? line.packageName;
-        return lineKey === packageKey ? { ...line, packageName: nextName } : line;
+        return lineKey === packageKey ? { ...line, packageNickname: nextName } : line;
       }),
     );
   };
@@ -1361,8 +1362,9 @@ function PrintQuoteDocument({ quote }: { quote: PrintableQuote }) {
             quote.lines.map((line) => (
               <tr key={line.lineId}>
                 <td>
-                  <strong>{line.packageName ?? line.name}</strong>
-                  {line.packageName ? <span>{line.name}</span> : null}
+                  <strong>{line.packageNickname?.trim() || line.packageName || line.name}</strong>
+                  {line.packageName ? <span>{line.packageNickname?.trim() ? line.packageName : line.name}</span> : null}
+                  {line.packageName && line.packageNickname?.trim() ? <small>{line.name}</small> : null}
                   {line.notes ? <small>{line.notes}</small> : null}
                 </td>
                 <td>{line.sku}</td>
@@ -1413,7 +1415,7 @@ function CartDropdown({
   onClose: () => void;
 }) {
   const cartRows = useMemo(() => {
-    const rows: Array<{ type: "line"; line: QuoteLine } | { type: "package"; packageName: string; lines: QuoteLine[] }> = [];
+    const rows: Array<{ type: "line"; line: QuoteLine } | { type: "package"; packageKey: string; packageName: string; packageNickname?: string; lines: QuoteLine[] }> = [];
     const packageIndexes = new Map<string, number>();
 
     lines.forEach((line) => {
@@ -1422,10 +1424,11 @@ function CartDropdown({
         return;
       }
 
-      const existingIndex = packageIndexes.get(line.packageName);
+      const packageKey = line.packageId ?? line.packageName;
+      const existingIndex = packageIndexes.get(packageKey);
       if (existingIndex === undefined) {
-        packageIndexes.set(line.packageName, rows.length);
-        rows.push({ type: "package", packageName: line.packageName, lines: [line] });
+        packageIndexes.set(packageKey, rows.length);
+        rows.push({ type: "package", packageKey, packageName: line.packageName, packageNickname: line.packageNickname, lines: [line] });
         return;
       }
 
@@ -1452,10 +1455,11 @@ function CartDropdown({
         {cartRows.length ? (
           cartRows.map((row) =>
             row.type === "package" ? (
-              <details key={row.packageName} className="group min-w-0 overflow-hidden rounded-lg border border-stone-200 bg-stone-50 p-3">
+              <details key={row.packageKey} className="group min-w-0 overflow-hidden rounded-lg border border-stone-200 bg-stone-50 p-3">
                 <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto] items-start gap-2 [&::-webkit-details-marker]:hidden">
                   <div className="min-w-0">
-                    <p className="truncate font-black text-stone-950">{row.packageName}</p>
+                    <p className="truncate font-black text-stone-950">{row.packageNickname?.trim() || row.packageName}</p>
+                    {row.packageNickname?.trim() ? <p className="truncate text-xs font-bold text-stone-500">{row.packageName}</p> : null}
                   </div>
                   <button
                     className="grid size-8 place-items-center rounded-full text-stone-500 hover:bg-red-50 hover:text-red-800"
@@ -1750,7 +1754,7 @@ function QuoteLines({
 }) {
   const [packageSelector, setPackageSelector] = useState("");
   const rows = useMemo(() => {
-    const result: Array<{ type: "package"; packageKey: string; packageName: string; packageSourceName?: string; lines: QuoteLine[] } | { type: "line"; line: QuoteLine }> = [];
+    const result: Array<{ type: "package"; packageKey: string; packageName: string; packageNickname?: string; packageSourceName?: string; lines: QuoteLine[] } | { type: "line"; line: QuoteLine }> = [];
     const packageIndexes = new Map<string, number>();
 
     lines.forEach((line) => {
@@ -1762,7 +1766,7 @@ function QuoteLines({
       const existingIndex = packageIndexes.get(packageKey);
       if (existingIndex === undefined) {
         packageIndexes.set(packageKey, result.length);
-        result.push({ type: "package", packageKey, packageName: line.packageName, packageSourceName: line.packageSourceName, lines: [line] });
+        result.push({ type: "package", packageKey, packageName: line.packageName, packageNickname: line.packageNickname, packageSourceName: line.packageSourceName, lines: [line] });
         return;
       }
       const existing = result[existingIndex];
@@ -1782,7 +1786,8 @@ function QuoteLines({
           <details key={`package-${row.packageKey}`} className="overflow-hidden rounded-lg border border-teal-200 bg-teal-50">
             <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 p-4 [&::-webkit-details-marker]:hidden">
               <div className="min-w-0">
-                <p className="truncate font-black">{row.packageName}</p>
+                <p className="truncate font-black">{row.packageNickname?.trim() || row.packageName}</p>
+                {row.packageNickname?.trim() ? <p className="mt-1 truncate text-xs font-bold text-teal-900">{row.packageName}</p> : null}
                 <p className="mt-1 text-sm font-medium text-teal-900">{row.lines.length} items · Qty {row.lines.reduce((sum, line) => sum + line.quantity, 0)}</p>
               </div>
               <span className="font-black">{money.format(row.lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0))}</span>
@@ -1792,11 +1797,11 @@ function QuoteLines({
               <div className="grid gap-3 md:grid-cols-[minmax(220px,0.4fr)_minmax(0,1fr)]">
                 <label className="field">
                   <span>Setup nickname</span>
-                  <input className="input border-teal-200 bg-white font-black text-teal-950" value={row.packageName} onChange={(event) => onRenamePackage(row.packageKey, event.target.value)} />
+                  <input className="input border-teal-200 bg-white font-black text-teal-950" value={row.packageNickname ?? ""} onChange={(event) => onRenamePackage(row.packageKey, event.target.value)} placeholder="Optional nickname, example: Camera 1P" />
                 </label>
                 <label className="field">
-                  <span>Template source</span>
-                  <input className="input bg-white" value={row.packageSourceName ?? row.packageName} readOnly />
+                  <span>Template / component source</span>
+                  <input className="input bg-white" value={row.packageName} readOnly />
                 </label>
               </div>
               <div className="grid gap-2">
@@ -2003,7 +2008,7 @@ function exportQuote(quote: SavedQuote, format: ExportQuoteFormat) {
     ["Created", new Date(quote.createdAt).toLocaleString()],
     [],
     ["Item", "SKU", "Package", "Quantity", "Notes"],
-    ...quote.lines.map((line) => [line.name, line.sku, line.packageName ?? "", String(line.quantity), line.notes]),
+    ...quote.lines.map((line) => [line.name, line.sku, line.packageNickname?.trim() || line.packageName || "", String(line.quantity), line.notes]),
   ] : [
     ["Quote", quote.meta.quoteNumber],
     ["Revision", String(revisionNumber)],
@@ -2013,7 +2018,7 @@ function exportQuote(quote: SavedQuote, format: ExportQuoteFormat) {
     ["Created", new Date(quote.createdAt).toLocaleString()],
     [],
     ["Item", "SKU", "Package", "Quantity", "ADI MSRP", "Unit Price", "Line Total", "Notes"],
-    ...quote.lines.map((line) => [line.name, line.sku, line.packageName ?? "", String(line.quantity), String(line.msrp ?? ""), String(line.unitPrice), String(line.quantity * line.unitPrice), line.notes]),
+    ...quote.lines.map((line) => [line.name, line.sku, line.packageNickname?.trim() || line.packageName || "", String(line.quantity), String(line.msrp ?? ""), String(line.unitPrice), String(line.quantity * line.unitPrice), line.notes]),
     [],
     ["Total", String(quote.total)],
   ];
@@ -2043,7 +2048,7 @@ function describeQuoteChanges(previous: { meta: QuoteMeta; lines: QuoteLine[]; t
     }
     if (oldLine.quantity !== line.quantity) changes.push({ kind: "changed", text: `${line.name} quantity changed from ${oldLine.quantity} to ${line.quantity}.` });
     if (oldLine.unitPrice !== line.unitPrice) changes.push({ kind: "changed", text: `${line.name} unit price changed from ${money.format(oldLine.unitPrice)} to ${money.format(line.unitPrice)}.` });
-    if ((oldLine.packageName ?? "") !== (line.packageName ?? "")) changes.push({ kind: "changed", text: `${line.name} setup nickname changed.` });
+    if ((oldLine.packageNickname ?? "") !== (line.packageNickname ?? "")) changes.push({ kind: "changed", text: `${line.name} setup nickname changed.` });
   });
   previous.lines.forEach((line) => {
     if (!next.lines.some((candidate) => candidate.lineId === line.lineId || candidate.itemId === line.itemId)) changes.push({ kind: "removed", text: `Removed ${line.name}.` });
@@ -3000,8 +3005,8 @@ function PreviousQuotes({
                 {selectedQuote.lines.map((line) => (
                   <div key={line.lineId} className="flex items-start justify-between gap-3 rounded-lg border border-stone-200 bg-white p-3">
                     <div>
-                      <p className="font-bold">{line.packageName ?? line.name}</p>
-                      {line.packageName ? <p className="text-sm text-stone-600">{line.name}</p> : null}
+                      <p className="font-bold">{line.packageNickname?.trim() || line.packageName || line.name}</p>
+                      {line.packageName ? <p className="text-sm text-stone-600">{line.packageNickname?.trim() ? `${line.packageName} / ${line.name}` : line.name}</p> : null}
                       <p className="text-sm text-stone-600">Qty {line.quantity}</p>
                     </div>
                     <strong>{money.format(line.quantity * line.unitPrice)}</strong>
@@ -3107,7 +3112,7 @@ function PreviousQuotes({
                   <div className="mt-3 grid gap-2">
                     {selectedHistory.lines.map((line) => (
                       <div key={line.lineId} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-md bg-stone-50 p-2 text-sm">
-                        <span className="truncate font-bold">{line.packageName ? `${line.packageName} / ${line.name}` : line.name}</span>
+                        <span className="truncate font-bold">{line.packageName ? `${line.packageNickname?.trim() || line.packageName} / ${line.name}` : line.name}</span>
                         <span className="font-black">Qty {line.quantity}</span>
                       </div>
                     ))}
@@ -3187,8 +3192,8 @@ function ClientQuoteView({ quote, onPrintQuote }: { quote: SavedQuote | null; on
           {quote.lines.map((line) => (
             <div key={line.lineId} className="flex items-start justify-between gap-3 rounded-lg border border-stone-200 bg-white p-3">
               <div className="min-w-0">
-                <p className="truncate font-bold">{line.packageName ?? line.name}</p>
-                {line.packageName ? <p className="truncate text-sm text-stone-600">{line.name}</p> : null}
+                <p className="truncate font-bold">{line.packageNickname?.trim() || line.packageName || line.name}</p>
+                {line.packageName ? <p className="truncate text-sm text-stone-600">{line.packageNickname?.trim() ? `${line.packageName} / ${line.name}` : line.name}</p> : null}
                 <p className="text-sm text-stone-600">Qty {line.quantity}</p>
               </div>
               <strong className="shrink-0">{money.format(line.quantity * line.unitPrice)}</strong>

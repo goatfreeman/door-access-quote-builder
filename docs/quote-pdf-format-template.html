@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>QQB Quote PDF Format Draft</title>
+    <style>
+      @page {
+        margin: 0.55in;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        color: #1c1917;
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 12px;
+        margin: 0;
+      }
+
+      .print-document {
+        display: block;
+      }
+
+      .print-header {
+        align-items: flex-start;
+        border-bottom: 2px solid #0f766e;
+        display: flex;
+        gap: 24px;
+        justify-content: space-between;
+        padding-bottom: 18px;
+      }
+
+      .print-brand {
+        color: #0f766e;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        margin: 0 0 8px;
+        text-transform: uppercase;
+      }
+
+      .print-header h1 {
+        font-size: 34px;
+        line-height: 1;
+        margin: 0;
+      }
+
+      .print-meta {
+        min-width: 190px;
+        text-align: right;
+      }
+
+      .print-meta p,
+      .print-info-grid p,
+      .print-footer p {
+        margin: 0;
+      }
+
+      .print-info-grid {
+        display: grid;
+        gap: 18px;
+        grid-template-columns: 1fr 1fr;
+        margin-top: 22px;
+      }
+
+      .print-info-grid > div {
+        border: 1px solid #d6d3d1;
+        border-radius: 8px;
+        font-size: 12px;
+        padding: 12px;
+      }
+
+      .print-label {
+        color: #78716c;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .print-notes {
+        border: 1px solid #d6d3d1;
+        border-radius: 8px;
+        font-size: 12px;
+        margin-top: 12px;
+        padding: 12px;
+      }
+
+      .print-table {
+        border-collapse: collapse;
+        margin-top: 24px;
+        width: 100%;
+      }
+
+      .print-table th {
+        background: #f5f5f4;
+        border-bottom: 1px solid #a8a29e;
+        color: #44403c;
+        font-size: 10px;
+        letter-spacing: 0.04em;
+        padding: 9px 8px;
+        text-align: left;
+        text-transform: uppercase;
+      }
+
+      .print-table td {
+        border-bottom: 1px solid #e7e5e4;
+        padding: 10px 8px;
+        vertical-align: top;
+      }
+
+      .print-table td:nth-child(3),
+      .print-table td:nth-child(4),
+      .print-table td:nth-child(5),
+      .print-table th:nth-child(3),
+      .print-table th:nth-child(4),
+      .print-table th:nth-child(5) {
+        text-align: right;
+      }
+
+      .print-table span,
+      .print-table small {
+        color: #57534e;
+        display: block;
+        margin-top: 3px;
+      }
+
+      .print-summary {
+        display: grid;
+        gap: 8px;
+        margin: 22px 0 0 auto;
+        width: 280px;
+      }
+
+      .summary-row,
+      .print-total {
+        display: flex;
+        justify-content: space-between;
+      }
+
+      .print-total {
+        border-top: 2px solid #0f766e;
+        font-size: 18px;
+        font-weight: 900;
+        margin-top: 6px;
+        padding-top: 10px;
+      }
+
+      .print-footer {
+        border-top: 1px solid #d6d3d1;
+        color: #78716c;
+        margin-top: 34px;
+        padding-top: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <section class="print-document">
+      <div class="print-header">
+        <div>
+          <p class="print-brand">Quick Quote Builder</p>
+          <h1>Quote</h1>
+        </div>
+        <div class="print-meta">
+          <p><strong>Quote #</strong> QQ-1001</p>
+          <p><strong>Revision</strong> 1</p>
+          <p><strong>Date</strong> 5/10/2026</p>
+        </div>
+      </div>
+
+      <div class="print-info-grid">
+        <div>
+          <p class="print-label">Customer</p>
+          <p>Example Customer</p>
+          <p>customer@example.com</p>
+        </div>
+        <div>
+          <p class="print-label">Project</p>
+          <p>Main Entrance Access Control</p>
+          <p>123 Example Street</p>
+        </div>
+      </div>
+
+      <div class="print-notes">
+        <p class="print-label">Notes</p>
+        <p>Sample installation instructions, exclusions, or customer notes appear here.</p>
+      </div>
+
+      <table class="print-table">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>SKU</th>
+            <th>Qty</th>
+            <th>Unit</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <strong>One Door Setup</strong>
+              <span>ASSA ABLOY HES 9600 Electric Strike</span>
+              <small>Install at main entry door.</small>
+            </td>
+            <td>ASSA-9600-LBM</td>
+            <td>1</td>
+            <td>$318.00</td>
+            <td>$318.00</td>
+          </tr>
+          <tr>
+            <td>
+              <strong>One Door Setup</strong>
+              <span>HID Signo 20 Mullion Reader</span>
+            </td>
+            <td>HID-920NTN</td>
+            <td>2</td>
+            <td>$185.00</td>
+            <td>$370.00</td>
+          </tr>
+          <tr>
+            <td>
+              <strong>Axis P3265-LVE Outdoor Dome Network Camera</strong>
+            </td>
+            <td>AXIS-P3265-LVE</td>
+            <td>1</td>
+            <td>$724.00</td>
+            <td>$724.00</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="print-summary">
+        <div class="summary-row"><span>Equipment</span><strong>$1,412.00</strong></div>
+        <div class="summary-row"><span>Labor</span><strong>$1,000.00</strong></div>
+        <div class="summary-row"><span>Margin</span><strong>$434.16</strong></div>
+        <div class="summary-row"><span>Tax</span><strong>$252.58</strong></div>
+        <div class="print-total"><span>Total</span><strong>$3,098.74</strong></div>
+      </div>
+
+      <div class="print-footer">
+        <p>Prepared for review. Pricing is valid as of the quote date unless otherwise noted.</p>
+      </div>
+    </section>
+  </body>
+</html>
