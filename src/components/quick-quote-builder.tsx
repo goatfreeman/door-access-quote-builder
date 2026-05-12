@@ -1772,6 +1772,7 @@ function QuoteLines({
   onRemoveLine: (lineId: string) => void;
 }) {
   const [packageSelector, setPackageSelector] = useState("");
+  const [editingPackageKey, setEditingPackageKey] = useState("");
   const rows = useMemo(() => {
     const result: Array<{ type: "package"; packageKey: string; packageName: string; packageNickname?: string; packageSourceName?: string; lines: QuoteLine[] } | { type: "line"; line: QuoteLine }> = [];
     const packageIndexes = new Map<string, number>();
@@ -1805,7 +1806,35 @@ function QuoteLines({
           <details key={`package-${row.packageKey}`} className="overflow-hidden rounded-lg border border-teal-200 bg-teal-50">
             <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 p-4 [&::-webkit-details-marker]:hidden">
               <div className="min-w-0">
-                <p className="truncate font-black">{row.packageNickname?.trim() || row.packageName}</p>
+                {editingPackageKey === row.packageKey ? (
+                  <input
+                    className="input min-h-9 border-teal-200 bg-white font-black text-teal-950"
+                    autoFocus
+                    value={row.packageNickname ?? ""}
+                    placeholder={row.packageName}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                    }}
+                    onKeyDown={(event) => {
+                      event.stopPropagation();
+                      if (event.key === "Enter" || event.key === "Escape") setEditingPackageKey("");
+                    }}
+                    onBlur={() => setEditingPackageKey("")}
+                    onChange={(event) => onRenamePackage(row.packageKey, event.target.value)}
+                  />
+                ) : (
+                  <button
+                    className="max-w-full truncate text-left font-black hover:text-teal-800"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setEditingPackageKey(row.packageKey);
+                    }}
+                  >
+                    {row.packageNickname?.trim() || row.packageName}
+                  </button>
+                )}
                 {row.packageNickname?.trim() ? <p className="mt-1 truncate text-xs font-bold text-teal-900">{row.packageName}</p> : null}
                 <p className="mt-1 text-sm font-medium text-teal-900">{row.lines.length} items · Qty {row.lines.reduce((sum, line) => sum + line.quantity, 0)}</p>
               </div>
@@ -1816,7 +1845,13 @@ function QuoteLines({
               <div className="grid gap-3 md:grid-cols-[minmax(220px,0.4fr)_minmax(0,1fr)]">
                 <label className="field">
                   <span>Setup nickname</span>
-                  <input className="input border-teal-200 bg-white font-black text-teal-950" value={row.packageNickname ?? ""} onChange={(event) => onRenamePackage(row.packageKey, event.target.value)} placeholder="Optional nickname, example: Camera 1P" />
+                  <input
+                    className="input border-teal-200 bg-white font-black text-teal-950"
+                    value={row.packageNickname ?? ""}
+                    onClick={(event) => event.stopPropagation()}
+                    onChange={(event) => onRenamePackage(row.packageKey, event.target.value)}
+                    placeholder="Optional nickname, example: Camera 1P"
+                  />
                 </label>
                 <label className="field">
                   <span>Template / component source</span>
