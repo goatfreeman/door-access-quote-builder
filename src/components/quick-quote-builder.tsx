@@ -29,13 +29,15 @@ import type { Dispatch, SetStateAction } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getPendingWriteCount, readDb, syncPendingWrites, writeDb } from "@/lib/client-db";
 import { writeDebugLog } from "@/lib/debug-log";
+import { quoteLineExportGroup, quoteLinePrimaryLabel, quoteLineSecondaryLabel } from "@/lib/quote/line-labels";
 import { getSupabaseAuthClient } from "@/lib/supabase/auth-client";
 import type { SessionUser } from "@/lib/auth-types";
+import type { IntegrationPluginStatus } from "@/lib/plugins/types";
 import type { CatalogItem, DebugLogEntry, DraftQuote, QuoteLine, QuoteMeta, QuoteTemplate, SavedQuote, ServiceTitanSettings, UserSessionRecord } from "@/lib/types";
 
 type View = "home" | "quote" | "items" | "templates" | "previous" | "settings" | "client";
 type QuoteStep = "pick" | "customize" | "review" | "finalize";
-type SettingsSection = "account" | "database" | "serviceTitan" | "adi" | "sync" | "debug" | "recovery";
+type SettingsSection = "account" | "database" | "plugins" | "sync" | "debug" | "recovery";
 type DatabaseStatus = {
   provider: string;
   persistent: boolean;
@@ -286,12 +288,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   const [quotes, setQuotes] = useState<SavedQuote[]>([]);
   const [draftQuotes, setDraftQuotes] = useState<DraftQuote[]>([]);
   const [sessions, setSessions] = useState<UserSessionRecord[]>([]);
-  const [settings, setSettings] = useState<ServiceTitanSettings>({
-    baseUrl: "",
-    tenantId: "",
-    clientId: "",
-    clientSecret: "",
-  });
+  const [settings, setSettings] = useState<ServiceTitanSettings>({});
   const [debugLogs, setDebugLogs] = useState<DebugLogEntry[]>([]);
   const [lines, setLines] = useState<QuoteLine[]>([]);
   const [meta, setMeta] = useState<QuoteMeta>(emptyMeta);
@@ -364,7 +361,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
       readDb<DraftQuote[]>("drafts", []),
       readDb<UserSessionRecord[]>("sessions", []),
       readDb<DebugLogEntry[]>("debugLogs", []),
-      readDb<ServiceTitanSettings>("settings", { baseUrl: "", tenantId: "", clientId: "", clientSecret: "" }),
+      readDb<ServiceTitanSettings>("settings", {}),
     ]).then(([dbItems, dbTemplates, dbQuotes, dbDraftQuotes, dbSessions, dbDebugLogs, dbSettings]) => {
       if (cancelled) return;
       setItems(dbItems);
@@ -744,7 +741,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
     if (settingsHoldTimer.current) clearTimeout(settingsHoldTimer.current);
     settingsHoldTimer.current = setTimeout(() => {
       setAdminUnlocked(true);
-      pushNotification("Admin panel unlocked", "ServiceTitan, ADI, sync, and recovery settings are now available.");
+      pushNotification("Admin panel unlocked", "Plugin status, sync, debug, and recovery settings are now available.");
     }, 5000);
   };
 
@@ -1101,11 +1098,11 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
 
       {menuOpen && !isClientView ? <MobileMenu nav={nav} view={view} setView={navigateToView} goToQuote={goToQuote} close={() => setMenuOpen(false)} onSignOut={signOut} onSettingsHoldStart={startSettingsHold} onSettingsHoldEnd={cancelSettingsHold} /> : null}
 
-      <section className={`mx-auto grid max-w-7xl gap-4 px-4 py-4 ${view === "quote" && quoteStep !== "finalize" ? "lg:grid-cols-[320px_minmax(0,1fr)]" : ""}`}>
+      <section className={`mx-auto grid max-w-7xl gap-4 px-4 py-4 ${view === "quote" && quoteStep !== "pick" && quoteStep !== "finalize" ? "lg:grid-cols-[320px_minmax(0,1fr)]" : ""}`}>
         {view === "home" ? <HomePage user={sessionUser} meta={meta} lines={activeLines} total={totals.total} drafts={userDraftQuotes} onContinue={goToQuote} onLoadDraft={loadDraftQuote} /> : null}
         {view === "quote" ? (
           <>
-            {quoteStep !== "finalize" ? (
+            {quoteStep !== "pick" && quoteStep !== "finalize" ? (
               <CatalogPanel
                 items={visibleItems}
                 categories={catalogCategories}
@@ -1362,9 +1359,8 @@ function PrintQuoteDocument({ quote }: { quote: PrintableQuote }) {
             quote.lines.map((line) => (
               <tr key={line.lineId}>
                 <td>
-                  <strong>{line.packageNickname?.trim() || line.packageName || line.name}</strong>
-                  {line.packageName ? <span>{line.packageNickname?.trim() ? line.packageName : line.name}</span> : null}
-                  {line.packageName && line.packageNickname?.trim() ? <small>{line.name}</small> : null}
+                  <strong>{quoteLinePrimaryLabel(line)}</strong>
+                  {quoteLineSecondaryLabel(line) ? <span>{quoteLineSecondaryLabel(line)}</span> : null}
                   {line.notes ? <small>{line.notes}</small> : null}
                 </td>
                 <td>{line.sku}</td>
@@ -2008,7 +2004,7 @@ function exportQuote(quote: SavedQuote, format: ExportQuoteFormat) {
     ["Created", new Date(quote.createdAt).toLocaleString()],
     [],
     ["Item", "SKU", "Package", "Quantity", "Notes"],
-    ...quote.lines.map((line) => [line.name, line.sku, line.packageNickname?.trim() || line.packageName || "", String(line.quantity), line.notes]),
+    ...quote.lines.map((line) => [line.name, line.sku, quoteLineExportGroup(line), String(line.quantity), line.notes]),
   ] : [
     ["Quote", quote.meta.quoteNumber],
     ["Revision", String(revisionNumber)],
@@ -2018,7 +2014,7 @@ function exportQuote(quote: SavedQuote, format: ExportQuoteFormat) {
     ["Created", new Date(quote.createdAt).toLocaleString()],
     [],
     ["Item", "SKU", "Package", "Quantity", "ADI MSRP", "Unit Price", "Line Total", "Notes"],
-    ...quote.lines.map((line) => [line.name, line.sku, line.packageNickname?.trim() || line.packageName || "", String(line.quantity), String(line.msrp ?? ""), String(line.unitPrice), String(line.quantity * line.unitPrice), line.notes]),
+    ...quote.lines.map((line) => [line.name, line.sku, quoteLineExportGroup(line), String(line.quantity), String(line.msrp ?? ""), String(line.unitPrice), String(line.quantity * line.unitPrice), line.notes]),
     [],
     ["Total", String(quote.total)],
   ];
@@ -2550,10 +2546,6 @@ function TemplatesPage({
                 <span>Template name</span>
                 <input className="input" value={draftTemplate.name} onChange={(event) => setDraftTemplate((current) => (current ? { ...current, name: event.target.value } : current))} placeholder="One door setup" />
               </label>
-              <label className="field">
-                <span>Description</span>
-                <textarea className="textarea" value={draftTemplate.description} onChange={(event) => setDraftTemplate((current) => (current ? { ...current, description: event.target.value } : current))} placeholder="Template notes or use case" />
-              </label>
               <div className="grid gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3">
                 <div className="flex items-center justify-between gap-3">
                   <p className="font-black">Template items</p>
@@ -2595,6 +2587,10 @@ function TemplatesPage({
                   <p className="rounded-lg border border-dashed border-stone-300 bg-white p-5 text-center text-stone-500">No items added yet.</p>
                 )}
               </div>
+              <label className="field">
+                <span>Description</span>
+                <textarea className="textarea" value={draftTemplate.description} onChange={(event) => setDraftTemplate((current) => (current ? { ...current, description: event.target.value } : current))} placeholder="Template notes or use case" />
+              </label>
             </div>
             <div className="mt-5 flex justify-end gap-2">
               <button className="button-ghost" onClick={() => setDraftTemplate(null)}>
@@ -2638,6 +2634,7 @@ function TemplateCard({
 }) {
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(false);
   const updateTemplate = (patch: Partial<QuoteTemplate>) => {
     setTemplates((current) =>
       current.map((candidate) => {
@@ -2684,7 +2681,33 @@ function TemplateCard({
       <details>
         <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-3 p-4 [&::-webkit-details-marker]:hidden">
           <div className="min-w-0">
-            <p className="truncate font-black">{template.name || "None"}</p>
+            {editingTitle ? (
+              <input
+                className="input min-h-9 bg-white font-black"
+                autoFocus
+                value={template.name}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                onBlur={() => setEditingTitle(false)}
+                onKeyDown={(event) => {
+                  event.stopPropagation();
+                  if (event.key === "Enter" || event.key === "Escape") setEditingTitle(false);
+                }}
+                onChange={(event) => updateTemplate({ name: event.target.value })}
+              />
+            ) : (
+              <button
+                className="max-w-full truncate text-left font-black hover:text-teal-800"
+                onClick={(event) => {
+                  event.preventDefault();
+                  setEditingTitle(true);
+                }}
+              >
+                {template.name || "None"}
+              </button>
+            )}
             <p className="mt-1 text-xs font-bold text-stone-500">
               Created by {template.createdByName ?? "User"}
               {template.collaborators?.length ? ` / ${template.collaborators.length} collaborator${template.collaborators.length === 1 ? "" : "s"}` : ""}
@@ -2713,8 +2736,7 @@ function TemplateCard({
           <ChevronDown size={17} className="text-stone-500" />
         </summary>
         <div className="grid gap-3 border-t border-stone-200 p-4">
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-            <input className="input font-black" value={template.name} onChange={(event) => updateTemplate({ name: event.target.value })} />
+          <div className="flex justify-end">
             <button
               className="icon-button hover:border-red-200 hover:bg-red-50 hover:text-red-800"
               onClick={() => onDeleteTemplate(template)}
@@ -2723,7 +2745,6 @@ function TemplateCard({
               <X size={16} />
             </button>
           </div>
-          <textarea className="textarea" value={template.description} onChange={(event) => updateTemplate({ description: event.target.value })} placeholder="Template description" />
           {requirements.length ? (
         <div className="grid gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
           <div>
@@ -2781,6 +2802,10 @@ function TemplateCard({
         <PackagePlus size={16} />
         Add item to list
       </button>
+      <label className="field">
+        <span>Description</span>
+        <textarea className="textarea" value={template.description} onChange={(event) => updateTemplate({ description: event.target.value })} placeholder="Template description" />
+      </label>
         </div>
       </details>
       {selectorOpen ? (
@@ -3005,8 +3030,8 @@ function PreviousQuotes({
                 {selectedQuote.lines.map((line) => (
                   <div key={line.lineId} className="flex items-start justify-between gap-3 rounded-lg border border-stone-200 bg-white p-3">
                     <div>
-                      <p className="font-bold">{line.packageNickname?.trim() || line.packageName || line.name}</p>
-                      {line.packageName ? <p className="text-sm text-stone-600">{line.packageNickname?.trim() ? `${line.packageName} / ${line.name}` : line.name}</p> : null}
+                      <p className="font-bold">{quoteLinePrimaryLabel(line)}</p>
+                      {quoteLineSecondaryLabel(line) ? <p className="text-sm text-stone-600">{quoteLineSecondaryLabel(line)}</p> : null}
                       <p className="text-sm text-stone-600">Qty {line.quantity}</p>
                     </div>
                     <strong>{money.format(line.quantity * line.unitPrice)}</strong>
@@ -3112,7 +3137,7 @@ function PreviousQuotes({
                   <div className="mt-3 grid gap-2">
                     {selectedHistory.lines.map((line) => (
                       <div key={line.lineId} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-md bg-stone-50 p-2 text-sm">
-                        <span className="truncate font-bold">{line.packageName ? `${line.packageNickname?.trim() || line.packageName} / ${line.name}` : line.name}</span>
+                        <span className="truncate font-bold">{line.packageName ? `${quoteLinePrimaryLabel(line)} / ${line.name}` : line.name}</span>
                         <span className="font-black">Qty {line.quantity}</span>
                       </div>
                     ))}
@@ -3192,8 +3217,8 @@ function ClientQuoteView({ quote, onPrintQuote }: { quote: SavedQuote | null; on
           {quote.lines.map((line) => (
             <div key={line.lineId} className="flex items-start justify-between gap-3 rounded-lg border border-stone-200 bg-white p-3">
               <div className="min-w-0">
-                <p className="truncate font-bold">{line.packageNickname?.trim() || line.packageName || line.name}</p>
-                {line.packageName ? <p className="truncate text-sm text-stone-600">{line.packageNickname?.trim() ? `${line.packageName} / ${line.name}` : line.name}</p> : null}
+                <p className="truncate font-bold">{quoteLinePrimaryLabel(line)}</p>
+                {quoteLineSecondaryLabel(line) ? <p className="truncate text-sm text-stone-600">{quoteLineSecondaryLabel(line)}</p> : null}
                 <p className="text-sm text-stone-600">Qty {line.quantity}</p>
               </div>
               <strong className="shrink-0">{money.format(line.quantity * line.unitPrice)}</strong>
@@ -3244,11 +3269,11 @@ function SettingsPage({
   const [recoverySort, setRecoverySort] = useState<RecoverySort>("recent");
   const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<PermanentDeleteTarget | null>(null);
   const [passwordChange, setPasswordChange] = useState({ next: "", confirm: "", message: "" });
+  const [pluginStatuses, setPluginStatuses] = useState<IntegrationPluginStatus[]>([]);
   const sections: { id: SettingsSection; label: string; admin?: boolean }[] = [
     { id: "account", label: "Account Info" },
     { id: "database", label: "Database" },
-    { id: "serviceTitan", label: "ServiceTitan", admin: true },
-    { id: "adi", label: "ADI MSRP", admin: true },
+    { id: "plugins", label: "Plugins", admin: true },
     { id: "sync", label: "Sync", admin: true },
     { id: "debug", label: "Debug Logs", admin: true },
     { id: "recovery", label: "Admin Recovery", admin: true },
@@ -3294,6 +3319,21 @@ function SettingsPage({
       setActiveSection("account");
     }
   }, [activeSection, adminUnlocked]);
+  useEffect(() => {
+    if (!adminUnlocked || user.role !== "admin") return;
+    let cancelled = false;
+    fetch("/api/plugins/status", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: { data?: IntegrationPluginStatus[] } | null) => {
+        if (!cancelled && Array.isArray(payload?.data)) setPluginStatuses(payload.data);
+      })
+      .catch(() => {
+        if (!cancelled) setPluginStatuses([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [adminUnlocked, user.role]);
 
   const confirmSync = () => {
     onSync();
@@ -3345,7 +3385,7 @@ function SettingsPage({
       <div className="panel-header">
         <div>
           <h2>Settings</h2>
-          <p>Account, database, ServiceTitan, and future integration controls.</p>
+          <p>Account, database, plugin, sync, and recovery controls.</p>
         </div>
       </div>
       <div className="grid gap-4 p-4 lg:grid-cols-[260px_minmax(0,1fr)]">
@@ -3448,42 +3488,34 @@ function SettingsPage({
               </div>
             </section>
           ) : null}
-          {activeSection === "serviceTitan" ? (
-            <section className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-4 md:grid-cols-2">
-              <h3 className="font-black md:col-span-2">ServiceTitan Admin Panel</h3>
-              <label className="field md:col-span-2">
-                <span>Base URL</span>
-                <input className="input" value={settings.baseUrl} onChange={(event) => setSettings((current) => ({ ...current, baseUrl: event.target.value }))} />
-              </label>
-              <label className="field">
-                <span>Tenant ID</span>
-                <input className="input" value={settings.tenantId} onChange={(event) => setSettings((current) => ({ ...current, tenantId: event.target.value }))} />
-              </label>
-              <label className="field">
-                <span>Client ID</span>
-                <input className="input" value={settings.clientId} onChange={(event) => setSettings((current) => ({ ...current, clientId: event.target.value }))} />
-              </label>
-              <label className="field md:col-span-2">
-                <span>Client Secret</span>
-                <input className="input" type="password" value={settings.clientSecret} onChange={(event) => setSettings((current) => ({ ...current, clientSecret: event.target.value }))} />
-              </label>
-            </section>
-          ) : null}
-          {activeSection === "adi" ? (
-            <section className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-4 md:grid-cols-2">
-              <h3 className="font-black md:col-span-2">ADI MSRP Admin Panel</h3>
-              <label className="field md:col-span-2">
-                <span>ADI Base URL</span>
-                <input className="input" value={settings.adiBaseUrl ?? ""} onChange={(event) => setSettings((current) => ({ ...current, adiBaseUrl: event.target.value }))} placeholder="Future ADI API or feed URL" />
-              </label>
-              <label className="field">
-                <span>ADI Account Number</span>
-                <input className="input" value={settings.adiAccountNumber ?? ""} onChange={(event) => setSettings((current) => ({ ...current, adiAccountNumber: event.target.value }))} />
-              </label>
-              <label className="field">
-                <span>ADI API Key</span>
-                <input className="input" type="password" value={settings.adiApiKey ?? ""} onChange={(event) => setSettings((current) => ({ ...current, adiApiKey: event.target.value }))} />
-              </label>
+          {activeSection === "plugins" ? (
+            <section className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-4">
+              <div>
+                <h3 className="font-black">Plugins</h3>
+                <p className="mt-1 text-sm text-stone-600">Integration credentials are read from Vercel environment variables. API keys are not editable in the browser.</p>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                {pluginStatuses.length ? (
+                  pluginStatuses.map((plugin) => (
+                    <div key={plugin.id} className="rounded-lg border border-stone-200 bg-white p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="font-black">{plugin.name}</p>
+                        <span className={`rounded-full border px-2 py-1 text-xs font-black uppercase tracking-normal ${plugin.connected ? "border-teal-300 bg-teal-100 text-teal-900" : "border-amber-300 bg-amber-100 text-amber-900"}`}>
+                          {plugin.connected ? "Connected" : "Not connected"}
+                        </span>
+                      </div>
+                      <div className="mt-3 grid gap-2 text-sm text-stone-600">
+                        <p>Running: <strong className="text-stone-950">{plugin.running ? "Yes" : "No"}</strong></p>
+                        <p>{plugin.detail}</p>
+                        {!plugin.connected ? <p>Missing env: {plugin.missingEnv.join(", ")}</p> : null}
+                        <p className="text-xs font-bold text-stone-500">Checked {new Date(plugin.lastCheckedAt).toLocaleString()}</p>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="rounded-lg border border-dashed border-stone-300 bg-white p-4 text-sm text-stone-500 md:col-span-2">Plugin status is unavailable or locked.</p>
+                )}
+              </div>
             </section>
           ) : null}
           {activeSection === "sync" ? (

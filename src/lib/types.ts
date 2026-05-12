@@ -121,12 +121,5 @@ export type DebugLogEntry = {
 };
 
 export type ServiceTitanSettings = {
-  baseUrl: string;
-  tenantId: string;
-  clientId: string;
-  clientSecret: string;
-  adiBaseUrl?: string;
-  adiAccountNumber?: string;
-  adiApiKey?: string;
   lastSyncAt?: string;
 };

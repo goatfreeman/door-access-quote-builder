@@ -383,11 +383,11 @@ async function writeSupabaseDebugLogs(supabase: SupabaseClient, logs: DebugLogEn
 async function readSupabaseSettings(supabase: SupabaseClient): Promise<ServiceTitanSettings> {
   const { data, error } = await supabase.from("app_settings").select("value").eq("key", "settings").maybeSingle();
   if (error) throw new Error(error.message);
-  return isObject(data?.value) ? ({ ...emptySettings(), ...data.value } as ServiceTitanSettings) : emptySettings();
+  return sanitizeSettings(data?.value);
 }
 
 async function writeSupabaseSettings(supabase: SupabaseClient, settings: ServiceTitanSettings) {
-  const { error } = await supabase.from("app_settings").upsert({ key: "settings", value: toJson(settings), updated_at: new Date().toISOString() });
+  const { error } = await supabase.from("app_settings").upsert({ key: "settings", value: toJson(sanitizeSettings(settings)), updated_at: new Date().toISOString() });
   if (error) throw new Error(error.message);
 }
 
@@ -483,7 +483,14 @@ function asMeta(value: unknown): QuoteMeta {
 }
 
 function emptySettings(): ServiceTitanSettings {
-  return { baseUrl: "", tenantId: "", clientId: "", clientSecret: "" };
+  return {};
+}
+
+function sanitizeSettings(value: unknown): ServiceTitanSettings {
+  const settings = isObject(value) ? value : {};
+  return {
+    lastSyncAt: typeof settings.lastSyncAt === "string" ? settings.lastSyncAt : undefined,
+  };
 }
 
 function nullableNumber(value: unknown) {

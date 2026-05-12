@@ -11,7 +11,7 @@ Next.js, React, TypeScript, Tailwind CSS, and shadcn/ui app for building quick e
 - Template database starts empty, so templates can be built from the live item catalog
 - Expandable quote rows that show item name and quantity first, with price and notes inside the dropdown
 - Saved previous quote summaries with original quote date and edit/remove actions
-- Settings page with account placeholder, database placeholder, ServiceTitan admin fields, sync button, and last sync time
+- Settings page with account, database, admin-only plugin status, sync button, and last sync time
 - Mobile-friendly slide-out navigation and bottom total bar
 - Print/save-as-PDF workflow and customer email prompt
 
@@ -59,6 +59,18 @@ Run [docs/supabase-schema.sql](docs/supabase-schema.sql) in Supabase SQL Editor 
 Supabase Auth is the login path. Password login, magic-link login, and Azure SSO all go through Supabase.
 
 Supabase PostgreSQL is also the primary app database when `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are present. Items, templates, quotes, drafts, sessions, and debug logs are stored in their matching Supabase tables. Settings are stored in `public.app_settings` under the `settings` key.
+
+ServiceTitan and ADI credentials are plugin configuration and must be set as server-only Vercel environment variables:
+
+```text
+SERVICE_TITAN_BASE_URL=
+SERVICE_TITAN_TENANT_ID=
+SERVICE_TITAN_CLIENT_ID=
+SERVICE_TITAN_CLIENT_SECRET=
+ADI_BASE_URL=
+ADI_ACCOUNT_NUMBER=
+ADI_API_KEY=
+```
 
 In Supabase Auth, add the deployed site URL and callback URL:
 
@@ -140,7 +152,7 @@ Supabase PostgreSQL is the source of truth when `NEXT_PUBLIC_SUPABASE_URL` and `
 
 Templates should store item IDs in their line records. When an item is deleted, the backend should cascade that item ID out of every template line before saving.
 
-ServiceTitan and ADI MSRP fields are already represented in the UI so API-backed sync can be wired in later without redesigning the quoting workflow.
+ServiceTitan and ADI MSRP are represented as server-side plugins under `src/lib/plugins`. The browser can see connection status for admin users, but API keys stay in Vercel environment variables.
 
 ## License
 
