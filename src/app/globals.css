@@ -211,6 +211,12 @@ summary {
     vertical-align: top;
   }
 
+  .print-package-row td {
+    background: #f0fdfa;
+    border-bottom: 1px solid #99f6e4;
+    padding: 10px 8px;
+  }
+
   .print-table td:nth-child(3),
   .print-table td:nth-child(4),
   .print-table td:nth-child(5),

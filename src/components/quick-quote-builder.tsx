@@ -29,7 +29,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getPendingWriteCount, readDb, syncPendingWrites, writeDb } from "@/lib/client-db";
 import { writeDebugLog } from "@/lib/debug-log";
-import { quoteLineExportGroup, quoteLinePrimaryLabel, quoteLineSecondaryLabel } from "@/lib/quote/line-labels";
+import { groupQuoteLines, quoteLineExportGroup, quoteLinePrimaryLabel, quoteLineSecondaryLabel } from "@/lib/quote/line-labels";
 import { getSupabaseAuthClient } from "@/lib/supabase/auth-client";
 import type { SessionUser } from "@/lib/auth-types";
 import type { IntegrationPluginStatus } from "@/lib/plugins/types";
@@ -1312,6 +1312,7 @@ function HomePage({ user, meta, lines, total, drafts, onContinue, onLoadDraft }:
 
 function PrintQuoteDocument({ quote }: { quote: PrintableQuote }) {
   const issuedDate = quote.createdAt ? new Date(quote.createdAt) : new Date();
+  const lineGroups = groupQuoteLines(quote.lines);
 
   return (
     <section className="print-document">
@@ -1355,20 +1356,42 @@ function PrintQuoteDocument({ quote }: { quote: PrintableQuote }) {
           </tr>
         </thead>
         <tbody>
-          {quote.lines.length ? (
-            quote.lines.map((line) => (
-              <tr key={line.lineId}>
-                <td>
-                  <strong>{quoteLinePrimaryLabel(line)}</strong>
-                  {quoteLineSecondaryLabel(line) ? <span>{quoteLineSecondaryLabel(line)}</span> : null}
-                  {line.notes ? <small>{line.notes}</small> : null}
-                </td>
-                <td>{line.sku}</td>
-                <td>{line.quantity}</td>
-                <td>{money.format(line.unitPrice)}</td>
-                <td>{money.format(line.quantity * line.unitPrice)}</td>
-              </tr>
-            ))
+          {lineGroups.length ? (
+            lineGroups.flatMap((group) =>
+              group.type === "package"
+                ? [
+                    <tr key={`package-${group.key}`} className="print-package-row">
+                      <td colSpan={5}>
+                        <strong>{group.title}</strong>
+                        {group.title !== group.sourceName ? <span>{group.sourceName}</span> : null}
+                      </td>
+                    </tr>,
+                    ...group.lines.map((line) => (
+                      <tr key={line.lineId}>
+                        <td>
+                          <span>{line.name}</span>
+                          {line.notes ? <small>{line.notes}</small> : null}
+                        </td>
+                        <td>{line.sku}</td>
+                        <td>{line.quantity}</td>
+                        <td>{money.format(line.unitPrice)}</td>
+                        <td>{money.format(line.quantity * line.unitPrice)}</td>
+                      </tr>
+                    )),
+                  ]
+                : [
+                    <tr key={group.line.lineId}>
+                      <td>
+                        <strong>{group.line.name}</strong>
+                        {group.line.notes ? <small>{group.line.notes}</small> : null}
+                      </td>
+                      <td>{group.line.sku}</td>
+                      <td>{group.line.quantity}</td>
+                      <td>{money.format(group.line.unitPrice)}</td>
+                      <td>{money.format(group.line.quantity * group.line.unitPrice)}</td>
+                    </tr>,
+                  ],
+            )
           ) : (
             <tr>
               <td colSpan={5}>No line items.</td>
@@ -2736,15 +2759,6 @@ function TemplateCard({
           <ChevronDown size={17} className="text-stone-500" />
         </summary>
         <div className="grid gap-3 border-t border-stone-200 p-4">
-          <div className="flex justify-end">
-            <button
-              className="icon-button hover:border-red-200 hover:bg-red-50 hover:text-red-800"
-              onClick={() => onDeleteTemplate(template)}
-              aria-label={`Delete ${template.name || "template"}`}
-            >
-              <X size={16} />
-            </button>
-          </div>
           {requirements.length ? (
         <div className="grid gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
           <div>
@@ -2806,6 +2820,12 @@ function TemplateCard({
         <span>Description</span>
         <textarea className="textarea" value={template.description} onChange={(event) => updateTemplate({ description: event.target.value })} placeholder="Template description" />
       </label>
+      <div className="flex justify-end">
+        <button className="button-ghost text-red-800 hover:bg-red-50" onClick={() => onDeleteTemplate(template)}>
+          <Trash2 size={16} />
+          Delete template
+        </button>
+      </div>
         </div>
       </details>
       {selectorOpen ? (
@@ -3026,18 +3046,7 @@ function PreviousQuotes({
                 {selectedQuote.meta.project ? <p className="mt-1 text-sm font-bold text-stone-700">{selectedQuote.meta.project}</p> : null}
                 {selectedQuote.meta.location ? <p className="text-sm text-stone-600">{selectedQuote.meta.location}</p> : null}
               </div>
-              <div className="grid gap-2">
-                {selectedQuote.lines.map((line) => (
-                  <div key={line.lineId} className="flex items-start justify-between gap-3 rounded-lg border border-stone-200 bg-white p-3">
-                    <div>
-                      <p className="font-bold">{quoteLinePrimaryLabel(line)}</p>
-                      {quoteLineSecondaryLabel(line) ? <p className="text-sm text-stone-600">{quoteLineSecondaryLabel(line)}</p> : null}
-                      <p className="text-sm text-stone-600">Qty {line.quantity}</p>
-                    </div>
-                    <strong>{money.format(line.quantity * line.unitPrice)}</strong>
-                  </div>
-                ))}
-              </div>
+              <GroupedQuoteLines lines={selectedQuote.lines} />
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <button className="button-ghost" onClick={() => setDeleteQuote(selectedQuote)}>
                   <Trash2 size={16} />
@@ -3213,21 +3222,54 @@ function ClientQuoteView({ quote, onPrintQuote }: { quote: SavedQuote | null; on
           <InfoTile label="Quoted" value={new Date(quote.createdAt).toLocaleDateString()} />
           {quote.meta.location ? <InfoTile label="Location" value={quote.meta.location} /> : null}
         </div>
-        <div className="grid gap-2">
-          {quote.lines.map((line) => (
-            <div key={line.lineId} className="flex items-start justify-between gap-3 rounded-lg border border-stone-200 bg-white p-3">
-              <div className="min-w-0">
-                <p className="truncate font-bold">{quoteLinePrimaryLabel(line)}</p>
-                {quoteLineSecondaryLabel(line) ? <p className="truncate text-sm text-stone-600">{quoteLineSecondaryLabel(line)}</p> : null}
-                <p className="text-sm text-stone-600">Qty {line.quantity}</p>
-              </div>
-              <strong className="shrink-0">{money.format(line.quantity * line.unitPrice)}</strong>
-            </div>
-          ))}
-        </div>
+        <GroupedQuoteLines lines={quote.lines} />
         <TotalsCard totals={totalsFromSavedQuote(quote)} />
       </div>
     </section>
+  );
+}
+
+function GroupedQuoteLines({ lines }: { lines: QuoteLine[] }) {
+  const groups = useMemo(() => groupQuoteLines(lines), [lines]);
+
+  return (
+    <div className="grid gap-2">
+      {groups.map((group) =>
+        group.type === "package" ? (
+          <div key={group.key} className="overflow-hidden rounded-lg border border-teal-200 bg-teal-50">
+            <div className="flex items-start justify-between gap-3 border-b border-teal-200 p-3">
+              <div className="min-w-0">
+                <p className="truncate font-black text-teal-950">{group.title}</p>
+                {group.title !== group.sourceName ? <p className="truncate text-sm font-bold text-teal-800">{group.sourceName}</p> : null}
+                <p className="text-sm text-teal-900">{group.lines.length} items - Qty {group.lines.reduce((sum, line) => sum + line.quantity, 0)}</p>
+              </div>
+              <strong className="shrink-0">{money.format(group.lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0))}</strong>
+            </div>
+            <div className="grid gap-2 p-3">
+              {group.lines.map((line) => (
+                <div key={line.lineId} className="flex items-start justify-between gap-3 rounded-md bg-white p-2">
+                  <div className="min-w-0">
+                    <p className="truncate font-bold">{line.name}</p>
+                    <p className="truncate font-mono text-xs text-stone-500">{line.sku}</p>
+                    <p className="text-sm text-stone-600">Qty {line.quantity}</p>
+                  </div>
+                  <strong className="shrink-0">{money.format(line.quantity * line.unitPrice)}</strong>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div key={group.line.lineId} className="flex items-start justify-between gap-3 rounded-lg border border-stone-200 bg-white p-3">
+            <div className="min-w-0">
+              <p className="truncate font-bold">{quoteLinePrimaryLabel(group.line)}</p>
+              {quoteLineSecondaryLabel(group.line) ? <p className="truncate text-sm text-stone-600">{quoteLineSecondaryLabel(group.line)}</p> : null}
+              <p className="text-sm text-stone-600">Qty {group.line.quantity}</p>
+            </div>
+            <strong className="shrink-0">{money.format(group.line.quantity * group.line.unitPrice)}</strong>
+          </div>
+        ),
+      )}
+    </div>
   );
 }
 
