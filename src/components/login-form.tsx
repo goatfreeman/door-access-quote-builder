@@ -166,13 +166,60 @@ export function LoginForm({ error }: { error?: string }) {
     }
   };
 
+  const sendPasswordReset = async () => {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes("@")) {
+      setMessage("Enter a valid email address first.");
+      return;
+    }
+    setLoading(true);
+    setMessage("");
+    try {
+      const supabase = getSupabaseAuthClient();
+      if (!supabase) {
+        setMessage("Supabase Auth is not configured.");
+        return;
+      }
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+        redirectTo: getAuthRedirectUrl("/auth/callback?next=/login/reset-password"),
+      });
+      if (resetError) {
+        await writeDebugLog({
+          type: "auth",
+          level: "warning",
+          message: "Supabase password reset request failed.",
+          metadata: { email: cleanEmail, error: resetError.message },
+        });
+        setMessage("Password reset email could not be sent.");
+        return;
+      }
+      await writeDebugLog({
+        type: "auth",
+        level: "info",
+        message: "Supabase password reset email sent.",
+        metadata: { email: cleanEmail },
+      });
+      setMessage("Password reset email sent. Check your inbox.");
+    } catch {
+      await writeDebugLog({
+        type: "auth",
+        level: "error",
+        message: "Password reset request failed.",
+        metadata: { email: cleanEmail },
+      });
+      setMessage("Sign-in service is not responding. Try refreshing the page.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <main className="grid min-h-screen place-items-center bg-stone-100 p-4 text-stone-950">
       <section className="w-full max-w-md rounded-lg border border-stone-200 bg-white p-5 shadow-xl">
         <div>
           <div className="grid size-11 place-items-center rounded-lg bg-stone-900 text-xl font-black text-white">Q</div>
           <h1 className="mt-4 text-2xl font-black">Sign in to Quick Quote Builder</h1>
-          <p className="mt-2 text-sm text-stone-600">Enter your email first. New SSO users are sent to Microsoft; existing password users can use a password or magic link.</p>
+          <p className="mt-2 text-sm text-stone-600">Enter your email first. SSO domains are sent to Microsoft; other users can use a password or magic link.</p>
         </div>
 
         {message ? <p className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-900">{message}</p> : null}
@@ -231,6 +278,9 @@ export function LoginForm({ error }: { error?: string }) {
               <button className="button-secondary justify-center" onClick={sendMagicLink} disabled={loading}>
                 <KeyRound size={16} />
                 Email magic link instead
+              </button>
+              <button className="button-ghost justify-center" onClick={sendPasswordReset} disabled={loading}>
+                Forgot password?
               </button>
               <button className="button-ghost justify-center" onClick={() => setMode("email")}>
                 Use a different email
