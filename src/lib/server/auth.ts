@@ -7,6 +7,14 @@ type SupabaseProfile = {
   role: "admin" | "user" | null;
 };
 
+function metadataText(metadata: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = metadata[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
 export async function getSessionUser(): Promise<SessionUser | null> {
   return getSupabaseSessionUser();
 }
@@ -26,11 +34,14 @@ async function getSupabaseSessionUser(): Promise<SessionUser | null> {
     const { data: rawProfile } = await supabase.from("profiles").select("display_name, role").eq("id", user.id).maybeSingle();
     const profile = rawProfile as SupabaseProfile | null;
     const provider = user.app_metadata.provider === "azure" || user.app_metadata.provider === "sso" ? "azure" : "password";
-    const metadataName = typeof user.user_metadata.name === "string" ? user.user_metadata.name : undefined;
+    const metadataName = metadataText(user.user_metadata, ["name", "full_name", "display_name", "preferred_username"]);
+    const emailName = user.email?.split("@")[0] ?? "User";
+    const profileName = profile?.display_name?.trim();
+    const displayName = profileName && profileName !== emailName ? profileName : metadataName ?? profileName ?? emailName;
 
     return {
       id: user.id,
-      name: profile?.display_name ?? metadataName ?? user.email?.split("@")[0] ?? "User",
+      name: displayName,
       email: user.email ?? undefined,
       provider,
       role: profile?.role === "admin" ? "admin" : "user",

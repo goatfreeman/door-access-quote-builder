@@ -46,6 +46,7 @@ export function LoginForm({ error }: { error?: string }) {
             provider: "azure",
             options: {
               redirectTo: getAuthRedirectUrl(),
+              scopes: "email",
               queryParams: { login_hint: email },
             },
           });
@@ -132,7 +133,7 @@ export function LoginForm({ error }: { error?: string }) {
       const { error: magicLinkError } = await supabase.auth.signInWithOtp({
         email: cleanEmail,
         options: {
-          emailRedirectTo: getAuthRedirectUrl(),
+          emailRedirectTo: getAuthRedirectUrl("/auth/callback?next=/login/confirmed"),
         },
       });
       if (magicLinkError) {
@@ -171,7 +172,7 @@ export function LoginForm({ error }: { error?: string }) {
         <div>
           <div className="grid size-11 place-items-center rounded-lg bg-stone-900 text-xl font-black text-white">Q</div>
           <h1 className="mt-4 text-2xl font-black">Sign in to Quick Quote Builder</h1>
-          <p className="mt-2 text-sm text-stone-600">Enter your email first. SSO users are sent to Microsoft; other users can use a password or magic link.</p>
+          <p className="mt-2 text-sm text-stone-600">Enter your email first. New SSO users are sent to Microsoft; existing password users can use a password or magic link.</p>
         </div>
 
         {message ? <p className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-900">{message}</p> : null}
