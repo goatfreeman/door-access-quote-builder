@@ -1964,7 +1964,12 @@ function FinalizePanel({
   onPrint: () => void;
   onEmail: () => void;
 }) {
+  const [scopeOpen, setScopeOpen] = useState(Boolean(meta.scopeOfWork));
   const [notesOpen, setNotesOpen] = useState(Boolean(meta.notes));
+  useEffect(() => {
+    if (meta.scopeOfWork) setScopeOpen(true);
+    if (meta.notes) setNotesOpen(true);
+  }, [meta.notes, meta.scopeOfWork]);
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div className="grid gap-3 md:grid-cols-2">
@@ -2016,10 +2021,18 @@ function FinalizePanel({
             </label>
           </div>
         ) : null}
-        <label className="field md:col-span-2">
-          <span>Scope of work</span>
-          <textarea className="textarea" value={meta.scopeOfWork ?? ""} onChange={(event) => setMeta((current) => ({ ...current, scopeOfWork: event.target.value }))} placeholder="Describe what work is included for this quote" />
-        </label>
+        {!scopeOpen ? (
+          <button className="button-secondary w-fit md:col-span-2" onClick={() => setScopeOpen(true)}>
+            <Plus size={16} />
+            Add scope of work
+          </button>
+        ) : null}
+        {scopeOpen ? (
+          <label className="field md:col-span-2">
+            <span>Scope of work</span>
+            <textarea className="textarea" value={meta.scopeOfWork ?? ""} onChange={(event) => setMeta((current) => ({ ...current, scopeOfWork: event.target.value }))} placeholder="Describe what work is included for this quote" />
+          </label>
+        ) : null}
         {!notesOpen ? (
           <button className="button-secondary w-fit md:col-span-2" onClick={() => setNotesOpen(true)}>
             <Plus size={16} />
@@ -3522,6 +3535,10 @@ function SettingsPage({
               {item.label}
             </button>
           ))}
+          <button className="mt-2 inline-flex min-h-10 items-center justify-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-left text-sm font-black text-red-800 transition hover:border-red-300 hover:bg-red-100" onClick={onSignOut}>
+            <LogOut size={16} />
+            Sign out
+          </button>
           {user.role === "admin" && !adminUnlocked ? <p className="rounded-md border border-dashed border-stone-300 bg-white p-3 text-xs font-bold text-stone-500">Hold the Settings nav button for 5 seconds to unlock admin sections.</p> : null}
         </div>
         <div className="grid gap-4">
@@ -3538,43 +3555,41 @@ function SettingsPage({
                   <input className="input" value={user.provider === "azure" ? "SSO" : "Password"} readOnly />
                 </label>
               </div>
-              <button className="button-secondary mt-4" onClick={onSignOut}>
-                <LogOut size={16} />
-                Sign out
-              </button>
-              <div className="mt-5 rounded-lg border border-stone-200 bg-white p-3">
-                {user.provider === "azure" ? (
-                  <p className="text-sm font-bold text-stone-600">SSO passwords are managed by the identity provider.</p>
-                ) : (
-                  <button className="button-secondary" onClick={() => setPasswordChangeOpen((open) => !open)}>
-                    <KeyRound size={17} />
-                    Change password
-                  </button>
-                )}
-                {user.provider !== "azure" && passwordChangeOpen ? (
-                  <div className="mt-4 grid gap-3 md:grid-cols-2">
-                    <p className="text-sm text-stone-600 md:col-span-2">Confirm your current password before setting a new one.</p>
-                    <label className="field md:col-span-2">
-                      <span>Current password</span>
-                      <input className="input" type="password" value={passwordChange.current} onChange={(event) => setPasswordChange((current) => ({ ...current, current: event.target.value, message: "" }))} />
-                    </label>
-                    <label className="field">
-                      <span>New password</span>
-                      <input className="input" type="password" value={passwordChange.next} onChange={(event) => setPasswordChange((current) => ({ ...current, next: event.target.value, message: "" }))} />
-                    </label>
-                    <label className="field">
-                      <span>Confirm password</span>
-                      <input className="input" type="password" value={passwordChange.confirm} onChange={(event) => setPasswordChange((current) => ({ ...current, confirm: event.target.value, message: "" }))} />
-                    </label>
-                    <div className="flex flex-wrap items-center gap-3 md:col-span-2">
-                      <button className="button-secondary" onClick={changePassword}>Save new password</button>
-                      {passwordChange.message ? <span className="text-sm font-bold text-stone-600">{passwordChange.message}</span> : null}
+              {user.provider === "azure" ? (
+                <div className="mt-4 rounded-lg border border-stone-200 bg-white p-3 text-sm font-bold text-stone-600">SSO passwords are managed by the identity provider.</div>
+              ) : (
+                <button className="button-secondary mt-4" onClick={() => setPasswordChangeOpen((open) => !open)}>
+                  <KeyRound size={17} />
+                  Change password
+                </button>
+              )}
+              {user.provider !== "azure" && (passwordChangeOpen || passwordChange.message) ? (
+                <div className="mt-5 rounded-lg border border-stone-200 bg-white p-3">
+                  {user.provider !== "azure" && passwordChangeOpen ? (
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <p className="text-sm text-stone-600 md:col-span-2">Confirm your current password before setting a new one.</p>
+                      <label className="field md:col-span-2">
+                        <span>Current password</span>
+                        <input className="input" type="password" value={passwordChange.current} onChange={(event) => setPasswordChange((current) => ({ ...current, current: event.target.value, message: "" }))} />
+                      </label>
+                      <label className="field">
+                        <span>New password</span>
+                        <input className="input" type="password" value={passwordChange.next} onChange={(event) => setPasswordChange((current) => ({ ...current, next: event.target.value, message: "" }))} />
+                      </label>
+                      <label className="field">
+                        <span>Confirm password</span>
+                        <input className="input" type="password" value={passwordChange.confirm} onChange={(event) => setPasswordChange((current) => ({ ...current, confirm: event.target.value, message: "" }))} />
+                      </label>
+                      <div className="flex flex-wrap items-center gap-3 md:col-span-2">
+                        <button className="button-secondary" onClick={changePassword}>Save new password</button>
+                        {passwordChange.message ? <span className="text-sm font-bold text-stone-600">{passwordChange.message}</span> : null}
+                      </div>
                     </div>
-                  </div>
-                ) : user.provider !== "azure" && passwordChange.message ? (
-                  <p className="mt-3 text-sm font-bold text-stone-600">{passwordChange.message}</p>
-                ) : null}
-              </div>
+                  ) : user.provider !== "azure" && passwordChange.message ? (
+                    <p className="text-sm font-bold text-stone-600">{passwordChange.message}</p>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="mt-5 grid gap-2">
                 <div className="flex items-center gap-2">
                   <Monitor size={17} />
@@ -3701,15 +3716,28 @@ function SettingsPage({
               <div className="grid gap-2">
                 {debugLogs.length ? (
                   debugLogs.slice(0, 50).map((log) => (
-                    <div key={log.id} className={`rounded-lg border bg-white p-3 ${log.level === "error" ? "border-red-200" : log.level === "warning" ? "border-amber-200" : "border-stone-200"}`}>
+                    <div key={log.id} className={`rounded-lg border bg-white p-4 ${log.level === "error" ? "border-red-200" : log.level === "warning" ? "border-amber-200" : "border-stone-200"}`}>
                       <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div>
+                        <div className="min-w-0">
                           <p className="font-black">{log.message}</p>
-                          <p className="mt-1 text-xs font-bold uppercase tracking-normal text-stone-500">{log.type} / {log.level}</p>
+                          <p className="mt-1 text-xs font-bold uppercase tracking-normal text-stone-500">Log ID: {log.id}</p>
                         </div>
-                        <span className="text-xs font-bold text-stone-500">{new Date(log.createdAt).toLocaleString()}</span>
+                        <span className={`rounded-full border px-2 py-1 text-xs font-black uppercase tracking-normal ${log.level === "error" ? "border-red-200 bg-red-50 text-red-800" : log.level === "warning" ? "border-amber-200 bg-amber-50 text-amber-800" : "border-stone-200 bg-stone-50 text-stone-700"}`}>
+                          {log.level}
+                        </span>
                       </div>
-                      <p className="mt-2 text-sm text-stone-600">{log.userName || log.userId || "Unknown user"}{log.deviceName ? ` / ${log.deviceName}` : ""}</p>
+                      <div className="mt-4 grid gap-2 text-sm md:grid-cols-2">
+                        <InfoTile label="Type" value={log.type} />
+                        <InfoTile label="Created" value={new Date(log.createdAt).toLocaleString()} />
+                        <InfoTile label="User" value={log.userName || log.userId || "Unknown user"} />
+                        <InfoTile label="Device" value={log.deviceName || log.deviceId || "Unknown device"} />
+                      </div>
+                      {log.metadata && Object.keys(log.metadata).length ? (
+                        <details className="mt-3 rounded-md border border-stone-200 bg-stone-50 p-3">
+                          <summary className="cursor-pointer text-sm font-black text-stone-700">Metadata</summary>
+                          <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-md bg-white p-3 font-mono text-xs text-stone-700">{JSON.stringify(log.metadata, null, 2)}</pre>
+                        </details>
+                      ) : null}
                     </div>
                   ))
                 ) : (
