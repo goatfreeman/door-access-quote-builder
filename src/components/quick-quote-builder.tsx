@@ -3565,7 +3565,7 @@ function SettingsPage({
               )}
               {user.provider !== "azure" && (passwordChangeOpen || passwordChange.message) ? (
                 <div className="mt-5 rounded-lg border border-stone-200 bg-white p-3">
-                  {user.provider !== "azure" && passwordChangeOpen ? (
+                  {passwordChangeOpen ? (
                     <div className="grid gap-3 md:grid-cols-2">
                       <p className="text-sm text-stone-600 md:col-span-2">Confirm your current password before setting a new one.</p>
                       <label className="field md:col-span-2">
@@ -3585,7 +3585,7 @@ function SettingsPage({
                         {passwordChange.message ? <span className="text-sm font-bold text-stone-600">{passwordChange.message}</span> : null}
                       </div>
                     </div>
-                  ) : user.provider !== "azure" && passwordChange.message ? (
+                  ) : passwordChange.message ? (
                     <p className="text-sm font-bold text-stone-600">{passwordChange.message}</p>
                   ) : null}
                 </div>
