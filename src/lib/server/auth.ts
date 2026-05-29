@@ -7,12 +7,28 @@ type SupabaseProfile = {
   role: "admin" | "user" | null;
 };
 
+type SupabaseIdentity = {
+  provider?: string | null;
+  identity_data?: Record<string, unknown> | null;
+};
+
 function metadataText(metadata: Record<string, unknown>, keys: string[]) {
   for (const key of keys) {
     const value = metadata[key];
     if (typeof value === "string" && value.trim()) return value.trim();
   }
   return undefined;
+}
+
+function metadataName(metadata: Record<string, unknown> | null | undefined) {
+  if (!metadata) return undefined;
+  const fullName = metadataText(metadata, ["name", "full_name", "display_name", "preferred_username"]);
+  if (fullName) return fullName;
+
+  const givenName = metadataText(metadata, ["given_name", "first_name"]);
+  const familyName = metadataText(metadata, ["family_name", "last_name", "surname"]);
+  const joined = [givenName, familyName].filter(Boolean).join(" ").trim();
+  return joined || undefined;
 }
 
 function metadataList(metadata: Record<string, unknown>, key: string) {
@@ -22,7 +38,7 @@ function metadataList(metadata: Record<string, unknown>, key: string) {
   return [];
 }
 
-function userAuthProvider(user: { app_metadata: Record<string, unknown>; identities?: Array<{ provider?: string | null }> | null; email?: string }) {
+function userAuthProvider(user: { app_metadata: Record<string, unknown>; identities?: SupabaseIdentity[] | null; email?: string }) {
   const providers = new Set<string>([
     metadataText(user.app_metadata, ["provider"])?.toLowerCase() ?? "",
     ...metadataList(user.app_metadata, "providers"),
@@ -52,10 +68,12 @@ async function getSupabaseSessionUser(): Promise<SessionUser | null> {
     const { data: rawProfile } = await supabase.from("profiles").select("display_name, role").eq("id", user.id).maybeSingle();
     const profile = rawProfile as SupabaseProfile | null;
     const provider = userAuthProvider(user);
-    const metadataName = metadataText(user.user_metadata, ["name", "full_name", "display_name", "preferred_username"]);
-    const emailName = user.email?.split("@")[0] ?? "User";
     const profileName = profile?.display_name?.trim();
-    const displayName = profileName && profileName !== emailName ? profileName : metadataName ?? profileName ?? emailName;
+    const displayName = preferredUserName(user, profileName);
+
+    if (profileName !== displayName) {
+      await supabase.from("profiles").update({ display_name: displayName }).eq("id", user.id);
+    }
 
     return {
       id: user.id,
@@ -67,6 +85,24 @@ async function getSupabaseSessionUser(): Promise<SessionUser | null> {
   } catch {
     return null;
   }
+}
+
+function isEmailFallbackName(name: string | undefined, email: string | undefined) {
+  if (!name || !email) return false;
+  const normalizedName = name.trim().toLowerCase();
+  const normalizedEmail = email.trim().toLowerCase();
+  return normalizedName === normalizedEmail || normalizedName === normalizedEmail.split("@")[0];
+}
+
+function preferredUserName(user: { email?: string; user_metadata: Record<string, unknown>; identities?: SupabaseIdentity[] | null }, profileName?: string) {
+  const emailName = user.email?.split("@")[0] ?? "User";
+  const authNames = [metadataName(user.user_metadata), ...(user.identities ?? []).map((identity) => metadataName(identity.identity_data))].filter(
+    (name): name is string => Boolean(name)
+  );
+  const authName = authNames.find((name) => !isEmailFallbackName(name, user.email)) ?? authNames[0];
+
+  if (profileName && !isEmailFallbackName(profileName, user.email)) return profileName;
+  return authName ?? profileName ?? emailName;
 }
 
 function isSupabaseAuthEnabled() {

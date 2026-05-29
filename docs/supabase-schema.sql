@@ -50,6 +50,10 @@ begin
       new.raw_user_meta_data->>'full_name',
       new.raw_user_meta_data->>'display_name',
       new.raw_user_meta_data->>'preferred_username',
+      nullif(
+        trim(concat_ws(' ', new.raw_user_meta_data->>'given_name', coalesce(new.raw_user_meta_data->>'family_name', new.raw_user_meta_data->>'surname'))),
+        ''
+      ),
       split_part(new.email, '@', 1)
     )
   )
