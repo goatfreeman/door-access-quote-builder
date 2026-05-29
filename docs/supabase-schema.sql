@@ -108,6 +108,7 @@ create table if not exists public.quotes (
   include_labor boolean not null default false,
   labor_hours numeric(8, 2),
   labor_rate numeric(10, 2),
+  scope_of_work text,
   notes text,
   lines_snapshot jsonb not null default '[]'::jsonb,
   total numeric(12, 2) not null default 0,
@@ -118,6 +119,9 @@ create table if not exists public.quotes (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.quotes
+  add column if not exists scope_of_work text;
 
 create table if not exists public.quote_revisions (
   id uuid primary key default gen_random_uuid(),
@@ -295,6 +299,10 @@ create policy "debug logs user insert" on public.debug_logs
   for insert to authenticated with check (user_id = auth.uid() or user_id is null);
 
 drop policy if exists "settings admin only" on public.app_settings;
-create policy "settings admin only" on public.app_settings
-  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+drop policy if exists "settings authenticated read" on public.app_settings;
+create policy "settings authenticated read" on public.app_settings
+  for select to authenticated using (true);
 
+drop policy if exists "settings admin write" on public.app_settings;
+create policy "settings admin write" on public.app_settings
+  for all to authenticated using (public.is_admin()) with check (public.is_admin());

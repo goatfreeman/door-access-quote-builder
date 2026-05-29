@@ -54,6 +54,7 @@ export type QuoteMeta = {
   includeLabor: boolean;
   laborHours?: number;
   laborRate?: number;
+  scopeOfWork?: string;
   notes?: string;
 };
 
@@ -122,4 +123,6 @@ export type DebugLogEntry = {
 
 export type ServiceTitanSettings = {
   lastSyncAt?: string;
+  taxState?: string;
+  defaultTaxPercent?: number;
 };

@@ -26,7 +26,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { Dispatch, SetStateAction } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getPendingWriteCount, readDb, syncPendingWrites, writeDb } from "@/lib/client-db";
 import { writeDebugLog } from "@/lib/debug-log";
 import { groupQuoteLines, quoteLineExportGroup, quoteLinePrimaryLabel, quoteLineSecondaryLabel } from "@/lib/quote/line-labels";
@@ -37,7 +37,7 @@ import type { CatalogItem, DebugLogEntry, DraftQuote, QuoteLine, QuoteMeta, Quot
 
 type View = "home" | "quote" | "items" | "templates" | "previous" | "settings" | "client";
 type QuoteStep = "pick" | "customize" | "review" | "finalize";
-type SettingsSection = "account" | "database" | "plugins" | "sync" | "debug" | "recovery";
+type SettingsSection = "account" | "database" | "quoteDefaults" | "plugins" | "sync" | "debug" | "recovery";
 type DatabaseStatus = {
   provider: string;
   persistent: boolean;
@@ -103,6 +103,7 @@ const emptyMeta: QuoteMeta = {
   includeLabor: true,
   laborHours: 0,
   laborRate: 125,
+  scopeOfWork: "",
   notes: "",
 };
 
@@ -270,6 +271,13 @@ function totalsFromSavedQuote(quote: SavedQuote): QuoteTotals {
   return { ...calculated, total: quote.total || calculated.total };
 }
 
+function quoteMetaDefaults(settings: ServiceTitanSettings): QuoteMeta {
+  return {
+    ...emptyMeta,
+    taxPercent: Number.isFinite(settings.defaultTaxPercent) ? Number(settings.defaultTaxPercent) : emptyMeta.taxPercent,
+  };
+}
+
 export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser | null }) {
   const [view, setView] = useState<View>(() => {
     const pathView = viewFromPath();
@@ -320,6 +328,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   const notificationRef = useRef<HTMLDivElement>(null);
   const settingsHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sessionsRef = useRef<UserSessionRecord[]>([]);
+  const previousOnlineRef = useRef(isOnline);
   const activeItems = useMemo(() => items.filter((item) => !item.deletedAt), [items]);
   const activeQuotes = useMemo(() => quotes.filter((quote) => !quote.deletedAt), [quotes]);
   const userDraftQuotes = useMemo(() => {
@@ -396,7 +405,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   useEffect(() => {
     purgeLegacyBrowserData();
     setLines([]);
-    setMeta(emptyMeta);
+    setMeta(quoteMetaDefaults(settings));
     setDraftHydrated(true);
   }, []);
 
@@ -408,12 +417,14 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
     const serverTime = serverDraft ? new Date(serverDraft.updatedAt).getTime() : 0;
     if (serverDraft && serverTime > 0) {
       setLines(serverDraft.lines);
-      setMeta({ ...emptyMeta, ...serverDraft.meta });
+      setMeta({ ...quoteMetaDefaults(settings), ...serverDraft.meta });
       if (serverDraft.quoteStep && isQuoteStep(serverDraft.quoteStep)) setQuoteStep(serverDraft.quoteStep);
       pushNotification("Draft restored", `Loaded the latest server draft from ${serverDraft.deviceName || "another device"}.`);
+    } else {
+      setMeta((current) => (current.customer || current.project || current.quoteNumber !== emptyMeta.quoteNumber ? current : quoteMetaDefaults(settings)));
     }
     setServerDraftChecked(true);
-  }, [draftHydrated, draftQuotes, hydrated, serverDraftChecked, sessionUser.id]);
+  }, [draftHydrated, draftQuotes, hydrated, pushNotification, serverDraftChecked, sessionUser.id, settings]);
 
   useEffect(() => {
     writeStorage(STORAGE_KEYS.session, { view, quoteStep, user: sessionUser });
@@ -638,10 +649,10 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   }, [deviceId, deviceName, hydrated, sessionUser.id, sessionUser.name]);
 
   useEffect(() => {
-    if (hydrated && !databaseLoadFailed) {
+    if (hydrated && !databaseLoadFailed && sessionUser.role === "admin") {
       void writeDb("settings", settings).then(() => setPendingOfflineWrites(getPendingWriteCount()));
     }
-  }, [databaseLoadFailed, hydrated, settings]);
+  }, [databaseLoadFailed, hydrated, sessionUser.role, settings]);
 
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent | TouchEvent) => {
@@ -682,13 +693,19 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
     }
   }, [catalogCategories, category]);
 
-  const pushNotification = (title: string, message: string) => {
+  const pushNotification = useCallback((title: string, message: string) => {
     setNotifications((current) => [{ id: makeId("note"), title, message, createdAt: new Date().toISOString() }, ...current].slice(0, 8));
-  };
+  }, []);
 
   const dismissNotification = (id: string) => {
     setNotifications((current) => current.filter((notification) => notification.id !== id));
   };
+
+  useEffect(() => {
+    if (previousOnlineRef.current === isOnline) return;
+    previousOnlineRef.current = isOnline;
+    pushNotification(isOnline ? "Back online" : "Offline", isOnline ? "Pending changes will sync to the database." : "Changes will be cached locally until the connection returns.");
+  }, [isOnline, pushNotification]);
 
   const saveDraftQuote = (label = "Temporary quote") => {
     if (!activeLines.length && !meta.customer.trim() && !meta.project.trim()) return;
@@ -713,7 +730,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
 
   const clearCurrentQuote = () => {
     setLines([]);
-    setMeta(emptyMeta);
+    setMeta(quoteMetaDefaults(settings));
     setEditingQuoteId("");
     setQuoteSaveError("");
     setQuoteStep("customize");
@@ -839,6 +856,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
       project: meta.project.trim(),
       location: meta.location?.trim() ?? "",
       quoteNumber,
+      scopeOfWork: meta.scopeOfWork?.trim() ?? "",
       notes: meta.notes?.trim() ?? "",
     };
     if (editingQuoteId) {
@@ -869,7 +887,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
       navigateToView("previous", updatedQuote);
       setEditingQuoteId("");
       setLines([]);
-      setMeta(emptyMeta);
+      setMeta(quoteMetaDefaults(settings));
       setQuoteStep("pick");
       pushNotification("Quote updated", "A revision snapshot was saved before applying the latest changes.");
       return;
@@ -892,7 +910,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
     setSelectedQuote(saved);
     navigateToView("previous", saved);
     setLines([]);
-    setMeta(emptyMeta);
+    setMeta(quoteMetaDefaults(settings));
     setQuoteStep("pick");
     pushNotification("Quote saved", `${saved.meta.quoteNumber} is now in Previous Quotes for the team.`);
   };
@@ -1083,11 +1101,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
                         </div>
                       </div>
                     ))}
-                    <div className="rounded-lg border border-stone-200 bg-white p-3">
-                      <p>{isOnline ? "Online. Database changes sync automatically." : "Offline. Supabase writes are paused until the browser is online again."}</p>
-                      <p className="mt-1">{pendingOfflineWrites ? `${pendingOfflineWrites} database update${pendingOfflineWrites === 1 ? "" : "s"} waiting to sync.` : "No offline database updates waiting."}</p>
-                    </div>
-                    <div className="rounded-lg border border-stone-200 bg-white p-3">ServiceTitan sync is in placeholder mode until production credentials are connected.</div>
+                    {!notifications.length ? <p className="rounded-lg border border-dashed border-stone-300 bg-white p-4 text-center text-stone-500">No notifications.</p> : null}
                   </div>
                 </div>
               ) : null}
@@ -1339,6 +1353,12 @@ function PrintQuoteDocument({ quote }: { quote: PrintableQuote }) {
           {quote.meta.location ? <p>{quote.meta.location}</p> : null}
         </div>
       </div>
+      {quote.meta.scopeOfWork ? (
+        <div className="print-notes">
+          <p className="print-label">Scope of Work</p>
+          <p>{quote.meta.scopeOfWork}</p>
+        </div>
+      ) : null}
       {quote.meta.notes ? (
         <div className="print-notes">
           <p className="print-label">Notes</p>
@@ -1459,7 +1479,7 @@ function CartDropdown({
   }, [lines]);
 
   return (
-    <div className="fixed inset-0 z-50 grid h-[100dvh] w-screen grid-rows-[auto_minmax(0,1fr)_auto_auto] gap-3 overflow-hidden rounded-none border border-stone-200 bg-white p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-2xl md:absolute md:inset-auto md:right-0 md:top-12 md:h-auto md:max-h-[calc(100vh-7rem)] md:w-[min(390px,calc(100vw-1.5rem))] md:grid-rows-none md:overflow-auto md:rounded-lg md:pb-4">
+    <div className="fixed inset-0 z-50 grid h-[100dvh] w-full max-w-[100vw] grid-rows-[auto_minmax(0,1fr)_auto_auto] gap-3 overflow-hidden rounded-none border border-stone-200 bg-white p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-2xl sm:p-4 sm:pb-[calc(1rem+env(safe-area-inset-bottom))] md:absolute md:inset-auto md:right-0 md:top-12 md:h-auto md:max-h-[calc(100vh-7rem)] md:w-[min(390px,calc(100vw-1.5rem))] md:grid-rows-none md:overflow-auto md:rounded-lg md:pb-4">
       <div className="flex items-center justify-between">
         <div>
           <p className="font-black">Shopping cart</p>
@@ -1494,12 +1514,12 @@ function CartDropdown({
                 <div className="hidden gap-2 pt-3 group-open:grid md:group-hover:grid md:group-focus-within:grid">
                   <div className="grid min-w-0 gap-1 border-t border-stone-200 pt-3">
                     {row.lines.map((line) => (
-                      <div key={line.lineId} className="grid min-w-0 grid-cols-[minmax(0,1fr)_64px] items-start gap-2 rounded-md bg-white p-2 text-sm">
+                      <div key={line.lineId} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-2 rounded-md bg-white p-2 text-sm">
                         <div className="min-w-0">
                           <p className="truncate font-bold">{line.name}</p>
                           <p className="truncate font-mono text-xs text-stone-500">{line.sku}</p>
                         </div>
-                        <span className="min-w-0 truncate text-right font-black">Qty {line.quantity}</span>
+                        <span className="shrink-0 whitespace-nowrap text-right font-black">Qty {line.quantity}</span>
                       </div>
                     ))}
                   </div>
@@ -1945,6 +1965,7 @@ function FinalizePanel({
   onPrint: () => void;
   onEmail: () => void;
 }) {
+  const [notesOpen, setNotesOpen] = useState(Boolean(meta.notes));
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div className="grid gap-3 md:grid-cols-2">
@@ -1997,9 +2018,21 @@ function FinalizePanel({
           </div>
         ) : null}
         <label className="field md:col-span-2">
-          <span>Extra instructions / notes</span>
-          <textarea className="textarea" value={meta.notes ?? ""} onChange={(event) => setMeta((current) => ({ ...current, notes: event.target.value }))} placeholder="Installation notes, customer instructions, exclusions, or follow-up details" />
+          <span>Scope of work</span>
+          <textarea className="textarea" value={meta.scopeOfWork ?? ""} onChange={(event) => setMeta((current) => ({ ...current, scopeOfWork: event.target.value }))} placeholder="Describe what work is included for this quote" />
         </label>
+        {!notesOpen ? (
+          <button className="button-secondary w-fit md:col-span-2" onClick={() => setNotesOpen(true)}>
+            <Plus size={16} />
+            Add extra instructions / notes
+          </button>
+        ) : null}
+        {notesOpen ? (
+          <label className="field md:col-span-2">
+            <span>Extra instructions / notes</span>
+            <textarea className="textarea" value={meta.notes ?? ""} onChange={(event) => setMeta((current) => ({ ...current, notes: event.target.value }))} placeholder="Installation notes, customer instructions, exclusions, or follow-up details" />
+          </label>
+        ) : null}
       </div>
       <div className="grid gap-3">
         {saveError ? <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-900">{saveError}</p> : null}
@@ -2059,6 +2092,7 @@ function exportQuote(quote: SavedQuote, format: ExportQuoteFormat) {
     ["Customer", quote.meta.customer],
     ["Project", quote.meta.project],
     ["Location", quote.meta.location ?? ""],
+    ["Scope of Work", quote.meta.scopeOfWork ?? ""],
     ["Created", new Date(quote.createdAt).toLocaleString()],
     [],
     ["Item", "SKU", "Package", "Quantity", "Notes"],
@@ -2069,6 +2103,7 @@ function exportQuote(quote: SavedQuote, format: ExportQuoteFormat) {
     ["Customer", quote.meta.customer],
     ["Project", quote.meta.project],
     ["Location", quote.meta.location ?? ""],
+    ["Scope of Work", quote.meta.scopeOfWork ?? ""],
     ["Created", new Date(quote.createdAt).toLocaleString()],
     [],
     ["Item", "SKU", "Package", "Quantity", "ADI MSRP", "Unit Price", "Line Total", "Notes"],
@@ -2092,6 +2127,7 @@ function describeQuoteChanges(previous: { meta: QuoteMeta; lines: QuoteLine[]; t
   if (previous.meta.customer !== next.meta.customer) changes.push({ kind: "changed", text: `Customer changed from ${previous.meta.customer || "blank"} to ${next.meta.customer || "blank"}.` });
   if (previous.meta.project !== next.meta.project) changes.push({ kind: "changed", text: `Project changed from ${previous.meta.project || "blank"} to ${next.meta.project || "blank"}.` });
   if ((previous.meta.location ?? "") !== (next.meta.location ?? "")) changes.push({ kind: "changed", text: "Location changed." });
+  if ((previous.meta.scopeOfWork ?? "") !== (next.meta.scopeOfWork ?? "")) changes.push({ kind: "changed", text: "Scope of work changed." });
   if ((previous.meta.notes ?? "") !== (next.meta.notes ?? "")) changes.push({ kind: "changed", text: "Quote notes changed." });
   if (previous.lines.length !== next.lines.length) changes.push({ kind: "changed", text: `Line count changed from ${previous.lines.length} to ${next.lines.length}.` });
   next.lines.forEach((line) => {
@@ -3345,11 +3381,13 @@ function SettingsPage({
   const [recoverySearch, setRecoverySearch] = useState("");
   const [recoverySort, setRecoverySort] = useState<RecoverySort>("recent");
   const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<PermanentDeleteTarget | null>(null);
-  const [passwordChange, setPasswordChange] = useState({ next: "", confirm: "", message: "" });
+  const [passwordChangeOpen, setPasswordChangeOpen] = useState(false);
+  const [passwordChange, setPasswordChange] = useState({ current: "", next: "", confirm: "", message: "" });
   const [pluginStatuses, setPluginStatuses] = useState<IntegrationPluginStatus[]>([]);
   const sections: { id: SettingsSection; label: string; admin?: boolean }[] = [
     { id: "account", label: "Account Info" },
     { id: "database", label: "Database" },
+    { id: "quoteDefaults", label: "Quote Defaults", admin: true },
     { id: "plugins", label: "Plugins", admin: true },
     { id: "sync", label: "Sync", admin: true },
     { id: "debug", label: "Debug Logs", admin: true },
@@ -3440,6 +3478,14 @@ function SettingsPage({
     }
   };
   const changePassword = async () => {
+    if (!user.email) {
+      setPasswordChange((current) => ({ ...current, message: "This account does not have an email available." }));
+      return;
+    }
+    if (!passwordChange.current) {
+      setPasswordChange((current) => ({ ...current, message: "Enter your current password first." }));
+      return;
+    }
     if (passwordChange.next.length < 8) {
       setPasswordChange((current) => ({ ...current, message: "Password must be at least 8 characters." }));
       return;
@@ -3453,8 +3499,13 @@ function SettingsPage({
       setPasswordChange((current) => ({ ...current, message: "Supabase Auth is not configured." }));
       return;
     }
+    const { error: confirmError } = await supabase.auth.signInWithPassword({ email: user.email, password: passwordChange.current });
+    if (confirmError) {
+      setPasswordChange((current) => ({ ...current, message: "Current password is incorrect." }));
+      return;
+    }
     const { error } = await supabase.auth.updateUser({ password: passwordChange.next });
-    setPasswordChange({ next: "", confirm: "", message: error ? "Password could not be changed." : "Password changed." });
+    setPasswordChange({ current: "", next: "", confirm: "", message: error ? "Password could not be changed." : "Password changed." });
   };
 
   return (
@@ -3485,33 +3536,45 @@ function SettingsPage({
                 </label>
                 <label className="field">
                   <span>Login provider</span>
-                  <input className="input" value={user.provider === "azure" ? "Microsoft Azure SSO" : "Temporary password login"} readOnly />
+                  <input className="input" value={user.provider === "azure" ? "SSO" : "Password"} readOnly />
                 </label>
               </div>
               <button className="button-secondary mt-4" onClick={onSignOut}>
                 <LogOut size={16} />
                 Sign out
               </button>
-              <div className="mt-5 grid gap-3 rounded-lg border border-stone-200 bg-white p-3 md:grid-cols-2">
-                <div className="md:col-span-2">
-                  <div className="flex items-center gap-2">
+              <div className="mt-5 rounded-lg border border-stone-200 bg-white p-3">
+                {user.provider === "azure" ? (
+                  <p className="text-sm font-bold text-stone-600">SSO passwords are managed by the identity provider.</p>
+                ) : (
+                  <button className="button-secondary" onClick={() => setPasswordChangeOpen((open) => !open)}>
                     <KeyRound size={17} />
-                    <h4 className="font-black">Change Password</h4>
+                    Change password
+                  </button>
+                )}
+                {user.provider !== "azure" && passwordChangeOpen ? (
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    <p className="text-sm text-stone-600 md:col-span-2">Confirm your current password before setting a new one.</p>
+                    <label className="field md:col-span-2">
+                      <span>Current password</span>
+                      <input className="input" type="password" value={passwordChange.current} onChange={(event) => setPasswordChange((current) => ({ ...current, current: event.target.value, message: "" }))} />
+                    </label>
+                    <label className="field">
+                      <span>New password</span>
+                      <input className="input" type="password" value={passwordChange.next} onChange={(event) => setPasswordChange((current) => ({ ...current, next: event.target.value, message: "" }))} />
+                    </label>
+                    <label className="field">
+                      <span>Confirm password</span>
+                      <input className="input" type="password" value={passwordChange.confirm} onChange={(event) => setPasswordChange((current) => ({ ...current, confirm: event.target.value, message: "" }))} />
+                    </label>
+                    <div className="flex flex-wrap items-center gap-3 md:col-span-2">
+                      <button className="button-secondary" onClick={changePassword}>Save new password</button>
+                      {passwordChange.message ? <span className="text-sm font-bold text-stone-600">{passwordChange.message}</span> : null}
+                    </div>
                   </div>
-                  <p className="mt-1 text-sm text-stone-600">Updates the password on the current Supabase Auth account.</p>
-                </div>
-                <label className="field">
-                  <span>New password</span>
-                  <input className="input" type="password" value={passwordChange.next} onChange={(event) => setPasswordChange((current) => ({ ...current, next: event.target.value, message: "" }))} />
-                </label>
-                <label className="field">
-                  <span>Confirm password</span>
-                  <input className="input" type="password" value={passwordChange.confirm} onChange={(event) => setPasswordChange((current) => ({ ...current, confirm: event.target.value, message: "" }))} />
-                </label>
-                <div className="flex flex-wrap items-center gap-3 md:col-span-2">
-                  <button className="button-secondary" onClick={changePassword}>Change password</button>
-                  {passwordChange.message ? <span className="text-sm font-bold text-stone-600">{passwordChange.message}</span> : null}
-                </div>
+                ) : user.provider !== "azure" && passwordChange.message ? (
+                  <p className="mt-3 text-sm font-bold text-stone-600">{passwordChange.message}</p>
+                ) : null}
               </div>
               <div className="mt-5 grid gap-2">
                 <div className="flex items-center gap-2">
@@ -3562,6 +3625,29 @@ function SettingsPage({
                 <p className="mt-2 text-sm text-stone-600">
                   Supabase PostgreSQL uses TLS in transit and provider-side encryption at rest. For production-grade breach protection, the next step is app-level field encryption for customer, project, pricing, and notes before writing quote records.
                 </p>
+              </div>
+            </section>
+          ) : null}
+          {activeSection === "quoteDefaults" ? (
+            <section className="rounded-lg border border-stone-200 bg-stone-50 p-4">
+              <h3 className="font-black">Quote Defaults</h3>
+              <p className="mt-1 text-sm text-stone-600">These values are used when starting a new quote or clearing the current workspace.</p>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <label className="field">
+                  <span>State / tax region</span>
+                  <input className="input" value={settings.taxState ?? ""} onChange={(event) => setSettings((current) => ({ ...current, taxState: event.target.value }))} placeholder="NY" />
+                </label>
+                <label className="field">
+                  <span>Default tax %</span>
+                  <input
+                    className="input"
+                    type="number"
+                    min={0}
+                    step="0.001"
+                    value={settings.defaultTaxPercent ?? emptyMeta.taxPercent}
+                    onChange={(event) => setSettings((current) => ({ ...current, defaultTaxPercent: Number(event.target.value) }))}
+                  />
+                </label>
               </div>
             </section>
           ) : null}

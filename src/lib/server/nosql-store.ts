@@ -204,6 +204,7 @@ async function readSupabaseQuotes(supabase: SupabaseClient): Promise<SavedQuote[
       includeLabor: Boolean(quote.include_labor),
       laborHours: nullableNumber(quote.labor_hours),
       laborRate: nullableNumber(quote.labor_rate),
+      scopeOfWork: quote.scope_of_work ?? "",
       notes: quote.notes ?? "",
     },
     lines: asQuoteLines(quote.lines_snapshot),
@@ -235,6 +236,7 @@ async function writeSupabaseQuotes(supabase: SupabaseClient, quotes: SavedQuote[
       include_labor: Boolean(quote.meta.includeLabor),
       labor_hours: quote.meta.laborHours ?? null,
       labor_rate: quote.meta.laborRate ?? null,
+      scope_of_work: quote.meta.scopeOfWork ?? null,
       notes: quote.meta.notes ?? null,
       lines_snapshot: toJson(quote.lines),
       total: quote.total ?? 0,
@@ -478,6 +480,7 @@ function asMeta(value: unknown): QuoteMeta {
     includeLabor: Boolean(meta.includeLabor),
     laborHours: number(meta.laborHours, 0),
     laborRate: number(meta.laborRate, 0),
+    scopeOfWork: text(meta.scopeOfWork),
     notes: text(meta.notes),
   };
 }
@@ -490,6 +493,8 @@ function sanitizeSettings(value: unknown): ServiceTitanSettings {
   const settings = isObject(value) ? value : {};
   return {
     lastSyncAt: typeof settings.lastSyncAt === "string" ? settings.lastSyncAt : undefined,
+    taxState: typeof settings.taxState === "string" ? settings.taxState : undefined,
+    defaultTaxPercent: Number.isFinite(Number(settings.defaultTaxPercent)) ? Number(settings.defaultTaxPercent) : undefined,
   };
 }
 

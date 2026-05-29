@@ -87,6 +87,7 @@ export type Database = {
           include_labor: boolean;
           labor_hours: number | null;
           labor_rate: number | null;
+          scope_of_work: string | null;
           notes: string | null;
           lines_snapshot: Json;
           total: number;
