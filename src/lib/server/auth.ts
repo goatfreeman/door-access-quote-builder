@@ -71,10 +71,6 @@ async function getSupabaseSessionUser(): Promise<SessionUser | null> {
     const profileName = profile?.display_name?.trim();
     const displayName = preferredUserName(user, profileName);
 
-    if (profileName !== displayName) {
-      await supabase.from("profiles").update({ display_name: displayName }).eq("id", user.id);
-    }
-
     return {
       id: user.id,
       name: displayName,
