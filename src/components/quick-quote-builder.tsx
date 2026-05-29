@@ -329,6 +329,9 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   const settingsHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sessionsRef = useRef<UserSessionRecord[]>([]);
   const previousOnlineRef = useRef(isOnline);
+  const pushNotification = useCallback((title: string, message: string) => {
+    setNotifications((current) => [{ id: makeId("note"), title, message, createdAt: new Date().toISOString() }, ...current].slice(0, 8));
+  }, []);
   const activeItems = useMemo(() => items.filter((item) => !item.deletedAt), [items]);
   const activeQuotes = useMemo(() => quotes.filter((quote) => !quote.deletedAt), [quotes]);
   const userDraftQuotes = useMemo(() => {
@@ -692,10 +695,6 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
       setCategory("All");
     }
   }, [catalogCategories, category]);
-
-  const pushNotification = useCallback((title: string, message: string) => {
-    setNotifications((current) => [{ id: makeId("note"), title, message, createdAt: new Date().toISOString() }, ...current].slice(0, 8));
-  }, []);
 
   const dismissNotification = (id: string) => {
     setNotifications((current) => current.filter((notification) => notification.id !== id));
