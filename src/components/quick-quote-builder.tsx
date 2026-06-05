@@ -2341,10 +2341,14 @@ function ItemsPage({
           Add Item
         </button>
       </div>
-      <div className="grid gap-3 p-4">
-        <div className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3 md:grid-cols-[minmax(0,1fr)_220px]">
+      <div className="grid min-h-0 gap-4 p-4 lg:grid-cols-[260px_minmax(0,1fr)]">
+        <aside className="grid content-start gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3">
+          <div>
+            <p className="font-black">Sort & filter</p>
+            <p className="mt-1 text-sm text-stone-600">{sortedItems.length} visible items</p>
+          </div>
           <label className="field">
-            <span>Filter by category</span>
+            <span>Category</span>
             <select className="input" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
               {categories.map((option) => (
                 <option key={option}>{option}</option>
@@ -2359,82 +2363,86 @@ function ItemsPage({
               <option value="price">Unit price</option>
             </select>
           </label>
+        </aside>
+        <div className="grid content-start gap-3">
+          {sortedItems.length ? sortedItems.map((item) => (
+            <details key={item.id} className="rounded-lg border border-stone-200 bg-stone-50">
+              <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto] items-center gap-3 p-4 [&::-webkit-details-marker]:hidden">
+                <div>
+                  <p className="font-black">{item.name}</p>
+                  <p className="font-mono text-xs text-stone-500">{item.category || "No category"} / {item.sku}</p>
+                </div>
+                <strong>{money.format(item.unitPrice)}</strong>
+              </summary>
+              <div className="grid gap-3 border-t border-stone-200 p-4 md:grid-cols-3">
+                <label className="field">
+                  <span>Name</span>
+                  <input className="input" value={item.name} onChange={(event) => updateItem(item.id, { name: event.target.value })} />
+                </label>
+                <label className="field">
+                  <span>SKU</span>
+                  <input className="input" value={item.sku} onChange={(event) => updateItem(item.id, { sku: event.target.value })} />
+                </label>
+                <label className="field">
+                  <span>Category</span>
+                  <select
+                    className="input"
+                    value={item.category || ""}
+                    onChange={(event) => {
+                      if (event.target.value === "__new__") {
+                        openCategoryEditor("item", item.id);
+                        return;
+                      }
+                      updateItem(item.id, { category: event.target.value });
+                    }}
+                  >
+                    {!item.category ? (
+                      <option value="" disabled>
+                        Add new category
+                      </option>
+                    ) : null}
+                    {itemCategoryOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                    <option value="__new__">Add new category</option>
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Unit price</span>
+                  <input className="input" type="number" value={item.unitPrice} onChange={(event) => updateItem(item.id, { unitPrice: Number(event.target.value) })} />
+                </label>
+                <label className="field">
+                  <span>ADI MSRP</span>
+                  <input className="input" type="number" value={item.msrp ?? 0} onChange={(event) => updateItem(item.id, { msrp: Number(event.target.value) })} />
+                </label>
+                <label className="field">
+                  <span>Inventory</span>
+                  <input className="input" type="number" value={item.inventory ?? 0} onChange={(event) => updateItem(item.id, { inventory: Number(event.target.value) })} />
+                </label>
+                <label className="field md:col-span-3">
+                  <span>Notes</span>
+                  <textarea className="textarea" value={item.notes ?? ""} onChange={(event) => updateItem(item.id, { notes: event.target.value })} placeholder="Optional item notes" />
+                </label>
+                <div className="flex justify-end md:col-span-3">
+                  <button
+                    className="button-ghost text-red-800 hover:bg-red-100"
+                    onClick={() => {
+                      setDeleteItem(item);
+                      setDeleteItemError("");
+                    }}
+                  >
+                    <Trash2 size={16} />
+                    Delete item
+                  </button>
+                </div>
+              </div>
+            </details>
+          )) : (
+            <p className="rounded-lg border border-dashed border-stone-300 bg-stone-50 p-8 text-center text-stone-500">No items match this filter.</p>
+          )}
         </div>
-        {sortedItems.map((item) => (
-          <details key={item.id} className="rounded-lg border border-stone-200 bg-stone-50">
-            <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto] items-center gap-3 p-4 [&::-webkit-details-marker]:hidden">
-              <div>
-                <p className="font-black">{item.name}</p>
-                <p className="font-mono text-xs text-stone-500">{item.category || "No category"} / {item.sku}</p>
-              </div>
-              <strong>{money.format(item.unitPrice)}</strong>
-            </summary>
-            <div className="grid gap-3 border-t border-stone-200 p-4 md:grid-cols-3">
-              <label className="field">
-                <span>Name</span>
-                <input className="input" value={item.name} onChange={(event) => updateItem(item.id, { name: event.target.value })} />
-              </label>
-              <label className="field">
-                <span>SKU</span>
-                <input className="input" value={item.sku} onChange={(event) => updateItem(item.id, { sku: event.target.value })} />
-              </label>
-              <label className="field">
-                <span>Category</span>
-                <select
-                  className="input"
-                  value={item.category || ""}
-                  onChange={(event) => {
-                    if (event.target.value === "__new__") {
-                      openCategoryEditor("item", item.id);
-                      return;
-                    }
-                    updateItem(item.id, { category: event.target.value });
-                  }}
-                >
-                  {!item.category ? (
-                    <option value="" disabled>
-                      Add new category
-                    </option>
-                  ) : null}
-                  {itemCategoryOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                  <option value="__new__">Add new category</option>
-                </select>
-              </label>
-              <label className="field">
-                <span>Unit price</span>
-                <input className="input" type="number" value={item.unitPrice} onChange={(event) => updateItem(item.id, { unitPrice: Number(event.target.value) })} />
-              </label>
-              <label className="field">
-                <span>ADI MSRP</span>
-                <input className="input" type="number" value={item.msrp ?? 0} onChange={(event) => updateItem(item.id, { msrp: Number(event.target.value) })} />
-              </label>
-              <label className="field">
-                <span>Inventory</span>
-                <input className="input" type="number" value={item.inventory ?? 0} onChange={(event) => updateItem(item.id, { inventory: Number(event.target.value) })} />
-              </label>
-              <label className="field md:col-span-3">
-                <span>Notes</span>
-                <textarea className="textarea" value={item.notes ?? ""} onChange={(event) => updateItem(item.id, { notes: event.target.value })} placeholder="Optional item notes" />
-              </label>
-              <div className="flex justify-end md:col-span-3">
-                <button
-                  className="button-ghost text-red-800 hover:bg-red-100"
-                  onClick={() => {
-                    setDeleteItem(item);
-                    setDeleteItemError("");
-                  }}
-                >
-                  <Trash2 size={16} />
-                  Delete item
-                </button>
-              </div>
-            </div>
-          </details>
-        ))}
       </div>
       {addItemOpen ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onClick={() => setAddItemOpen(false)}>
