@@ -1118,6 +1118,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
             {quoteStep !== "pick" && quoteStep !== "finalize" ? (
               <CatalogPanel
                 items={visibleItems}
+                templates={templates}
                 categories={catalogCategories}
                 category={category}
                 search={search}
@@ -1125,6 +1126,10 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
                 setCategory={setCategory}
                 onAdd={(item) => {
                   addItem(item);
+                  setQuoteStep("customize");
+                }}
+                onAddTemplate={(template) => {
+                  addTemplate(template);
                   setQuoteStep("customize");
                 }}
               />
@@ -1563,40 +1568,58 @@ function CartDropdown({
 
 function CatalogPanel({
   items,
+  templates,
   categories,
   category,
   search,
   setSearch,
   setCategory,
   onAdd,
+  onAddTemplate,
 }: {
   items: CatalogItem[];
+  templates: QuoteTemplate[];
   categories: string[];
   category: string;
   search: string;
   setSearch: (value: string) => void;
   setCategory: (value: string) => void;
   onAdd: (item: CatalogItem) => void;
+  onAddTemplate: (template: QuoteTemplate) => void;
 }) {
   const [filterOpen, setFilterOpen] = useState(false);
+  const [catalogMode, setCatalogMode] = useState<"items" | "templates">("items");
   const hasCategories = categories.some((item) => item !== "All");
+  const visibleTemplates = useMemo(() => {
+    const normalizedSearch = normalizeSearchValue(search);
+    if (!normalizedSearch) return templates;
+    return templates.filter((template) => normalizeSearchValue(`${template.name} ${template.description}`).includes(normalizedSearch));
+  }, [search, templates]);
   return (
     <aside className="panel h-fit">
       <div className="panel-header">
         <div>
-          <h2>Item Catalog</h2>
-          <p>Pick equipment, parts, and labor.</p>
+          <h2>{catalogMode === "items" ? "Item Catalog" : "Template Catalog"}</h2>
+          <p>{catalogMode === "items" ? "Pick equipment, parts, and labor." : "Add a saved setup to the quote."}</p>
         </div>
-        <PackagePlus size={20} />
+        {catalogMode === "items" ? <PackagePlus size={20} /> : <FileText size={20} />}
       </div>
       <div className="grid gap-3 p-4">
+        <div className="grid grid-cols-2 gap-2 rounded-lg border border-stone-200 bg-stone-50 p-1">
+          <button className={`chip justify-center ${catalogMode === "items" ? "chip-active" : ""}`} onClick={() => setCatalogMode("items")}>
+            Items
+          </button>
+          <button className={`chip justify-center ${catalogMode === "templates" ? "chip-active" : ""}`} onClick={() => setCatalogMode("templates")}>
+            Templates
+          </button>
+        </div>
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-          <input className="input" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search items or SKU" />
-          <button className={`icon-button ${filterOpen ? "border-teal-700 text-teal-800" : ""}`} onClick={() => setFilterOpen((open) => !open)} aria-label="Filter categories">
+          <input className="input" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={catalogMode === "items" ? "Search items or SKU" : "Search templates"} />
+          <button className={`icon-button ${filterOpen ? "border-teal-700 text-teal-800" : ""}`} onClick={() => setFilterOpen((open) => !open)} aria-label="Filter categories" disabled={catalogMode === "templates"}>
             <Menu size={18} />
           </button>
         </div>
-        {filterOpen ? (
+        {catalogMode === "items" && filterOpen ? (
           <div className="grid grid-cols-2 gap-2 rounded-lg border border-stone-200 bg-stone-50 p-2">
             {hasCategories ? (
               categories.map((item) => (
@@ -1615,30 +1638,61 @@ function CatalogPanel({
               <p className="col-span-2 rounded-md border border-dashed border-stone-300 bg-white p-3 text-center text-sm font-bold text-stone-500">No categories</p>
             )}
           </div>
-        ) : (
+        ) : catalogMode === "items" ? (
           <div className="flex items-center justify-between rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm">
             <span className="font-bold text-stone-600">Category</span>
             <strong>{hasCategories ? category : "None"}</strong>
           </div>
+        ) : (
+          <div className="flex items-center justify-between rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm">
+            <span className="font-bold text-stone-600">Templates</span>
+            <strong>{visibleTemplates.length}</strong>
+          </div>
         )}
         <div className="grid max-h-[65vh] gap-2 overflow-auto pr-1">
-          {items.map((item) => (
-            <article key={item.id} className="rounded-lg border border-stone-200 bg-white p-3">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="font-black">{item.name}</p>
-                  <p className="mt-1 font-mono text-xs text-stone-500">{item.sku}</p>
+          {catalogMode === "items" ? (
+            items.length ? (
+              items.map((item) => (
+                <article key={item.id} className="rounded-lg border border-stone-200 bg-white p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-black">{item.name}</p>
+                      <p className="mt-1 font-mono text-xs text-stone-500">{item.sku}</p>
+                    </div>
+                    <button className="icon-button" onClick={() => onAdd(item)} aria-label={`Add ${item.name}`}>
+                      <PackagePlus size={18} />
+                    </button>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between text-sm">
+                    <span className="rounded-full bg-teal-50 px-2 py-1 font-bold text-teal-800">{item.category}</span>
+                    <span className="font-black">{money.format(item.unitPrice)}</span>
+                  </div>
+                </article>
+              ))
+            ) : (
+              <p className="rounded-lg border border-dashed border-stone-300 bg-stone-50 p-5 text-center text-sm text-stone-500">No items found.</p>
+            )
+          ) : visibleTemplates.length ? (
+            visibleTemplates.map((template) => (
+              <article key={template.id} className="rounded-lg border border-stone-200 bg-white p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-black">{template.name || "Unnamed template"}</p>
+                    {template.description ? <p className="mt-1 line-clamp-2 text-sm text-stone-600">{template.description}</p> : null}
+                  </div>
+                  <button className="icon-button" onClick={() => onAddTemplate(template)} aria-label={`Add template ${template.name || "Unnamed template"}`}>
+                    <PackagePlus size={18} />
+                  </button>
                 </div>
-                <button className="icon-button" onClick={() => onAdd(item)} aria-label={`Add ${item.name}`}>
-                  <PackagePlus size={18} />
-                </button>
-              </div>
-              <div className="mt-3 flex items-center justify-between text-sm">
-                <span className="rounded-full bg-teal-50 px-2 py-1 font-bold text-teal-800">{item.category}</span>
-                <span className="font-black">{money.format(item.unitPrice)}</span>
-              </div>
-            </article>
-          ))}
+                <div className="mt-3 flex items-center justify-between text-sm">
+                  <span className="rounded-full bg-cyan-50 px-2 py-1 font-bold text-cyan-800">Template</span>
+                  <span className="font-black">{template.lines.length} lines</span>
+                </div>
+              </article>
+            ))
+          ) : (
+            <p className="rounded-lg border border-dashed border-stone-300 bg-stone-50 p-5 text-center text-sm text-stone-500">No templates found.</p>
+          )}
         </div>
       </div>
     </aside>
