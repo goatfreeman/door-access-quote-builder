@@ -2245,6 +2245,7 @@ function ItemsPage({
   onDeleteItem: (itemId: string) => string | null;
 }) {
   const [categoryFilter, setCategoryFilter] = useState("All");
+  const [itemSearch, setItemSearch] = useState("");
   const [sortMode, setSortMode] = useState<"category" | "name" | "price">("category");
   const [draftItem, setDraftItem] = useState<Omit<CatalogItem, "id">>({
     sku: "",
@@ -2264,15 +2265,20 @@ function ItemsPage({
   const categories = useMemo(() => ["All", ...Array.from(new Set(items.map((item) => item.category).filter(Boolean))).sort((a, b) => a.localeCompare(b))], [items]);
   const itemCategoryOptions = categories.filter((option) => option !== "All");
   const sortedItems = useMemo(() => {
+    const query = normalizeSearchValue(itemSearch);
     return items
-      .filter((item) => categoryFilter === "All" || item.category === categoryFilter)
+      .filter((item) => {
+        const matchesCategory = categoryFilter === "All" || item.category === categoryFilter;
+        const matchesSearch = !query || normalizeSearchValue(`${item.name} ${item.sku} ${item.category} ${item.vendor ?? ""} ${item.notes ?? ""}`).includes(query);
+        return matchesCategory && matchesSearch;
+      })
       .slice()
       .sort((a, b) => {
         if (sortMode === "price") return a.unitPrice - b.unitPrice;
         if (sortMode === "name") return a.name.localeCompare(b.name);
         return a.category.localeCompare(b.category) || a.name.localeCompare(b.name);
       });
-  }, [categoryFilter, items, sortMode]);
+  }, [categoryFilter, itemSearch, items, sortMode]);
   useEffect(() => {
     if (categoryFilter !== "All" && !itemCategoryOptions.includes(categoryFilter)) {
       setCategoryFilter("All");
@@ -2347,6 +2353,10 @@ function ItemsPage({
             <p className="font-black">Sort & filter</p>
             <p className="mt-1 text-sm text-stone-600">{sortedItems.length} visible items</p>
           </div>
+          <label className="field">
+            <span>Search</span>
+            <input className="input" value={itemSearch} onChange={(event) => setItemSearch(event.target.value)} placeholder="Name, SKU, vendor, notes" />
+          </label>
           <label className="field">
             <span>Category</span>
             <select className="input" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
