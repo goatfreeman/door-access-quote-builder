@@ -1111,7 +1111,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
 
       {menuOpen && !isClientView ? <MobileMenu nav={nav} view={view} setView={navigateToView} goToQuote={goToQuote} close={() => setMenuOpen(false)} onSignOut={signOut} onSettingsHoldStart={startSettingsHold} onSettingsHoldEnd={cancelSettingsHold} /> : null}
 
-      <section className={`mx-auto grid max-w-7xl gap-4 px-4 py-4 ${view === "quote" && quoteStep !== "pick" && quoteStep !== "finalize" ? "lg:min-h-[calc(100dvh-96px)] lg:grid-cols-[320px_minmax(0,1fr)] lg:items-stretch" : ""}`}>
+      <section className={`mx-auto grid min-h-[calc(100dvh-96px)] max-w-7xl items-stretch gap-4 px-4 py-4 ${view === "quote" && quoteStep !== "pick" && quoteStep !== "finalize" ? "lg:grid-cols-[320px_minmax(0,1fr)]" : ""}`}>
         {view === "home" ? <HomePage user={sessionUser} meta={meta} lines={activeLines} total={totals.total} drafts={userDraftQuotes} onContinue={goToQuote} onLoadDraft={loadDraftQuote} /> : null}
         {view === "quote" ? (
           <>
@@ -1596,7 +1596,7 @@ function CatalogPanel({
     return templates.filter((template) => normalizeSearchValue(`${template.name} ${template.description}`).includes(normalizedSearch));
   }, [search, templates]);
   return (
-    <aside className="panel flex min-h-[70dvh] flex-col overflow-hidden lg:h-[calc(100dvh-128px)] lg:min-h-0">
+    <aside className="panel flex min-h-[70dvh] flex-col overflow-hidden lg:h-full lg:min-h-0">
       <div className="panel-header">
         <div>
           <h2>Item Catalog</h2>
@@ -1745,7 +1745,7 @@ function QuoteWorkspace(props: {
             <QuoteStageProgress steps={steps} currentStep={props.step} setStep={props.setStep} />
           </div>
         </div>
-        <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto_auto] gap-4 p-4">
+        <div className="flex min-h-0 flex-1 flex-col gap-4 p-4">
           <div className="sm:hidden">
             <QuoteStageProgress steps={steps} currentStep={props.step} setStep={props.setStep} />
           </div>
@@ -1792,7 +1792,7 @@ function QuoteWorkspace(props: {
           ) : null}
 
           {props.step === "customize" || props.step === "review" || props.step === "finalize" ? (
-            <div className="min-h-0 overflow-y-auto pr-1">
+            <div className="min-h-0 flex-1 overflow-y-auto pr-1">
               <QuoteLines lines={props.lines} items={props.items} onAddItemToPackage={props.onAddItemToPackage} onUpdateLine={props.onUpdateLine} onRenamePackage={props.onRenamePackage} onRemoveLine={props.onRemoveLine} />
             </div>
           ) : null}
@@ -1801,7 +1801,7 @@ function QuoteWorkspace(props: {
             <FinalizePanel meta={props.meta} setMeta={props.setMeta} totals={props.totals} saveError={props.saveError} />
           ) : null}
           {props.step !== "pick" ? (
-            <div className="sticky bottom-3 z-10 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-stone-200 bg-stone-50/95 p-3 shadow-sm backdrop-blur">
+            <div className="mt-auto flex flex-wrap items-center justify-between gap-2 rounded-lg border border-stone-200 bg-stone-50/95 p-3 shadow-sm backdrop-blur">
               <button className="button-secondary" onClick={() => props.setStep(previousStep(props.step))}>
                 Back
               </button>
