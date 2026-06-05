@@ -1009,12 +1009,12 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
             <button className="grid size-10 place-items-center rounded-lg bg-stone-900 text-xl font-black text-white disabled:cursor-default" onClick={isClientView ? undefined : goToHome} disabled={isClientView} aria-label="Go to home page">
               Q
             </button>
-            <button className="min-w-0 text-left disabled:cursor-default" onClick={isClientView ? undefined : goToHome} disabled={isClientView} aria-label="Go to home page">
+            <button className="hidden min-w-0 text-left disabled:cursor-default xl:block" onClick={isClientView ? undefined : goToHome} disabled={isClientView} aria-label="Go to home page">
               <span className="flex min-w-0 flex-wrap items-center gap-2">
-                <h1 className="hidden truncate text-lg font-black leading-tight sm:block sm:text-2xl">Quick Quote Builder</h1>
-                {!isProductionStage ? <span className="hidden rounded-full border border-amber-300 bg-amber-100 px-2 py-1 text-xs font-black uppercase tracking-normal text-amber-900 md:inline-flex">Dev Build</span> : null}
+                <h1 className="truncate text-lg font-black leading-tight sm:text-2xl">Quick Quote Builder</h1>
+                {!isProductionStage ? <span className="hidden rounded-full border border-amber-300 bg-amber-100 px-2 py-1 text-xs font-black uppercase tracking-normal text-amber-900 2xl:inline-flex">Dev Build</span> : null}
               </span>
-              <p className="hidden text-sm text-stone-600 sm:block">Quote equipment, labor, templates, and saved jobs.</p>
+              <p className="hidden text-sm text-stone-600 2xl:block">Quote equipment, labor, templates, and saved jobs.</p>
             </button>
           </div>
           {!isClientView ? (
