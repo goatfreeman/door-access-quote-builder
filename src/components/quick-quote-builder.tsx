@@ -1011,8 +1011,8 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
             </button>
             <button className="min-w-0 text-left disabled:cursor-default" onClick={isClientView ? undefined : goToHome} disabled={isClientView} aria-label="Go to home page">
               <span className="flex min-w-0 flex-wrap items-center gap-2">
-                <h1 className="truncate text-lg font-black leading-tight sm:text-2xl">Quick Quote Builder</h1>
-                {!isProductionStage ? <span className="rounded-full border border-amber-300 bg-amber-100 px-2 py-1 text-xs font-black uppercase tracking-normal text-amber-900">Dev Build</span> : null}
+                <h1 className="hidden truncate text-lg font-black leading-tight sm:block sm:text-2xl">Quick Quote Builder</h1>
+                {!isProductionStage ? <span className="hidden rounded-full border border-amber-300 bg-amber-100 px-2 py-1 text-xs font-black uppercase tracking-normal text-amber-900 md:inline-flex">Dev Build</span> : null}
               </span>
               <p className="hidden text-sm text-stone-600 sm:block">Quote equipment, labor, templates, and saved jobs.</p>
             </button>
@@ -1111,7 +1111,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
 
       {menuOpen && !isClientView ? <MobileMenu nav={nav} view={view} setView={navigateToView} goToQuote={goToQuote} close={() => setMenuOpen(false)} onSignOut={signOut} onSettingsHoldStart={startSettingsHold} onSettingsHoldEnd={cancelSettingsHold} /> : null}
 
-      <section className={`mx-auto grid max-w-7xl gap-4 px-4 py-4 ${view === "quote" && quoteStep !== "pick" && quoteStep !== "finalize" ? "lg:grid-cols-[320px_minmax(0,1fr)]" : ""}`}>
+      <section className={`mx-auto grid max-w-7xl gap-4 px-4 py-4 ${view === "quote" && quoteStep !== "pick" && quoteStep !== "finalize" ? "lg:min-h-[calc(100dvh-96px)] lg:grid-cols-[320px_minmax(0,1fr)] lg:items-stretch" : ""}`}>
         {view === "home" ? <HomePage user={sessionUser} meta={meta} lines={activeLines} total={totals.total} drafts={userDraftQuotes} onContinue={goToQuote} onLoadDraft={loadDraftQuote} /> : null}
         {view === "quote" ? (
           <>
@@ -1596,15 +1596,15 @@ function CatalogPanel({
     return templates.filter((template) => normalizeSearchValue(`${template.name} ${template.description}`).includes(normalizedSearch));
   }, [search, templates]);
   return (
-    <aside className="panel h-fit">
+    <aside className="panel flex min-h-[70dvh] flex-col overflow-hidden lg:h-[calc(100dvh-128px)] lg:min-h-0">
       <div className="panel-header">
         <div>
-          <h2>{catalogMode === "items" ? "Item Catalog" : "Template Catalog"}</h2>
+          <h2>Item Catalog</h2>
           <p>{catalogMode === "items" ? "Pick equipment, parts, and labor." : "Add a saved setup to the quote."}</p>
         </div>
-        {catalogMode === "items" ? <PackagePlus size={20} /> : <FileText size={20} />}
+        <PackagePlus size={20} />
       </div>
-      <div className="grid gap-3 p-4">
+      <div className="grid min-h-0 flex-1 grid-rows-[auto_auto_auto_minmax(0,1fr)] gap-3 p-4">
         <div className="grid grid-cols-2 gap-2 rounded-lg border border-stone-200 bg-stone-50 p-1">
           <button className={`chip justify-center ${catalogMode === "items" ? "chip-active" : ""}`} onClick={() => setCatalogMode("items")}>
             Items
@@ -1649,7 +1649,7 @@ function CatalogPanel({
             <strong>{visibleTemplates.length}</strong>
           </div>
         )}
-        <div className="grid max-h-[65vh] gap-2 overflow-auto pr-1">
+        <div className="grid min-h-0 content-start gap-2 overflow-auto pr-1">
           {catalogMode === "items" ? (
             items.length ? (
               items.map((item) => (
@@ -1734,8 +1734,8 @@ function QuoteWorkspace(props: {
   };
 
   return (
-    <section className="grid gap-4">
-      <div className="panel">
+    <section className="grid min-h-0 gap-4 lg:h-full">
+      <div className="panel flex min-h-0 flex-col overflow-hidden">
         <div className="panel-header">
           <div>
             <h2>Quote Workspace</h2>
@@ -1745,7 +1745,7 @@ function QuoteWorkspace(props: {
             <QuoteStageProgress steps={steps} currentStep={props.step} setStep={props.setStep} />
           </div>
         </div>
-        <div className="grid gap-4 p-4">
+        <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto_auto] gap-4 p-4">
           <div className="sm:hidden">
             <QuoteStageProgress steps={steps} currentStep={props.step} setStep={props.setStep} />
           </div>
@@ -1792,7 +1792,7 @@ function QuoteWorkspace(props: {
           ) : null}
 
           {props.step === "customize" || props.step === "review" || props.step === "finalize" ? (
-            <div className="max-h-[calc(100vh-290px)] overflow-y-auto pr-1">
+            <div className="min-h-0 overflow-y-auto pr-1">
               <QuoteLines lines={props.lines} items={props.items} onAddItemToPackage={props.onAddItemToPackage} onUpdateLine={props.onUpdateLine} onRenamePackage={props.onRenamePackage} onRemoveLine={props.onRemoveLine} />
             </div>
           ) : null}
