@@ -1744,29 +1744,41 @@ function QuoteWorkspace(props: {
           ) : null}
 
           {props.step === "finalize" ? (
-            <FinalizePanel meta={props.meta} setMeta={props.setMeta} totals={props.totals} onSave={props.onSave} saveError={props.saveError} onPrint={props.onPrint} onEmail={props.onEmail} />
+            <FinalizePanel meta={props.meta} setMeta={props.setMeta} totals={props.totals} saveError={props.saveError} />
           ) : null}
           {props.step !== "pick" ? (
             <div className="sticky bottom-3 z-10 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-stone-200 bg-stone-50/95 p-3 shadow-sm backdrop-blur">
               <button className="button-secondary" onClick={() => props.setStep(previousStep(props.step))}>
                 Back
               </button>
-              {props.step === "customize" ? (
-                <button className="button-primary" onClick={() => props.setStep("review")}>
-                  Next
-                </button>
-              ) : null}
-              {props.step === "review" ? (
-                <button className="button-primary" onClick={() => props.setStep("finalize")}>
-                  Add to cart
-                </button>
-              ) : null}
-              {props.step === "finalize" ? (
-                <button className="button-primary" onClick={props.onPrint}>
-                  <Printer size={17} />
-                  Print
-                </button>
-              ) : null}
+              <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+                {props.step === "customize" ? (
+                  <button className="button-primary" onClick={() => props.setStep("review")}>
+                    Next
+                  </button>
+                ) : null}
+                {props.step === "review" ? (
+                  <button className="button-primary" onClick={() => props.setStep("finalize")}>
+                    Add to cart
+                  </button>
+                ) : null}
+                {props.step === "finalize" ? (
+                  <>
+                    <button className="button-primary" onClick={props.onSave}>
+                      <Save size={17} />
+                      Save Quote
+                    </button>
+                    <button className="button-secondary" onClick={props.onEmail}>
+                      <Mail size={17} />
+                      Email PDF
+                    </button>
+                    <button className="button-secondary" onClick={props.onPrint}>
+                      <Printer size={17} />
+                      Print
+                    </button>
+                  </>
+                ) : null}
+              </div>
             </div>
           ) : null}
         </div>
@@ -1951,18 +1963,12 @@ function FinalizePanel({
   meta,
   setMeta,
   totals,
-  onSave,
   saveError,
-  onPrint,
-  onEmail,
 }: {
   meta: QuoteMeta;
   setMeta: Dispatch<SetStateAction<QuoteMeta>>;
   totals: QuoteTotals;
-  onSave: () => void;
   saveError: string;
-  onPrint: () => void;
-  onEmail: () => void;
 }) {
   const [scopeOpen, setScopeOpen] = useState(Boolean(meta.scopeOfWork));
   const [notesOpen, setNotesOpen] = useState(Boolean(meta.notes));
@@ -1971,7 +1977,11 @@ function FinalizePanel({
     if (meta.notes) setNotesOpen(true);
   }, [meta.notes, meta.scopeOfWork]);
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+    <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+      <div className="grid content-start gap-3">
+        {saveError ? <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-900">{saveError}</p> : null}
+        <TotalsCard totals={totals} />
+      </div>
       <div className="grid gap-3 md:grid-cols-2">
         <label className="field">
           <span>Customer</span>
@@ -2045,22 +2055,6 @@ function FinalizePanel({
             <textarea className="textarea" value={meta.notes ?? ""} onChange={(event) => setMeta((current) => ({ ...current, notes: event.target.value }))} placeholder="Installation notes, customer instructions, exclusions, or follow-up details" />
           </label>
         ) : null}
-      </div>
-      <div className="grid gap-3">
-        {saveError ? <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-900">{saveError}</p> : null}
-        <TotalsCard totals={totals} />
-        <button className="button-primary" onClick={onSave}>
-          <Save size={17} />
-          Save Quote
-        </button>
-        <button className="button-secondary" onClick={onEmail}>
-          <Mail size={17} />
-          Email PDF
-        </button>
-        <button className="button-secondary" onClick={onPrint}>
-          <Printer size={17} />
-          Print
-        </button>
       </div>
     </div>
   );
