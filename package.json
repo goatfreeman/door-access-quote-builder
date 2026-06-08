@@ -5,9 +5,14 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "android:add": "npx cap add android",
+    "android:sync": "npx cap sync android",
+    "android:open": "npx cap open android"
   },
   "dependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.87.1",
     "class-variance-authority": "^0.7.1",
@@ -19,6 +24,7 @@
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
+    "@capacitor/cli": "^7.0.0",
     "@tailwindcss/postcss": "^4.1.17",
     "@types/node": "^22.10.7",
     "@types/react": "^19.2.7",

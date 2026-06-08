@@ -32,6 +32,18 @@ http://localhost:3000
 
 Import the GitHub repository into Vercel. Vercel will auto-detect Next.js and run the standard build.
 
+## Android App Wrapper
+
+The Android app path uses Capacitor to package Quick Quote Builder as a native shell that loads the deployed Vercel app. This keeps Supabase Auth, server actions, API routes, PDFs, and integration plugins running on the hosted backend.
+
+See [docs/android.md](docs/android.md) for setup and Android Studio steps.
+
+Set this before syncing the Android project:
+
+```powershell
+$env:CAPACITOR_SERVER_URL="https://your-vercel-domain.vercel.app"
+```
+
 ### Supabase Migration Target
 
 The target production stack is:

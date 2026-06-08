@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Quick Quote Builder</title>
+  <rect width="512" height="512" rx="112" fill="#0f766e"/>
+  <path fill="#ffffff" d="M146 140h220c23 0 42 19 42 42v116c0 23-19 42-42 42h-79l-67 56c-8 7-21 1-21-10v-46h-53c-23 0-42-19-42-42V182c0-23 19-42 42-42z"/>
+  <path fill="#0f766e" d="M177 203h158v30H177v-30zm0 60h116v30H177v-30z"/>
+  <path fill="#0f766e" d="M332 276l48 48-22 22-48-48 22-22z"/>
+  <circle cx="318" cy="260" r="52" fill="none" stroke="#0f766e" stroke-width="28"/>
+</svg>
