@@ -1,5 +1,6 @@
 .next
 node_modules
+.tools
 out
 dist
 .env
