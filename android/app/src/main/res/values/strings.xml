@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">Quick Quote Builder</string>
-    <string name="title_activity_main">Quick Quote Builder</string>
-    <string name="package_name">com.quickquotebuilder.app</string>
-    <string name="custom_url_scheme">com.quickquotebuilder.app</string>
-</resources>
