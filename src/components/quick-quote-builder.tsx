@@ -2067,7 +2067,10 @@ function QuoteLineEditor({ line, onUpdateLine, onRemoveLine }: { line: QuoteLine
             <span>Markup</span>
           </span>
         </span>
-        <input className="input" type="number" min={0} step="0.01" value={line.unitPrice} onChange={(event) => onUpdateLine(line.lineId, { unitPrice: Number(event.target.value) })} />
+        <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2 rounded-md border border-stone-300 bg-white px-3">
+          <span className="text-sm font-black text-stone-500">$</span>
+          <input className="min-h-11 min-w-0 bg-transparent text-sm font-medium outline-none" type="number" min={0} step="0.01" value={line.unitPrice} onChange={(event) => onUpdateLine(line.lineId, { unitPrice: Number(event.target.value) })} />
+        </div>
       </label>
       {markupOpen ? (
         <div className="grid gap-2 rounded-lg border border-stone-200 bg-stone-50 p-2 md:col-span-2">
@@ -2097,35 +2100,41 @@ function QuoteLineEditor({ line, onUpdateLine, onRemoveLine }: { line: QuoteLine
             </label>
             <label className="field">
               <span>Percent</span>
-              <input
-                className="input"
-                type="number"
-                min={0}
-                step="0.01"
-                placeholder="0"
-                value={markupPercent > 0 ? String(markupPercent) : ""}
-                onChange={(event) => {
-                  const nextPercent = Number(event.target.value);
-                  onUpdateLine(line.lineId, { markupMode: "percent", markupPercent: nextPercent, markupPrice: markupPriceFromPercent(Number(line.unitPrice) || 0, nextPercent) });
-                }}
-              />
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-md border border-stone-300 bg-white px-3">
+                <input
+                  className="min-h-11 min-w-0 bg-transparent text-sm font-medium outline-none"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="0"
+                  value={markupPercent > 0 ? String(markupPercent) : ""}
+                  onChange={(event) => {
+                    const nextPercent = Number(event.target.value);
+                    onUpdateLine(line.lineId, { markupMode: "percent", markupPercent: nextPercent, markupPrice: markupPriceFromPercent(Number(line.unitPrice) || 0, nextPercent) });
+                  }}
+                />
+                <span className="text-sm font-black text-stone-500">%</span>
+              </div>
             </label>
           </div>
           <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(150px,0.8fr)]">
             <label className="field">
               <span>Markup price per unit</span>
-              <input
-                className="input"
-                type="number"
-                min={0}
-                step="0.01"
-                placeholder="0"
-                value={markupPrice > 0 ? String(markupPrice) : ""}
-                onChange={(event) => {
-                  const nextPrice = Number(event.target.value);
-                  onUpdateLine(line.lineId, { markupMode: "price", markupPrice: nextPrice, markupPercent: markupPercentFromPrice(Number(line.unitPrice) || 0, nextPrice) });
-                }}
-              />
+              <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2 rounded-md border border-stone-300 bg-white px-3">
+                <span className="text-sm font-black text-stone-500">$</span>
+                <input
+                  className="min-h-11 min-w-0 bg-transparent text-sm font-medium outline-none"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="0"
+                  value={markupPrice > 0 ? String(markupPrice) : ""}
+                  onChange={(event) => {
+                    const nextPrice = Number(event.target.value);
+                    onUpdateLine(line.lineId, { markupMode: "price", markupPrice: nextPrice, markupPercent: markupPercentFromPrice(Number(line.unitPrice) || 0, nextPrice) });
+                  }}
+                />
+              </div>
             </label>
             <div className="grid content-end gap-1 rounded-md border border-stone-200 bg-white p-2 text-xs">
               <div className="flex items-center justify-between gap-3">
