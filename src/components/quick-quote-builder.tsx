@@ -256,8 +256,23 @@ function itemMatchesRequirement(item: CatalogItem, requirement: TemplateRequirem
   return requirement.terms.some((term) => searchable.includes(normalizeSearchValue(term)));
 }
 
+function lineMarkupAmount(line: QuoteLine) {
+  if (line.markupMode === "price") return Math.max(0, Number(line.markupPrice) || 0);
+  if (line.markupMode === "percent") return Math.max(0, line.unitPrice * ((Number(line.markupPercent) || 0) / 100));
+  if (Number(line.markupPrice) > 0) return Math.max(0, Number(line.markupPrice) || 0);
+  return Math.max(0, line.unitPrice * ((Number(line.markupPercent) || 0) / 100));
+}
+
+function lineSellUnitPrice(line: QuoteLine) {
+  return Math.max(0, (Number(line.unitPrice) || 0) + lineMarkupAmount(line));
+}
+
+function lineTotal(line: QuoteLine) {
+  return Math.max(0, Number(line.quantity) || 0) * lineSellUnitPrice(line);
+}
+
 function buildQuoteTotals(lines: QuoteLine[], meta: QuoteMeta): QuoteTotals {
-  const equipmentSubtotal = lines.filter((line) => !isLabor(line)).reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);
+  const equipmentSubtotal = lines.filter((line) => !isLabor(line)).reduce((sum, line) => sum + lineTotal(line), 0);
   const laborAmount = meta.includeLabor ? (meta.laborHours ?? 0) * (meta.laborRate ?? 0) : 0;
   const subtotal = equipmentSubtotal + laborAmount;
   const marginAmount = subtotal * (meta.marginPercent / 100);
@@ -1398,8 +1413,8 @@ function PrintQuoteDocument({ quote }: { quote: PrintableQuote }) {
                         </td>
                         <td>{line.sku}</td>
                         <td>{line.quantity}</td>
-                        <td>{money.format(line.unitPrice)}</td>
-                        <td>{money.format(line.quantity * line.unitPrice)}</td>
+                        <td>{money.format(lineSellUnitPrice(line))}</td>
+                        <td>{money.format(lineTotal(line))}</td>
                       </tr>
                     )),
                   ]
@@ -1411,8 +1426,8 @@ function PrintQuoteDocument({ quote }: { quote: PrintableQuote }) {
                       </td>
                       <td>{group.line.sku}</td>
                       <td>{group.line.quantity}</td>
-                      <td>{money.format(group.line.unitPrice)}</td>
-                      <td>{money.format(group.line.quantity * group.line.unitPrice)}</td>
+                      <td>{money.format(lineSellUnitPrice(group.line))}</td>
+                      <td>{money.format(lineTotal(group.line))}</td>
                     </tr>,
                   ],
             )
@@ -1923,7 +1938,7 @@ function QuoteLines({
                 {row.packageNickname?.trim() ? <p className="mt-1 truncate text-xs font-bold text-teal-900">{row.packageName}</p> : null}
                 <p className="mt-1 text-sm font-medium text-teal-900">{row.lines.length} items · Qty {row.lines.reduce((sum, line) => sum + line.quantity, 0)}</p>
               </div>
-              <span className="font-black">{money.format(row.lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0))}</span>
+              <span className="font-black">{money.format(row.lines.reduce((sum, line) => sum + lineTotal(line), 0))}</span>
               <ChevronDown size={17} className="text-stone-500" />
             </summary>
             <div className="grid gap-3 border-t border-teal-200 p-4">
@@ -1984,6 +1999,12 @@ function QuoteLines({
 }
 
 function QuoteLineEditor({ line, onUpdateLine, onRemoveLine }: { line: QuoteLine; onUpdateLine: (lineId: string, patch: Partial<QuoteLine>) => void; onRemoveLine: (lineId: string) => void }) {
+  const markupPercent = Number(line.markupPercent ?? 0);
+  const markupPrice = Number(line.markupPrice ?? 0);
+  const activeMarkupMode = line.markupMode ?? (markupPrice > 0 ? "price" : "percent");
+  const markupAmount = lineMarkupAmount(line);
+  const sellUnitPrice = lineSellUnitPrice(line);
+
   return (
     <div className="grid gap-3 rounded-lg border border-stone-200 bg-white p-3 md:grid-cols-2">
       <label className="field md:col-span-2">
@@ -1995,15 +2016,81 @@ function QuoteLineEditor({ line, onUpdateLine, onRemoveLine }: { line: QuoteLine
         <input className="input" type="number" min={0} value={line.quantity} onChange={(event) => onUpdateLine(line.lineId, { quantity: Number(event.target.value) })} />
       </label>
       <label className="field">
-        <span>Unit price</span>
+        <span>Base unit price</span>
         <input className="input" type="number" min={0} step="0.01" value={line.unitPrice} onChange={(event) => onUpdateLine(line.lineId, { unitPrice: Number(event.target.value) })} />
       </label>
+      <div className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3 md:col-span-2">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-black text-stone-950">Item markup</p>
+            <p className="text-xs font-bold text-stone-500">Choose a percentage or enter a markup dollar amount per unit.</p>
+          </div>
+          <span className="rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-sm font-black text-teal-900">
+            Sell {money.format(sellUnitPrice)}
+          </span>
+        </div>
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_160px]">
+          <label className="field">
+            <span>Markup percentage</span>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={1}
+              value={markupPercent}
+              onChange={(event) => onUpdateLine(line.lineId, { markupMode: "percent", markupPercent: Number(event.target.value), markupPrice: undefined })}
+              aria-label={`Markup percentage for ${line.name}`}
+            />
+          </label>
+          <label className="field">
+            <span>Percent</span>
+            <input
+              className="input"
+              type="number"
+              min={0}
+              step="0.01"
+              value={markupPercent}
+              onChange={(event) => onUpdateLine(line.lineId, { markupMode: "percent", markupPercent: Number(event.target.value), markupPrice: undefined })}
+            />
+          </label>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          <label className="field">
+            <span>Markup price per unit</span>
+            <input
+              className="input"
+              type="number"
+              min={0}
+              step="0.01"
+              value={markupPrice}
+              onChange={(event) => onUpdateLine(line.lineId, { markupMode: "price", markupPrice: Number(event.target.value) })}
+            />
+          </label>
+          <div className="grid content-end gap-1 rounded-md border border-stone-200 bg-white p-3 text-sm">
+            <div className="flex items-center justify-between gap-3">
+              <span className="font-bold text-stone-600">Active markup</span>
+              <strong>{activeMarkupMode === "price" ? "Price" : "Percent"}</strong>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="font-bold text-stone-600">Markup amount</span>
+              <strong>{money.format(markupAmount)}</strong>
+            </div>
+          </div>
+        </div>
+        <button
+          type="button"
+          className="button-secondary w-fit"
+          onClick={() => onUpdateLine(line.lineId, { markupMode: undefined, markupPercent: undefined, markupPrice: undefined })}
+        >
+          Clear item markup
+        </button>
+      </div>
       <label className="field md:col-span-2">
         <span>Notes</span>
         <p className="min-h-16 rounded-md border border-stone-200 bg-stone-50 p-3 text-sm font-medium text-stone-700">{line.notes || "No notes"}</p>
       </label>
       <div className="flex items-center justify-between gap-3 md:col-span-2">
-        <strong>{money.format(line.quantity * line.unitPrice)}</strong>
+        <strong>{money.format(lineTotal(line))}</strong>
         <button className="button-ghost" onClick={() => onRemoveLine(line.lineId)}>
           <Trash2 size={16} />
           Remove
@@ -2166,8 +2253,21 @@ function exportQuote(quote: SavedQuote, format: ExportQuoteFormat) {
     ["Scope of Work", quote.meta.scopeOfWork ?? ""],
     ["Created", new Date(quote.createdAt).toLocaleString()],
     [],
-    ["Item", "SKU", "Package", "Quantity", "ADI MSRP", "Unit Price", "Line Total", "Notes"],
-    ...quote.lines.map((line) => [line.name, line.sku, quoteLineExportGroup(line), String(line.quantity), String(line.msrp ?? ""), String(line.unitPrice), String(line.quantity * line.unitPrice), line.notes]),
+    ["Item", "SKU", "Package", "Quantity", "ADI MSRP", "Base Unit Price", "Markup Mode", "Markup Percent", "Markup Price", "Sell Unit Price", "Line Total", "Notes"],
+    ...quote.lines.map((line) => [
+      line.name,
+      line.sku,
+      quoteLineExportGroup(line),
+      String(line.quantity),
+      String(line.msrp ?? ""),
+      String(line.unitPrice),
+      line.markupMode ?? "",
+      String(line.markupPercent ?? ""),
+      String(line.markupPrice ?? ""),
+      String(lineSellUnitPrice(line)),
+      String(lineTotal(line)),
+      line.notes,
+    ]),
     [],
     ["Total", String(quote.total)],
   ];
@@ -2198,6 +2298,10 @@ function describeQuoteChanges(previous: { meta: QuoteMeta; lines: QuoteLine[]; t
     }
     if (oldLine.quantity !== line.quantity) changes.push({ kind: "changed", text: `${line.name} quantity changed from ${oldLine.quantity} to ${line.quantity}.` });
     if (oldLine.unitPrice !== line.unitPrice) changes.push({ kind: "changed", text: `${line.name} unit price changed from ${money.format(oldLine.unitPrice)} to ${money.format(line.unitPrice)}.` });
+    if ((oldLine.markupMode ?? "") !== (line.markupMode ?? "")) changes.push({ kind: "changed", text: `${line.name} markup mode changed from ${oldLine.markupMode || "none"} to ${line.markupMode || "none"}.` });
+    if ((oldLine.markupPercent ?? 0) !== (line.markupPercent ?? 0)) changes.push({ kind: "changed", text: `${line.name} markup percent changed from ${oldLine.markupPercent ?? 0}% to ${line.markupPercent ?? 0}%.` });
+    if ((oldLine.markupPrice ?? 0) !== (line.markupPrice ?? 0)) changes.push({ kind: "changed", text: `${line.name} markup price changed from ${money.format(oldLine.markupPrice ?? 0)} to ${money.format(line.markupPrice ?? 0)}.` });
+    if (lineTotal(oldLine) !== lineTotal(line)) changes.push({ kind: "changed", text: `${line.name} line total changed from ${money.format(lineTotal(oldLine))} to ${money.format(lineTotal(line))}.` });
     if ((oldLine.packageNickname ?? "") !== (line.packageNickname ?? "")) changes.push({ kind: "changed", text: `${line.name} setup nickname changed.` });
   });
   previous.lines.forEach((line) => {
@@ -3392,7 +3496,7 @@ function GroupedQuoteLines({ lines }: { lines: QuoteLine[] }) {
                 {group.title !== group.sourceName ? <p className="truncate text-sm font-bold text-teal-800">{group.sourceName}</p> : null}
                 <p className="text-sm text-teal-900">{group.lines.length} items - Qty {group.lines.reduce((sum, line) => sum + line.quantity, 0)}</p>
               </div>
-              <strong className="shrink-0">{money.format(group.lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0))}</strong>
+              <strong className="shrink-0">{money.format(group.lines.reduce((sum, line) => sum + lineTotal(line), 0))}</strong>
             </div>
             <div className="grid gap-2 p-3">
               {group.lines.map((line) => (
@@ -3402,7 +3506,7 @@ function GroupedQuoteLines({ lines }: { lines: QuoteLine[] }) {
                     <p className="truncate font-mono text-xs text-stone-500">{line.sku}</p>
                     <p className="text-sm text-stone-600">Qty {line.quantity}</p>
                   </div>
-                  <strong className="shrink-0">{money.format(line.quantity * line.unitPrice)}</strong>
+                  <strong className="shrink-0">{money.format(lineTotal(line))}</strong>
                 </div>
               ))}
             </div>
@@ -3414,7 +3518,7 @@ function GroupedQuoteLines({ lines }: { lines: QuoteLine[] }) {
               {quoteLineSecondaryLabel(group.line) ? <p className="truncate text-sm text-stone-600">{quoteLineSecondaryLabel(group.line)}</p> : null}
               <p className="text-sm text-stone-600">Qty {group.line.quantity}</p>
             </div>
-            <strong className="shrink-0">{money.format(group.line.quantity * group.line.unitPrice)}</strong>
+            <strong className="shrink-0">{money.format(lineTotal(group.line))}</strong>
           </div>
         ),
       )}

@@ -39,6 +39,9 @@ export type QuoteLine = {
   packageSourceName?: string;
   quantity: number;
   unitPrice: number;
+  markupMode?: "percent" | "price";
+  markupPercent?: number;
+  markupPrice?: number;
   msrp?: number;
   notes: string;
 };
