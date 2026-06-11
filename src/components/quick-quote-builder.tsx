@@ -1453,7 +1453,6 @@ function PrintQuoteDocument({ quote }: { quote: PrintableQuote }) {
                     <tr key={`package-${group.key}`} className="print-package-row">
                       <td colSpan={5}>
                         <strong>{group.title}</strong>
-                        {group.title !== group.sourceName ? <span>{group.sourceName}</span> : null}
                       </td>
                     </tr>,
                     ...group.lines.map((line) => (
@@ -1568,7 +1567,6 @@ function CartDropdown({
                 <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto] items-start gap-2 [&::-webkit-details-marker]:hidden">
                   <div className="min-w-0">
                     <p className="truncate font-black text-stone-950">{row.packageNickname?.trim() || row.packageName}</p>
-                    {row.packageNickname?.trim() ? <p className="truncate text-xs font-bold text-stone-500">{row.packageName}</p> : null}
                   </div>
                   <button
                     className="grid size-8 place-items-center rounded-full text-stone-500 hover:bg-red-50 hover:text-red-800"
@@ -1859,7 +1857,7 @@ function QuoteWorkspace(props: {
 
           {props.step === "customize" || props.step === "review" || props.step === "finalize" ? (
             <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-              <QuoteLines lines={props.lines} items={props.items} onAddItemToPackage={props.onAddItemToPackage} onUpdateLine={props.onUpdateLine} onRenamePackage={props.onRenamePackage} onRemoveLine={props.onRemoveLine} />
+              <QuoteLines lines={props.lines} items={props.items} onAddItemToPackage={props.onAddItemToPackage} onUpdateLine={props.onUpdateLine} onRemoveLine={props.onRemoveLine} />
             </div>
           ) : null}
 
@@ -1912,18 +1910,15 @@ function QuoteLines({
   items,
   onAddItemToPackage,
   onUpdateLine,
-  onRenamePackage,
   onRemoveLine,
 }: {
   lines: QuoteLine[];
   items: CatalogItem[];
   onAddItemToPackage: (item: CatalogItem, packageName?: string, quantity?: number, packageId?: string, packageSourceName?: string) => void;
   onUpdateLine: (lineId: string, patch: Partial<QuoteLine>) => void;
-  onRenamePackage: (packageName: string, nextName: string) => void;
   onRemoveLine: (lineId: string) => void;
 }) {
   const [packageSelector, setPackageSelector] = useState("");
-  const [editingPackageKey, setEditingPackageKey] = useState("");
   const rows = useMemo(() => {
     const result: Array<{ type: "package"; packageKey: string; packageName: string; packageNickname?: string; packageSourceName?: string; lines: QuoteLine[] } | { type: "line"; line: QuoteLine }> = [];
     const packageIndexes = new Map<string, number>();
@@ -1957,58 +1952,13 @@ function QuoteLines({
           <details key={`package-${row.packageKey}`} className="overflow-hidden rounded-lg border border-teal-200 bg-teal-50">
             <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 p-4 [&::-webkit-details-marker]:hidden">
               <div className="min-w-0">
-                {editingPackageKey === row.packageKey ? (
-                  <input
-                    className="input min-h-9 border-teal-200 bg-white font-black text-teal-950"
-                    autoFocus
-                    value={row.packageNickname ?? ""}
-                    placeholder={row.packageName}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                    }}
-                    onKeyDown={(event) => {
-                      event.stopPropagation();
-                      if (event.key === "Enter" || event.key === "Escape") setEditingPackageKey("");
-                    }}
-                    onBlur={() => setEditingPackageKey("")}
-                    onChange={(event) => onRenamePackage(row.packageKey, event.target.value)}
-                  />
-                ) : (
-                  <button
-                    className="max-w-full truncate text-left font-black hover:text-teal-800"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      setEditingPackageKey(row.packageKey);
-                    }}
-                  >
-                    {row.packageNickname?.trim() || row.packageName}
-                  </button>
-                )}
-                {row.packageNickname?.trim() ? <p className="mt-1 truncate text-xs font-bold text-teal-900">{row.packageName}</p> : null}
+                <p className="truncate font-black text-teal-950">{row.packageNickname?.trim() || row.packageName}</p>
                 <p className="mt-1 text-sm font-medium text-teal-900">{row.lines.length} items · Qty {row.lines.reduce((sum, line) => sum + line.quantity, 0)}</p>
               </div>
               <span className="font-black">{money.format(row.lines.reduce((sum, line) => sum + lineTotal(line), 0))}</span>
               <ChevronDown size={17} className="text-stone-500" />
             </summary>
             <div className="grid gap-3 border-t border-teal-200 p-4">
-              <div className="grid gap-3 md:grid-cols-[minmax(220px,0.4fr)_minmax(0,1fr)]">
-                <label className="field">
-                  <span>Setup nickname</span>
-                  <input
-                    className="input border-teal-200 bg-white font-black text-teal-950"
-                    value={row.packageNickname ?? ""}
-                    onClick={(event) => event.stopPropagation()}
-                    onChange={(event) => onRenamePackage(row.packageKey, event.target.value)}
-                    placeholder="Optional nickname, example: Camera 1P"
-                  />
-                </label>
-                <label className="field">
-                  <span>Template / component source</span>
-                  <input className="input bg-white" value={row.packageName} readOnly />
-                </label>
-              </div>
               <div className="grid gap-2">
                 {row.lines.map((line) => (
                   <QuoteLineEditor key={line.lineId} line={line} onUpdateLine={onUpdateLine} onRemoveLine={onRemoveLine} />
@@ -2059,10 +2009,10 @@ function QuoteLineEditor({ line, onUpdateLine, onRemoveLine }: { line: QuoteLine
 
   return (
     <div className="grid gap-3 rounded-lg border border-stone-200 bg-white p-3 md:grid-cols-2">
-      <label className="field md:col-span-2">
-        <span>Item name</span>
-        <input className="input" value={line.name} onChange={(event) => onUpdateLine(line.lineId, { name: event.target.value })} />
-      </label>
+      <div className="min-w-0 md:col-span-2">
+        <p className="truncate font-black text-stone-950">{line.name}</p>
+        {line.sku ? <p className="truncate font-mono text-xs text-stone-500">{line.sku}</p> : null}
+      </div>
       <label className="field">
         <span>Quantity</span>
         <input className="input" type="number" min={0} value={line.quantity} onChange={(event) => onUpdateLine(line.lineId, { quantity: Number(event.target.value) })} />
@@ -3579,7 +3529,6 @@ function GroupedQuoteLines({ lines }: { lines: QuoteLine[] }) {
             <div className="flex items-start justify-between gap-3 border-b border-teal-200 p-3">
               <div className="min-w-0">
                 <p className="truncate font-black text-teal-950">{group.title}</p>
-                {group.title !== group.sourceName ? <p className="truncate text-sm font-bold text-teal-800">{group.sourceName}</p> : null}
                 <p className="text-sm text-teal-900">{group.lines.length} items - Qty {group.lines.reduce((sum, line) => sum + line.quantity, 0)}</p>
               </div>
               <strong className="shrink-0">{money.format(group.lines.reduce((sum, line) => sum + lineTotal(line), 0))}</strong>

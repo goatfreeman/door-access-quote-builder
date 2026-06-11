@@ -2,7 +2,7 @@ import type { QuoteLine } from "@/lib/types";
 
 export type QuoteLineGroup =
   | { type: "line"; line: QuoteLine }
-  | { type: "package"; key: string; title: string; sourceName: string; lines: QuoteLine[] };
+  | { type: "package"; key: string; title: string; lines: QuoteLine[] };
 
 export function quoteLinePrimaryLabel(line: QuoteLine) {
   return line.packageNickname?.trim() || line.packageName || line.name;
@@ -10,7 +10,7 @@ export function quoteLinePrimaryLabel(line: QuoteLine) {
 
 export function quoteLineSecondaryLabel(line: QuoteLine) {
   if (!line.packageName) return "";
-  return line.packageNickname?.trim() ? `${line.packageName} / ${line.name}` : line.name;
+  return line.name;
 }
 
 export function quoteLineExportGroup(line: QuoteLine) {
@@ -35,7 +35,6 @@ export function groupQuoteLines(lines: QuoteLine[]): QuoteLineGroup[] {
         type: "package",
         key,
         title: line.packageNickname?.trim() || line.packageName,
-        sourceName: line.packageName,
         lines: [line],
       });
       return;
