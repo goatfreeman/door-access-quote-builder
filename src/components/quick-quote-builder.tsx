@@ -2030,15 +2030,10 @@ function QuoteLines({
 function QuoteLineEditor({ line, onUpdateLine, onRemoveLine }: { line: QuoteLine; onUpdateLine: (lineId: string, patch: Partial<QuoteLine>) => void; onRemoveLine: (lineId: string) => void }) {
   const markupPercent = Number(line.markupPercent ?? 0);
   const markupPrice = Number(line.markupPrice ?? 0);
-  const hasMarkup = Boolean(line.markupMode || markupPercent > 0 || markupPrice > 0);
-  const [markupOpen, setMarkupOpen] = useState(hasMarkup);
+  const markupEnabled = Boolean(line.markupMode || markupPercent > 0 || markupPrice > 0);
   const activeMarkupMode = line.markupMode ?? (markupPrice > 0 ? "price" : "percent");
   const markupAmount = lineMarkupAmount(line);
   const sellUnitPrice = lineSellUnitPrice(line);
-
-  useEffect(() => {
-    setMarkupOpen(hasMarkup);
-  }, [hasMarkup]);
 
   return (
     <div className="grid gap-3 rounded-lg border border-stone-200 bg-white p-3 md:grid-cols-2">
@@ -2057,10 +2052,9 @@ function QuoteLineEditor({ line, onUpdateLine, onRemoveLine }: { line: QuoteLine
             <input
               type="checkbox"
               className="size-4 accent-teal-700"
-              checked={markupOpen}
+              checked={markupEnabled}
               onChange={(event) => {
                 const checked = event.target.checked;
-                setMarkupOpen(checked);
                 onUpdateLine(
                   line.lineId,
                   checked
@@ -2085,7 +2079,7 @@ function QuoteLineEditor({ line, onUpdateLine, onRemoveLine }: { line: QuoteLine
           <input className="min-h-11 min-w-0 bg-transparent text-sm font-medium outline-none" type="number" min={0} step="0.01" value={line.unitPrice} onChange={(event) => onUpdateLine(line.lineId, { unitPrice: Number(event.target.value) })} />
         </div>
       </label>
-      {markupOpen ? (
+      {markupEnabled ? (
         <div className="grid gap-2 rounded-lg border border-stone-200 bg-stone-50 p-2 md:col-span-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
