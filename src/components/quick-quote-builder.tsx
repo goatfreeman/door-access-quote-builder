@@ -2037,7 +2037,7 @@ function QuoteLineEditor({ line, onUpdateLine, onRemoveLine }: { line: QuoteLine
   const sellUnitPrice = lineSellUnitPrice(line);
 
   useEffect(() => {
-    if (hasMarkup) setMarkupOpen(true);
+    setMarkupOpen(hasMarkup);
   }, [hasMarkup]);
 
   return (
@@ -2061,7 +2061,20 @@ function QuoteLineEditor({ line, onUpdateLine, onRemoveLine }: { line: QuoteLine
               onChange={(event) => {
                 const checked = event.target.checked;
                 setMarkupOpen(checked);
-                if (!checked) onUpdateLine(line.lineId, { markupMode: undefined, markupPercent: undefined, markupPrice: undefined });
+                onUpdateLine(
+                  line.lineId,
+                  checked
+                    ? {
+                        markupMode: activeMarkupMode,
+                        markupPercent,
+                        markupPrice,
+                      }
+                    : {
+                        markupMode: undefined,
+                        markupPercent: undefined,
+                        markupPrice: undefined,
+                      },
+                );
               }}
             />
             <span>Markup</span>
