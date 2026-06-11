@@ -2022,7 +2022,22 @@ function QuoteLineEditor({ line, onUpdateLine, onRemoveLine }: { line: QuoteLine
         <input className="input" type="number" min={0} value={line.quantity} onChange={(event) => onUpdateLine(line.lineId, { quantity: Number(event.target.value) })} />
       </label>
       <label className="field">
-        <span>Base unit price</span>
+        <span className="flex items-center justify-between gap-3">
+          <span className="inline-flex items-center gap-2">
+            <input
+              type="checkbox"
+              className="size-4 accent-teal-700"
+              checked={markupOpen}
+              onChange={(event) => {
+                const checked = event.target.checked;
+                setMarkupOpen(checked);
+                if (!checked) onUpdateLine(line.lineId, { markupMode: undefined, markupPercent: undefined, markupPrice: undefined });
+              }}
+            />
+            <span>Base unit price</span>
+          </span>
+          <span className="text-xs font-black text-stone-500">Markup</span>
+        </span>
         <input className="input" type="number" min={0} step="0.01" value={line.unitPrice} onChange={(event) => onUpdateLine(line.lineId, { unitPrice: Number(event.target.value) })} />
       </label>
       {markupOpen ? (
@@ -2095,16 +2110,7 @@ function QuoteLineEditor({ line, onUpdateLine, onRemoveLine }: { line: QuoteLine
             Clear item markup
           </button>
         </div>
-      ) : (
-        <button
-          type="button"
-          className="button-secondary w-fit md:col-span-2"
-          onClick={() => setMarkupOpen(true)}
-        >
-          <Plus size={16} />
-          Add item markup
-        </button>
-      )}
+      ) : null}
       <label className="field md:col-span-2">
         <span>Notes</span>
         <p className="min-h-16 rounded-md border border-stone-200 bg-stone-50 p-3 text-sm font-medium text-stone-700">{line.notes || "No notes"}</p>
