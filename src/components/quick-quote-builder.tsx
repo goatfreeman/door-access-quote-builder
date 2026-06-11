@@ -2023,7 +2023,8 @@ function QuoteLineEditor({ line, onUpdateLine, onRemoveLine }: { line: QuoteLine
       </label>
       <label className="field">
         <span className="flex items-center justify-between gap-3">
-          <span className="inline-flex items-center gap-2">
+          <span>Base unit price</span>
+          <span className="inline-flex items-center gap-2 text-xs font-black text-stone-500">
             <input
               type="checkbox"
               className="size-4 accent-teal-700"
@@ -2034,9 +2035,8 @@ function QuoteLineEditor({ line, onUpdateLine, onRemoveLine }: { line: QuoteLine
                 if (!checked) onUpdateLine(line.lineId, { markupMode: undefined, markupPercent: undefined, markupPrice: undefined });
               }}
             />
-            <span>Base unit price</span>
+            <span>Markup</span>
           </span>
-          <span className="text-xs font-black text-stone-500">Markup</span>
         </span>
         <input className="input" type="number" min={0} step="0.01" value={line.unitPrice} onChange={(event) => onUpdateLine(line.lineId, { unitPrice: Number(event.target.value) })} />
       </label>
