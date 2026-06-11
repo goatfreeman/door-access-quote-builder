@@ -271,6 +271,14 @@ function lineTotal(line: QuoteLine) {
   return Math.max(0, Number(line.quantity) || 0) * lineSellUnitPrice(line);
 }
 
+function markupPercentFromPrice(baseUnitPrice: number, markupPrice: number) {
+  return baseUnitPrice > 0 ? (markupPrice / baseUnitPrice) * 100 : 0;
+}
+
+function markupPriceFromPercent(baseUnitPrice: number, markupPercent: number) {
+  return baseUnitPrice * (markupPercent / 100);
+}
+
 function buildQuoteTotals(lines: QuoteLine[], meta: QuoteMeta): QuoteTotals {
   const equipmentSubtotal = lines.filter((line) => !isLabor(line)).reduce((sum, line) => sum + lineTotal(line), 0);
   const laborAmount = meta.includeLabor ? (meta.laborHours ?? 0) * (meta.laborRate ?? 0) : 0;
@@ -786,8 +794,21 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
     setLines((current) => {
       const existing = current.find((line) => line.itemId === item.id && (packageId ? line.packageId === packageId : line.packageName === packageName));
       if (existing) {
-        return current.map((line) => (line.lineId === existing.lineId ? { ...line, quantity: line.quantity + quantity } : line));
+        const sharedMarkup = {
+          markupMode: existing.markupMode,
+          markupPercent: existing.markupPercent,
+          markupPrice: existing.markupPrice,
+        };
+        return current.map((line) => {
+          if (line.itemId !== item.id) return line;
+          return {
+            ...line,
+            ...sharedMarkup,
+            quantity: line.lineId === existing.lineId ? line.quantity + quantity : line.quantity,
+          };
+        });
       }
+      const sameItemLine = current.find((line) => line.itemId === item.id);
       return [
         ...current,
         {
@@ -801,6 +822,9 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
           packageSourceName,
           quantity,
           unitPrice: item.unitPrice,
+          markupMode: sameItemLine?.markupMode,
+          markupPercent: sameItemLine?.markupPercent,
+          markupPrice: sameItemLine?.markupPrice,
           msrp: item.msrp,
           notes: item.notes ?? "",
         },
@@ -822,7 +846,12 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   };
 
   const updateLine = (lineId: string, patch: Partial<QuoteLine>) => {
-    setLines((current) => current.map((line) => (line.lineId === lineId ? { ...line, ...patch } : line)));
+    setLines((current) => {
+      const target = current.find((line) => line.lineId === lineId);
+      const hasMarkupPatch = "markupMode" in patch || "markupPercent" in patch || "markupPrice" in patch;
+      if (!target || !hasMarkupPatch) return current.map((line) => (line.lineId === lineId ? { ...line, ...patch } : line));
+      return current.map((line) => (line.itemId === target.itemId ? { ...line, ...patch } : line));
+    });
   };
 
   const renamePackage = (packageKey: string, nextName: string) => {
@@ -2060,7 +2089,10 @@ function QuoteLineEditor({ line, onUpdateLine, onRemoveLine }: { line: QuoteLine
                 max={100}
                 step={1}
                 value={markupPercent}
-                onChange={(event) => onUpdateLine(line.lineId, { markupMode: "percent", markupPercent: Number(event.target.value), markupPrice: undefined })}
+                onChange={(event) => {
+                  const nextPercent = Number(event.target.value);
+                  onUpdateLine(line.lineId, { markupMode: "percent", markupPercent: nextPercent, markupPrice: markupPriceFromPercent(Number(line.unitPrice) || 0, nextPercent) });
+                }}
                 aria-label={`Markup percentage for ${line.name}`}
               />
             </label>
@@ -2072,7 +2104,10 @@ function QuoteLineEditor({ line, onUpdateLine, onRemoveLine }: { line: QuoteLine
                 min={0}
                 step="0.01"
                 value={markupPercent}
-                onChange={(event) => onUpdateLine(line.lineId, { markupMode: "percent", markupPercent: Number(event.target.value), markupPrice: undefined })}
+                onChange={(event) => {
+                  const nextPercent = Number(event.target.value);
+                  onUpdateLine(line.lineId, { markupMode: "percent", markupPercent: nextPercent, markupPrice: markupPriceFromPercent(Number(line.unitPrice) || 0, nextPercent) });
+                }}
               />
             </label>
           </div>
@@ -2085,7 +2120,10 @@ function QuoteLineEditor({ line, onUpdateLine, onRemoveLine }: { line: QuoteLine
                 min={0}
                 step="0.01"
                 value={markupPrice}
-                onChange={(event) => onUpdateLine(line.lineId, { markupMode: "price", markupPrice: Number(event.target.value) })}
+                onChange={(event) => {
+                  const nextPrice = Number(event.target.value);
+                  onUpdateLine(line.lineId, { markupMode: "price", markupPrice: nextPrice, markupPercent: markupPercentFromPrice(Number(line.unitPrice) || 0, nextPrice) });
+                }}
               />
             </label>
             <div className="grid content-end gap-1 rounded-md border border-stone-200 bg-white p-3 text-sm">
@@ -2099,16 +2137,6 @@ function QuoteLineEditor({ line, onUpdateLine, onRemoveLine }: { line: QuoteLine
               </div>
             </div>
           </div>
-          <button
-            type="button"
-            className="button-secondary w-fit"
-            onClick={() => {
-              onUpdateLine(line.lineId, { markupMode: undefined, markupPercent: undefined, markupPrice: undefined });
-              setMarkupOpen(false);
-            }}
-          >
-            Clear item markup
-          </button>
         </div>
       ) : null}
       <label className="field md:col-span-2">
