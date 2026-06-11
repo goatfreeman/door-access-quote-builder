@@ -2070,17 +2070,16 @@ function QuoteLineEditor({ line, onUpdateLine, onRemoveLine }: { line: QuoteLine
         <input className="input" type="number" min={0} step="0.01" value={line.unitPrice} onChange={(event) => onUpdateLine(line.lineId, { unitPrice: Number(event.target.value) })} />
       </label>
       {markupOpen ? (
-        <div className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3 md:col-span-2">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="grid gap-2 rounded-lg border border-stone-200 bg-stone-50 p-2 md:col-span-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <p className="text-sm font-black text-stone-950">Item markup</p>
-              <p className="text-xs font-bold text-stone-500">Choose a percentage or enter a markup dollar amount per unit.</p>
             </div>
-            <span className="rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-sm font-black text-teal-900">
+            <span className="rounded-full border border-teal-200 bg-teal-50 px-2 py-1 text-xs font-black text-teal-900">
               Sell {money.format(sellUnitPrice)}
             </span>
           </div>
-          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_160px]">
+          <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_120px]">
             <label className="field">
               <span>Markup percentage</span>
               <input
@@ -2103,7 +2102,8 @@ function QuoteLineEditor({ line, onUpdateLine, onRemoveLine }: { line: QuoteLine
                 type="number"
                 min={0}
                 step="0.01"
-                value={markupPercent}
+                placeholder="0"
+                value={markupPercent > 0 ? String(markupPercent) : ""}
                 onChange={(event) => {
                   const nextPercent = Number(event.target.value);
                   onUpdateLine(line.lineId, { markupMode: "percent", markupPercent: nextPercent, markupPrice: markupPriceFromPercent(Number(line.unitPrice) || 0, nextPercent) });
@@ -2111,7 +2111,7 @@ function QuoteLineEditor({ line, onUpdateLine, onRemoveLine }: { line: QuoteLine
               />
             </label>
           </div>
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(150px,0.8fr)]">
             <label className="field">
               <span>Markup price per unit</span>
               <input
@@ -2119,14 +2119,15 @@ function QuoteLineEditor({ line, onUpdateLine, onRemoveLine }: { line: QuoteLine
                 type="number"
                 min={0}
                 step="0.01"
-                value={markupPrice}
+                placeholder="0"
+                value={markupPrice > 0 ? String(markupPrice) : ""}
                 onChange={(event) => {
                   const nextPrice = Number(event.target.value);
                   onUpdateLine(line.lineId, { markupMode: "price", markupPrice: nextPrice, markupPercent: markupPercentFromPrice(Number(line.unitPrice) || 0, nextPrice) });
                 }}
               />
             </label>
-            <div className="grid content-end gap-1 rounded-md border border-stone-200 bg-white p-3 text-sm">
+            <div className="grid content-end gap-1 rounded-md border border-stone-200 bg-white p-2 text-xs">
               <div className="flex items-center justify-between gap-3">
                 <span className="font-bold text-stone-600">Active markup</span>
                 <strong>{activeMarkupMode === "price" ? "Price" : "Percent"}</strong>
@@ -2139,10 +2140,6 @@ function QuoteLineEditor({ line, onUpdateLine, onRemoveLine }: { line: QuoteLine
           </div>
         </div>
       ) : null}
-      <label className="field md:col-span-2">
-        <span>Notes</span>
-        <p className="min-h-16 rounded-md border border-stone-200 bg-stone-50 p-3 text-sm font-medium text-stone-700">{line.notes || "No notes"}</p>
-      </label>
       <div className="flex items-center justify-between gap-3 md:col-span-2">
         <strong>{money.format(lineTotal(line))}</strong>
         <button className="button-ghost" onClick={() => onRemoveLine(line.lineId)}>
