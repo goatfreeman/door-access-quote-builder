@@ -1,4 +1,4 @@
-import type { CatalogItem, DebugLogEntry, DraftQuote, QuoteMeta, QuoteRevision, QuoteTemplate, SavedQuote, ServiceTitanSettings, UserSessionRecord } from "@/lib/types";
+import type { CatalogItem, DebugLogEntry, DraftQuote, ExportColumnKey, QuoteMeta, QuoteRevision, QuoteTemplate, SavedQuote, ServiceTitanSettings, UserSessionRecord } from "@/lib/types";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/schema-types";
 
@@ -12,6 +12,7 @@ type ProfileMap = Map<string, { name?: string; email?: string }>;
 const collections = new Set<StoreCollection>(["items", "templates", "quotes", "settings", "drafts", "sessions", "debugLogs"]);
 const nilUuid = "00000000-0000-0000-0000-000000000000";
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const exportColumnKeys: ExportColumnKey[] = ["item", "sku", "package", "quantity", "adiMsrp", "baseUnitPrice", "markupMode", "markupPercent", "markupPrice", "sellUnitPrice", "lineTotal", "notes"];
 
 export function isCollection(value: string): value is StoreCollection {
   return collections.has(value as StoreCollection);
@@ -491,10 +492,12 @@ function emptySettings(): ServiceTitanSettings {
 
 function sanitizeSettings(value: unknown): ServiceTitanSettings {
   const settings = isObject(value) ? value : {};
+  const exportColumns = Array.isArray(settings.exportColumns) ? settings.exportColumns.filter((column): column is ExportColumnKey => exportColumnKeys.includes(column as ExportColumnKey)) : undefined;
   return {
     lastSyncAt: typeof settings.lastSyncAt === "string" ? settings.lastSyncAt : undefined,
     taxState: typeof settings.taxState === "string" ? settings.taxState : undefined,
     defaultTaxPercent: Number.isFinite(Number(settings.defaultTaxPercent)) ? Number(settings.defaultTaxPercent) : undefined,
+    exportColumns: exportColumns?.length ? exportColumns : undefined,
   };
 }
 

@@ -124,8 +124,23 @@ export type DebugLogEntry = {
   createdAt: string;
 };
 
+export type ExportColumnKey =
+  | "item"
+  | "sku"
+  | "package"
+  | "quantity"
+  | "adiMsrp"
+  | "baseUnitPrice"
+  | "markupMode"
+  | "markupPercent"
+  | "markupPrice"
+  | "sellUnitPrice"
+  | "lineTotal"
+  | "notes";
+
 export type ServiceTitanSettings = {
   lastSyncAt?: string;
   taxState?: string;
   defaultTaxPercent?: number;
+  exportColumns?: ExportColumnKey[];
 };

@@ -33,11 +33,11 @@ import { groupQuoteLines, quoteLineExportGroup, quoteLinePrimaryLabel, quoteLine
 import { getSupabaseAuthClient } from "@/lib/supabase/auth-client";
 import type { SessionUser } from "@/lib/auth-types";
 import type { IntegrationPluginStatus } from "@/lib/plugins/types";
-import type { CatalogItem, DebugLogEntry, DraftQuote, QuoteLine, QuoteMeta, QuoteTemplate, SavedQuote, ServiceTitanSettings, UserSessionRecord } from "@/lib/types";
+import type { CatalogItem, DebugLogEntry, DraftQuote, ExportColumnKey, QuoteLine, QuoteMeta, QuoteTemplate, SavedQuote, ServiceTitanSettings, UserSessionRecord } from "@/lib/types";
 
 type View = "home" | "quote" | "items" | "templates" | "previous" | "settings" | "client";
 type QuoteStep = "pick" | "customize" | "review" | "finalize";
-type SettingsSection = "account" | "database" | "quoteDefaults" | "plugins" | "sync" | "debug" | "recovery";
+type SettingsSection = "account" | "database" | "export" | "quoteDefaults" | "plugins" | "sync" | "debug" | "recovery";
 type DatabaseStatus = {
   provider: string;
   persistent: boolean;
@@ -78,6 +78,11 @@ type QuoteHistoryEntry = {
   total: number;
   changes: QuoteHistoryChange[];
 };
+type ExportColumnDefinition = {
+  key: ExportColumnKey;
+  label: string;
+  value: (line: QuoteLine) => string;
+};
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const appStage = process.env.NEXT_PUBLIC_APP_STAGE ?? "development";
@@ -106,6 +111,22 @@ const emptyMeta: QuoteMeta = {
   scopeOfWork: "",
   notes: "",
 };
+
+const exportColumnDefinitions: ExportColumnDefinition[] = [
+  { key: "item", label: "Item", value: (line) => line.name },
+  { key: "sku", label: "SKU", value: (line) => line.sku },
+  { key: "package", label: "Package", value: (line) => quoteLineExportGroup(line) },
+  { key: "quantity", label: "Quantity", value: (line) => String(line.quantity) },
+  { key: "adiMsrp", label: "ADI MSRP", value: (line) => String(line.msrp ?? "") },
+  { key: "baseUnitPrice", label: "Base Unit Price", value: (line) => String(line.unitPrice) },
+  { key: "markupMode", label: "Markup Mode", value: (line) => line.markupMode ?? "" },
+  { key: "markupPercent", label: "Markup Percent", value: (line) => String(line.markupPercent ?? "") },
+  { key: "markupPrice", label: "Markup Price", value: (line) => String(line.markupPrice ?? "") },
+  { key: "sellUnitPrice", label: "Sell Unit Price", value: (line) => String(lineSellUnitPrice(line)) },
+  { key: "lineTotal", label: "Line Total", value: (line) => String(lineTotal(line)) },
+  { key: "notes", label: "Notes", value: (line) => line.notes },
+];
+const defaultExportColumns = exportColumnDefinitions.map((column) => column.key);
 
 const isView = (value: unknown): value is View => ["home", "quote", "items", "templates", "previous", "settings", "client"].includes(String(value));
 const isQuoteStep = (value: unknown): value is QuoteStep => ["pick", "customize", "review", "finalize"].includes(String(value));
@@ -1221,6 +1242,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
             }}
             onEdit={loadQuoteForEdit}
             onPrintQuote={printSavedQuote}
+            exportColumns={settings.exportColumns}
             setQuotes={setQuotes}
           />
         ) : null}
@@ -2292,7 +2314,13 @@ function SummaryRow({ label, value }: { label: string; value: number }) {
   );
 }
 
-function exportQuote(quote: SavedQuote, format: ExportQuoteFormat) {
+function normalizeExportColumns(columns?: ExportColumnKey[]) {
+  const validColumns = new Set(exportColumnDefinitions.map((column) => column.key));
+  const normalized = (columns ?? defaultExportColumns).filter((column) => validColumns.has(column));
+  return normalized.length ? normalized : defaultExportColumns;
+}
+
+function exportQuote(quote: SavedQuote, format: ExportQuoteFormat, exportColumns?: ExportColumnKey[]) {
   if (format === "print" || format === "pdf") {
     window.print();
     return;
@@ -2300,6 +2328,8 @@ function exportQuote(quote: SavedQuote, format: ExportQuoteFormat) {
 
   const revisionNumber = (quote.revisions?.length ?? 0) + 1;
   const isInstallList = format === "install";
+  const selectedColumns = normalizeExportColumns(exportColumns);
+  const columns = exportColumnDefinitions.filter((column) => selectedColumns.includes(column.key));
   const rows = isInstallList ? [
     ["Quote", quote.meta.quoteNumber],
     ["Revision", String(revisionNumber)],
@@ -2320,21 +2350,8 @@ function exportQuote(quote: SavedQuote, format: ExportQuoteFormat) {
     ["Scope of Work", quote.meta.scopeOfWork ?? ""],
     ["Created", new Date(quote.createdAt).toLocaleString()],
     [],
-    ["Item", "SKU", "Package", "Quantity", "ADI MSRP", "Base Unit Price", "Markup Mode", "Markup Percent", "Markup Price", "Sell Unit Price", "Line Total", "Notes"],
-    ...quote.lines.map((line) => [
-      line.name,
-      line.sku,
-      quoteLineExportGroup(line),
-      String(line.quantity),
-      String(line.msrp ?? ""),
-      String(line.unitPrice),
-      line.markupMode ?? "",
-      String(line.markupPercent ?? ""),
-      String(line.markupPrice ?? ""),
-      String(lineSellUnitPrice(line)),
-      String(lineTotal(line)),
-      line.notes,
-    ]),
+    columns.map((column) => column.label),
+    ...quote.lines.map((line) => columns.map((column) => column.value(line))),
     [],
     ["Total", String(quote.total)],
   ];
@@ -3263,6 +3280,7 @@ function PreviousQuotes({
   onClientView,
   onEdit,
   onPrintQuote,
+  exportColumns,
   setQuotes,
 }: {
   quotes: SavedQuote[];
@@ -3272,6 +3290,7 @@ function PreviousQuotes({
   onClientView: (quote: SavedQuote) => void;
   onEdit: (quote: SavedQuote) => void;
   onPrintQuote: (quote: SavedQuote) => void;
+  exportColumns?: ExportColumnKey[];
   setQuotes: Dispatch<SetStateAction<SavedQuote[]>>;
 }) {
   const [deleteQuote, setDeleteQuote] = useState<SavedQuote | null>(null);
@@ -3398,7 +3417,7 @@ function PreviousQuotes({
                             className="rounded-md px-3 py-2 text-left text-sm font-bold hover:bg-stone-100"
                             onClick={() => {
                               if (format === "excel" || format === "install") {
-                                exportQuote(selectedQuote, format as ExportQuoteFormat);
+                                exportQuote(selectedQuote, format as ExportQuoteFormat, exportColumns);
                               } else {
                                 onPrintQuote(selectedQuote);
                               }
@@ -3636,6 +3655,7 @@ function SettingsPage({
   const sections: { id: SettingsSection; label: string; admin?: boolean }[] = [
     { id: "account", label: "Account Info" },
     { id: "database", label: "Database" },
+    { id: "export", label: "Export Options" },
     { id: "quoteDefaults", label: "Quote Defaults", admin: true },
     { id: "plugins", label: "Plugins", admin: true },
     { id: "sync", label: "Sync", admin: true },
@@ -3755,6 +3775,18 @@ function SettingsPage({
     }
     const { error } = await supabase.auth.updateUser({ password: passwordChange.next });
     setPasswordChange({ current: "", next: "", confirm: "", message: error ? "Password could not be changed." : "Password changed." });
+  };
+  const activeExportColumns = normalizeExportColumns(settings.exportColumns);
+  const setExportColumnEnabled = (key: ExportColumnKey, enabled: boolean) => {
+    setSettings((current) => {
+      const currentColumns = normalizeExportColumns(current.exportColumns);
+      const nextColumns = enabled ? Array.from(new Set([...currentColumns, key])) : currentColumns.filter((column) => column !== key);
+      if (!nextColumns.length) return current;
+      return {
+        ...current,
+        exportColumns: defaultExportColumns.filter((column) => nextColumns.includes(column)),
+      };
+    });
   };
 
   return (
@@ -3876,6 +3908,32 @@ function SettingsPage({
                 <p className="mt-2 text-sm text-stone-600">
                   Supabase PostgreSQL uses TLS in transit and provider-side encryption at rest. For production-grade breach protection, the next step is app-level field encryption for customer, project, pricing, and notes before writing quote records.
                 </p>
+              </div>
+            </section>
+          ) : null}
+          {activeSection === "export" ? (
+            <section className="rounded-lg border border-stone-200 bg-stone-50 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="font-black">Export Options</h3>
+                  <p className="mt-1 text-sm text-stone-600">Choose which columns are included in Excel exports. Install-list exports keep the no-price format.</p>
+                </div>
+                <button className="button-secondary" onClick={() => setSettings((current) => ({ ...current, exportColumns: defaultExportColumns }))}>
+                  Reset defaults
+                </button>
+              </div>
+              <div className="mt-4 grid gap-2 md:grid-cols-2">
+                {exportColumnDefinitions.map((column) => (
+                  <label key={column.key} className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm font-bold transition hover:border-teal-300">
+                    <input
+                      type="checkbox"
+                      className="size-4 accent-teal-700"
+                      checked={activeExportColumns.includes(column.key)}
+                      onChange={(event) => setExportColumnEnabled(column.key, event.target.checked)}
+                    />
+                    <span>{column.label}</span>
+                  </label>
+                ))}
               </div>
             </section>
           ) : null}
