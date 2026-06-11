@@ -2001,9 +2001,15 @@ function QuoteLines({
 function QuoteLineEditor({ line, onUpdateLine, onRemoveLine }: { line: QuoteLine; onUpdateLine: (lineId: string, patch: Partial<QuoteLine>) => void; onRemoveLine: (lineId: string) => void }) {
   const markupPercent = Number(line.markupPercent ?? 0);
   const markupPrice = Number(line.markupPrice ?? 0);
+  const hasMarkup = Boolean(line.markupMode || markupPercent > 0 || markupPrice > 0);
+  const [markupOpen, setMarkupOpen] = useState(hasMarkup);
   const activeMarkupMode = line.markupMode ?? (markupPrice > 0 ? "price" : "percent");
   const markupAmount = lineMarkupAmount(line);
   const sellUnitPrice = lineSellUnitPrice(line);
+
+  useEffect(() => {
+    if (hasMarkup) setMarkupOpen(true);
+  }, [hasMarkup]);
 
   return (
     <div className="grid gap-3 rounded-lg border border-stone-200 bg-white p-3 md:grid-cols-2">
@@ -2019,72 +2025,86 @@ function QuoteLineEditor({ line, onUpdateLine, onRemoveLine }: { line: QuoteLine
         <span>Base unit price</span>
         <input className="input" type="number" min={0} step="0.01" value={line.unitPrice} onChange={(event) => onUpdateLine(line.lineId, { unitPrice: Number(event.target.value) })} />
       </label>
-      <div className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3 md:col-span-2">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-black text-stone-950">Item markup</p>
-            <p className="text-xs font-bold text-stone-500">Choose a percentage or enter a markup dollar amount per unit.</p>
-          </div>
-          <span className="rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-sm font-black text-teal-900">
-            Sell {money.format(sellUnitPrice)}
-          </span>
-        </div>
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_160px]">
-          <label className="field">
-            <span>Markup percentage</span>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              step={1}
-              value={markupPercent}
-              onChange={(event) => onUpdateLine(line.lineId, { markupMode: "percent", markupPercent: Number(event.target.value), markupPrice: undefined })}
-              aria-label={`Markup percentage for ${line.name}`}
-            />
-          </label>
-          <label className="field">
-            <span>Percent</span>
-            <input
-              className="input"
-              type="number"
-              min={0}
-              step="0.01"
-              value={markupPercent}
-              onChange={(event) => onUpdateLine(line.lineId, { markupMode: "percent", markupPercent: Number(event.target.value), markupPrice: undefined })}
-            />
-          </label>
-        </div>
-        <div className="grid gap-3 md:grid-cols-2">
-          <label className="field">
-            <span>Markup price per unit</span>
-            <input
-              className="input"
-              type="number"
-              min={0}
-              step="0.01"
-              value={markupPrice}
-              onChange={(event) => onUpdateLine(line.lineId, { markupMode: "price", markupPrice: Number(event.target.value) })}
-            />
-          </label>
-          <div className="grid content-end gap-1 rounded-md border border-stone-200 bg-white p-3 text-sm">
-            <div className="flex items-center justify-between gap-3">
-              <span className="font-bold text-stone-600">Active markup</span>
-              <strong>{activeMarkupMode === "price" ? "Price" : "Percent"}</strong>
+      {markupOpen ? (
+        <div className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3 md:col-span-2">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-black text-stone-950">Item markup</p>
+              <p className="text-xs font-bold text-stone-500">Choose a percentage or enter a markup dollar amount per unit.</p>
             </div>
-            <div className="flex items-center justify-between gap-3">
-              <span className="font-bold text-stone-600">Markup amount</span>
-              <strong>{money.format(markupAmount)}</strong>
+            <span className="rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-sm font-black text-teal-900">
+              Sell {money.format(sellUnitPrice)}
+            </span>
+          </div>
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_160px]">
+            <label className="field">
+              <span>Markup percentage</span>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={markupPercent}
+                onChange={(event) => onUpdateLine(line.lineId, { markupMode: "percent", markupPercent: Number(event.target.value), markupPrice: undefined })}
+                aria-label={`Markup percentage for ${line.name}`}
+              />
+            </label>
+            <label className="field">
+              <span>Percent</span>
+              <input
+                className="input"
+                type="number"
+                min={0}
+                step="0.01"
+                value={markupPercent}
+                onChange={(event) => onUpdateLine(line.lineId, { markupMode: "percent", markupPercent: Number(event.target.value), markupPrice: undefined })}
+              />
+            </label>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="field">
+              <span>Markup price per unit</span>
+              <input
+                className="input"
+                type="number"
+                min={0}
+                step="0.01"
+                value={markupPrice}
+                onChange={(event) => onUpdateLine(line.lineId, { markupMode: "price", markupPrice: Number(event.target.value) })}
+              />
+            </label>
+            <div className="grid content-end gap-1 rounded-md border border-stone-200 bg-white p-3 text-sm">
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-bold text-stone-600">Active markup</span>
+                <strong>{activeMarkupMode === "price" ? "Price" : "Percent"}</strong>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-bold text-stone-600">Markup amount</span>
+                <strong>{money.format(markupAmount)}</strong>
+              </div>
             </div>
           </div>
+          <button
+            type="button"
+            className="button-secondary w-fit"
+            onClick={() => {
+              onUpdateLine(line.lineId, { markupMode: undefined, markupPercent: undefined, markupPrice: undefined });
+              setMarkupOpen(false);
+            }}
+          >
+            Clear item markup
+          </button>
         </div>
+      ) : (
         <button
           type="button"
-          className="button-secondary w-fit"
-          onClick={() => onUpdateLine(line.lineId, { markupMode: undefined, markupPercent: undefined, markupPrice: undefined })}
+          className="button-secondary w-fit md:col-span-2"
+          onClick={() => setMarkupOpen(true)}
         >
-          Clear item markup
+          <Plus size={16} />
+          Add item markup
         </button>
-      </div>
+      )}
       <label className="field md:col-span-2">
         <span>Notes</span>
         <p className="min-h-16 rounded-md border border-stone-200 bg-stone-50 p-3 text-sm font-medium text-stone-700">{line.notes || "No notes"}</p>
