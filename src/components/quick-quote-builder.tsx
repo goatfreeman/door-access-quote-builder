@@ -25,7 +25,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import type { Dispatch, SetStateAction } from "react";
+import type { Dispatch, MouseEvent as ReactMouseEvent, SetStateAction } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getPendingWriteCount, readDb, syncPendingWrites, writeDb } from "@/lib/client-db";
 import { writeDebugLog } from "@/lib/debug-log";
@@ -83,6 +83,13 @@ type TemplateItemSelection = {
     category: string;
   };
 };
+
+function closeOnBackdropMouseDown(event: ReactMouseEvent<HTMLElement>, onClose: () => void) {
+  if (event.target === event.currentTarget) {
+    onClose();
+  }
+}
+
 type ExportColumnDefinition = {
   key: ExportColumnKey;
   label: string;
@@ -1267,7 +1274,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
       </section>
 
       {startFreshPromptOpen ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onClick={() => setStartFreshPromptOpen(false)}>
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onMouseDown={(event) => closeOnBackdropMouseDown(event, () => setStartFreshPromptOpen(false))}>
           <div className="w-full max-w-lg rounded-lg bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -1970,7 +1977,7 @@ function TemplateConfigureDialog({
   const selectedCount = requirements.filter((requirement) => isSelectionComplete(selections[requirement.id])).length;
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onClick={onCancel}>
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onMouseDown={(event) => closeOnBackdropMouseDown(event, onCancel)}>
       <div className="grid max-h-[calc(100vh-2rem)] w-full max-w-4xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-3 border-b border-stone-200 p-5">
           <div>
@@ -2754,7 +2761,7 @@ function ItemsPage({
         </div>
       </div>
       {addItemOpen ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onClick={() => setAddItemOpen(false)}>
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onMouseDown={(event) => closeOnBackdropMouseDown(event, () => setAddItemOpen(false))}>
           <div className="max-h-[calc(100vh-2rem)] w-full max-w-3xl overflow-y-auto rounded-lg bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -2836,7 +2843,7 @@ function ItemsPage({
         </div>
       ) : null}
       {categoryEditor ? (
-        <div className="fixed inset-0 z-[60] grid place-items-center bg-black/45 p-4" onClick={closeCategoryEditor}>
+        <div className="fixed inset-0 z-[60] grid place-items-center bg-black/45 p-4" onMouseDown={(event) => closeOnBackdropMouseDown(event, closeCategoryEditor)}>
           <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -2863,7 +2870,7 @@ function ItemsPage({
         </div>
       ) : null}
       {deleteItem ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onClick={() => setDeleteItem(null)}>
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onMouseDown={(event) => closeOnBackdropMouseDown(event, () => setDeleteItem(null))}>
           <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -2982,7 +2989,7 @@ function TemplatesPage({
         )}
       </div>
       {deleteTemplate ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onClick={() => setDeleteTemplate(null)}>
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onMouseDown={(event) => closeOnBackdropMouseDown(event, () => setDeleteTemplate(null))}>
           <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -3006,7 +3013,7 @@ function TemplatesPage({
         </div>
       ) : null}
       {draftTemplate ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onClick={() => setDraftTemplate(null)}>
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onMouseDown={(event) => closeOnBackdropMouseDown(event, () => setDraftTemplate(null))}>
           <div className="max-h-[calc(100vh-2rem)] w-full max-w-3xl overflow-y-auto rounded-lg bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -3262,7 +3269,7 @@ function TemplateCard({
         />
       ) : null}
       {infoOpen ? (
-        <div className="fixed inset-0 z-[60] grid place-items-center bg-black/45 p-4" onClick={() => setInfoOpen(false)}>
+        <div className="fixed inset-0 z-[60] grid place-items-center bg-black/45 p-4" onMouseDown={(event) => closeOnBackdropMouseDown(event, () => setInfoOpen(false))}>
           <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -3302,7 +3309,7 @@ function TemplateItemSelector({ items, onCancel, onConfirm }: { items: CatalogIt
   }, [selectedItemId, visibleItems]);
 
   return (
-    <div className="fixed inset-0 z-[60] grid place-items-center bg-black/45 p-4" onClick={onCancel}>
+    <div className="fixed inset-0 z-[60] grid place-items-center bg-black/45 p-4" onMouseDown={(event) => closeOnBackdropMouseDown(event, onCancel)}>
       <div className="max-h-[calc(100vh-2rem)] w-full max-w-4xl overflow-y-auto rounded-lg bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -3525,7 +3532,7 @@ function PreviousQuotes({
         </div>
       </div>
       {historyOpen && selectedQuote && selectedHistory ? (
-        <div className="fixed inset-0 z-50 bg-black/45 p-3 sm:p-5" onClick={() => setHistoryOpen(false)}>
+        <div className="fixed inset-0 z-50 bg-black/45 p-3 sm:p-5" onMouseDown={(event) => closeOnBackdropMouseDown(event, () => setHistoryOpen(false))}>
           <div className="mx-auto grid h-full max-w-6xl grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-lg bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="flex flex-wrap items-start justify-between gap-3 border-b border-stone-200 p-4">
               <div>
@@ -3583,7 +3590,7 @@ function PreviousQuotes({
         </div>
       ) : null}
       {deleteQuote ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onClick={() => setDeleteQuote(null)}>
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onMouseDown={(event) => closeOnBackdropMouseDown(event, () => setDeleteQuote(null))}>
           <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -4205,7 +4212,7 @@ function SettingsPage({
         </div>
       </div>
       {syncConfirmOpen ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onClick={() => setSyncConfirmOpen(false)}>
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onMouseDown={(event) => closeOnBackdropMouseDown(event, () => setSyncConfirmOpen(false))}>
           <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -4228,7 +4235,7 @@ function SettingsPage({
         </div>
       ) : null}
       {permanentDeleteTarget ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onClick={() => setPermanentDeleteTarget(null)}>
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onMouseDown={(event) => closeOnBackdropMouseDown(event, () => setPermanentDeleteTarget(null))}>
           <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -4284,7 +4291,7 @@ function MobileMenu({
   onSettingsHoldEnd: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 bg-black/35 md:hidden" onClick={close}>
+    <div className="fixed inset-0 z-50 bg-black/35 md:hidden" onMouseDown={(event) => closeOnBackdropMouseDown(event, close)}>
       <div className="h-full w-80 max-w-[85vw] bg-white p-4 shadow-2xl" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-center justify-between">
           <button
