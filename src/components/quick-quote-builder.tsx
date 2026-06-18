@@ -37,7 +37,7 @@ import type { CatalogItem, DebugLogEntry, DraftQuote, ExportColumnKey, QuoteLine
 
 type View = "home" | "quote" | "items" | "templates" | "previous" | "settings" | "client";
 type QuoteStep = "pick" | "customize" | "review" | "finalize";
-type SettingsSection = "account" | "database" | "export" | "quoteDefaults" | "plugins" | "sync" | "debug" | "recovery";
+type SettingsSection = "account" | "database" | "export" | "quoteDefaults" | "categories" | "plugins" | "sync" | "debug" | "recovery";
 type DatabaseStatus = {
   provider: string;
   persistent: boolean;
@@ -276,6 +276,14 @@ function itemCategory(item: CatalogItem) {
 
 function uniqueItemCategories(items: CatalogItem[]) {
   return Array.from(new Set(items.map(itemCategory))).sort((a, b) => a.localeCompare(b));
+}
+
+function normalizeCategoryList(categories?: string[]) {
+  return Array.from(new Set((categories ?? []).map((category) => category.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+}
+
+function allCategoryOptions(items: CatalogItem[], settingsCategories?: string[]) {
+  return normalizeCategoryList([...uniqueItemCategories(items), ...normalizeCategoryList(settingsCategories)]);
 }
 
 function templateCategoryRequirements(template: QuoteTemplate) {
@@ -729,6 +737,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
     };
   }, [cartOpen, notificationOpen]);
 
+  const sharedCategories = useMemo(() => allCategoryOptions(activeItems, settings.categories), [activeItems, settings.categories]);
   const visibleItems = useMemo(() => {
     const query = search.trim().toLowerCase();
     return activeItems.filter((item) => {
@@ -737,7 +746,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
       return matchesCategory && matchesSearch;
     });
   }, [activeItems, search, category]);
-  const catalogCategories = useMemo(() => ["All", ...Array.from(new Set(activeItems.map((item) => item.category).filter(Boolean))).sort((a, b) => a.localeCompare(b))], [activeItems]);
+  const catalogCategories = useMemo(() => ["All", ...sharedCategories], [sharedCategories]);
 
   useEffect(() => {
     if (category !== "All" && !catalogCategories.includes(category)) {
@@ -1211,6 +1220,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
               <CatalogPanel
                 items={visibleItems}
                 templates={templates}
+                allCategories={sharedCategories}
                 categories={catalogCategories}
                 category={category}
                 search={search}
@@ -1220,8 +1230,8 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
                   addItem(item);
                   setQuoteStep("customize");
                 }}
-                onAddTemplate={(template) => {
-                  addTemplate(template);
+                onAddTemplate={(template, jumpToCustomize, selections) => {
+                  addTemplate(template, jumpToCustomize, selections);
                   setQuoteStep("customize");
                 }}
               />
@@ -1234,6 +1244,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
               setMeta={setMeta}
               totals={totals}
               items={activeItems}
+              categories={sharedCategories}
               templates={templates}
               onAddTemplate={addTemplate}
               onStartFresh={startFresh}
@@ -1252,8 +1263,8 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
           </>
         ) : null}
 
-        {view === "items" ? <ItemsPage items={activeItems} setItems={setItems} onDeleteItem={deleteItemEverywhere} /> : null}
-        {view === "templates" ? <TemplatesPage templates={templates} items={activeItems} user={sessionUser} setTemplates={setTemplates} onAddTemplate={addTemplate} /> : null}
+        {view === "items" ? <ItemsPage items={activeItems} categories={sharedCategories} setItems={setItems} setSettings={setSettings} onDeleteItem={deleteItemEverywhere} /> : null}
+        {view === "templates" ? <TemplatesPage templates={templates} items={activeItems} categories={sharedCategories} user={sessionUser} setTemplates={setTemplates} setSettings={setSettings} onAddTemplate={addTemplate} /> : null}
         {view === "previous" ? (
           <PreviousQuotes
             quotes={activeQuotes}
@@ -1274,7 +1285,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
           />
         ) : null}
         {view === "client" ? <ClientQuoteView quote={selectedQuote} onPrintQuote={printSavedQuote} /> : null}
-        {view === "settings" ? <SettingsPage settings={settings} setSettings={setSettings} onSync={syncServiceTitan} items={items} setItems={setItems} quotes={quotes} setQuotes={setQuotes} sessions={userSessions} setSessions={setSessions} debugLogs={debugLogs} currentDeviceId={deviceId} adminUnlocked={adminUnlocked} user={sessionUser} onSignOut={signOut} /> : null}
+        {view === "settings" ? <SettingsPage settings={settings} setSettings={setSettings} onSync={syncServiceTitan} items={items} setItems={setItems} templates={templates} quotes={quotes} setQuotes={setQuotes} sessions={userSessions} setSessions={setSessions} debugLogs={debugLogs} currentDeviceId={deviceId} adminUnlocked={adminUnlocked} user={sessionUser} onSignOut={signOut} /> : null}
       </section>
 
       {startFreshPromptOpen ? (
@@ -1719,6 +1730,7 @@ function CartDropdown({
 function CatalogPanel({
   items,
   templates,
+  allCategories,
   categories,
   category,
   search,
@@ -1729,6 +1741,7 @@ function CatalogPanel({
 }: {
   items: CatalogItem[];
   templates: QuoteTemplate[];
+  allCategories: string[];
   categories: string[];
   category: string;
   search: string;
@@ -1850,6 +1863,7 @@ function CatalogPanel({
         <TemplateConfigureDialog
           template={templateConfigurator}
           items={items}
+          categories={allCategories}
           onCancel={() => setTemplateConfigurator(null)}
           onConfirm={(selections) => {
             onAddTemplate(templateConfigurator, true, selections);
@@ -1869,6 +1883,7 @@ function QuoteWorkspace(props: {
   setMeta: Dispatch<SetStateAction<QuoteMeta>>;
   totals: QuoteTotals;
   items: CatalogItem[];
+  categories: string[];
   templates: QuoteTemplate[];
   onAddTemplate: (template: QuoteTemplate, jumpToCustomize?: boolean, selections?: TemplateItemSelection[]) => void;
   onStartFresh: () => void;
@@ -1950,6 +1965,7 @@ function QuoteWorkspace(props: {
                 <TemplateConfigureDialog
                   template={templateConfigurator}
                   items={props.items}
+                  categories={props.categories}
                   onCancel={() => setTemplateConfigurator(null)}
                   onConfirm={(selections) => {
                     setAddedTemplateId(templateConfigurator.id);
@@ -2018,15 +2034,18 @@ function QuoteWorkspace(props: {
 function TemplateConfigureDialog({
   template,
   items,
+  categories,
   onCancel,
   onConfirm,
 }: {
   template: QuoteTemplate;
   items: CatalogItem[];
+  categories: string[];
   onCancel: () => void;
   onConfirm: (selections: TemplateItemSelection[]) => void;
 }) {
   const [requirements, setRequirements] = useState(() => templateCategoryRequirements(template));
+  const [newCategoryName, setNewCategoryName] = useState("");
   const [selections, setSelections] = useState<Record<string, TemplateItemSelection>>(() => {
     const initial: Record<string, TemplateItemSelection> = {};
     templateCategoryRequirements(template).forEach((requirement) => {
@@ -2035,7 +2054,7 @@ function TemplateConfigureDialog({
     });
     return initial;
   });
-  const categoryOptions = useMemo(() => uniqueItemCategories(items), [items]);
+  const categoryOptions = useMemo(() => allCategoryOptions(items, categories), [items, categories]);
   const isSelectionComplete = (selection?: TemplateItemSelection) => Boolean(selection?.itemId || selection?.customItem?.name.trim());
   const canConfirm = requirements.length > 0 && requirements.every((requirement) => isSelectionComplete(selections[requirement.id]));
   const selectedCount = requirements.filter((requirement) => isSelectionComplete(selections[requirement.id])).length;
@@ -2045,6 +2064,14 @@ function TemplateConfigureDialog({
     const match = items.find((item) => itemCategory(item) === category);
     setRequirements((current) => [...current, { id, category, quantity: 1 }]);
     setSelections((current) => ({ ...current, [id]: { requirementId: id, itemId: match?.id ?? "", quantity: 1 } }));
+  };
+  const addNamedExtraCategory = () => {
+    const category = newCategoryName.trim();
+    if (!category) return;
+    const id = makeId("requirement");
+    setRequirements((current) => [...current, { id, category, quantity: 1 }]);
+    setSelections((current) => ({ ...current, [id]: { requirementId: id, itemId: "", quantity: 1 } }));
+    setNewCategoryName("");
   };
   const updateExtraCategory = (requirementId: string, category: string) => {
     const requirement = requirements.find((candidate) => candidate.id === requirementId);
@@ -2171,10 +2198,16 @@ function TemplateConfigureDialog({
                 </div>
               );
             })}
-            <button className="button-secondary w-fit" onClick={addExtraCategory} disabled={!categoryOptions.length}>
-              <Plus size={17} />
-              Add extra category
-            </button>
+            <div className="grid gap-2 rounded-lg border border-dashed border-stone-300 bg-white p-3 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center">
+              <button className="button-secondary w-fit" onClick={addExtraCategory} disabled={!categoryOptions.length}>
+                <Plus size={17} />
+                Add existing category
+              </button>
+              <input className="input" value={newCategoryName} onChange={(event) => setNewCategoryName(event.target.value)} placeholder="Create quote-only category" />
+              <button className="button-secondary" onClick={addNamedExtraCategory} disabled={!newCategoryName.trim()}>
+                Create category
+              </button>
+            </div>
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 p-5">
@@ -2661,11 +2694,15 @@ function buildQuoteHistory(quote: SavedQuote): QuoteHistoryEntry[] {
 
 function ItemsPage({
   items,
+  categories,
   setItems,
+  setSettings,
   onDeleteItem,
 }: {
   items: CatalogItem[];
+  categories: string[];
   setItems: Dispatch<SetStateAction<CatalogItem[]>>;
+  setSettings: Dispatch<SetStateAction<ServiceTitanSettings>>;
   onDeleteItem: (itemId: string) => string | null;
 }) {
   const [categoryFilter, setCategoryFilter] = useState("All");
@@ -2686,8 +2723,8 @@ function ItemsPage({
   const [deleteItemError, setDeleteItemError] = useState("");
   const [categoryEditor, setCategoryEditor] = useState<{ target: "draft" | "item"; itemId?: string } | null>(null);
   const [newCategoryName, setNewCategoryName] = useState("");
-  const categories = useMemo(() => ["All", ...Array.from(new Set(items.map((item) => item.category).filter(Boolean))).sort((a, b) => a.localeCompare(b))], [items]);
-  const itemCategoryOptions = categories.filter((option) => option !== "All");
+  const filterCategories = useMemo(() => ["All", ...categories], [categories]);
+  const itemCategoryOptions = categories;
   const sortedItems = useMemo(() => {
     const query = normalizeSearchValue(itemSearch);
     return items
@@ -2729,6 +2766,7 @@ function ItemsPage({
   const saveCategoryName = () => {
     const category = newCategoryName.trim();
     if (!category || !categoryEditor) return;
+    setSettings((current) => ({ ...current, categories: normalizeCategoryList([...(current.categories ?? []), category]) }));
     if (categoryEditor.target === "draft") {
       setDraftItem((current) => ({ ...current, category }));
     } else if (categoryEditor.itemId) {
@@ -2784,7 +2822,7 @@ function ItemsPage({
           <label className="field">
             <span>Category</span>
             <select className="input" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
-              {categories.map((option) => (
+              {filterCategories.map((option) => (
                 <option key={option}>{option}</option>
               ))}
             </select>
@@ -3019,20 +3057,23 @@ function ItemsPage({
 function TemplatesPage({
   templates,
   items,
+  categories,
   user,
   setTemplates,
+  setSettings,
   onAddTemplate,
 }: {
   templates: QuoteTemplate[];
   items: CatalogItem[];
+  categories: string[];
   user: SessionUser;
   setTemplates: Dispatch<SetStateAction<QuoteTemplate[]>>;
+  setSettings: Dispatch<SetStateAction<ServiceTitanSettings>>;
   onAddTemplate: (template: QuoteTemplate, jumpToCustomize?: boolean, selections?: TemplateItemSelection[]) => void;
 }) {
   const [deleteTemplate, setDeleteTemplate] = useState<QuoteTemplate | null>(null);
   const [draftTemplate, setDraftTemplate] = useState<QuoteTemplate | null>(null);
   const [newCategoryName, setNewCategoryName] = useState("");
-  const categories = useMemo(() => uniqueItemCategories(items), [items]);
   const confirmDeleteTemplate = () => {
     if (!deleteTemplate) return;
     setTemplates((current) => current.filter((template) => template.id !== deleteTemplate.id));
@@ -3041,6 +3082,7 @@ function TemplatesPage({
   const addDraftCategory = (category: string) => {
     const cleanCategory = category.trim();
     if (!cleanCategory) return;
+    setSettings((current) => ({ ...current, categories: normalizeCategoryList([...(current.categories ?? []), cleanCategory]) }));
     setDraftTemplate((current) => {
       if (!current) return current;
       const requirements = templateCategoryRequirements(current);
@@ -3100,7 +3142,7 @@ function TemplatesPage({
       <div className="grid gap-3 p-4 md:grid-cols-3">
         {templates.length ? (
           templates.map((template) => (
-            <TemplateCard key={template.id} template={template} items={items} user={user} setTemplates={setTemplates} onAddTemplate={onAddTemplate} onDeleteTemplate={setDeleteTemplate} />
+            <TemplateCard key={template.id} template={template} items={items} categories={categories} user={user} setTemplates={setTemplates} setSettings={setSettings} onAddTemplate={onAddTemplate} onDeleteTemplate={setDeleteTemplate} />
           ))
         ) : (
           <div className="rounded-lg border border-dashed border-stone-300 bg-stone-50 p-8 text-center text-stone-500 md:col-span-3">No templates yet.</div>
@@ -3223,15 +3265,19 @@ function TemplatesPage({
 function TemplateCard({
   template,
   items,
+  categories,
   user,
   setTemplates,
+  setSettings,
   onAddTemplate,
   onDeleteTemplate,
 }: {
   template: QuoteTemplate;
   items: CatalogItem[];
+  categories: string[];
   user: SessionUser;
   setTemplates: Dispatch<SetStateAction<QuoteTemplate[]>>;
+  setSettings: Dispatch<SetStateAction<ServiceTitanSettings>>;
   onAddTemplate: (template: QuoteTemplate, jumpToCustomize?: boolean, selections?: TemplateItemSelection[]) => void;
   onDeleteTemplate: (template: QuoteTemplate) => void;
 }) {
@@ -3239,7 +3285,6 @@ function TemplateCard({
   const [editingTitle, setEditingTitle] = useState(false);
   const [configureOpen, setConfigureOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
-  const categories = useMemo(() => uniqueItemCategories(items), [items]);
   const updateTemplate = (patch: Partial<QuoteTemplate>) => {
     setTemplates((current) =>
       current.map((candidate) => {
@@ -3252,6 +3297,7 @@ function TemplateCard({
   const addTemplateCategory = (category: string) => {
     const cleanCategory = category.trim();
     if (!cleanCategory) return;
+    setSettings((current) => ({ ...current, categories: normalizeCategoryList([...(current.categories ?? []), cleanCategory]) }));
     const requirements = templateCategoryRequirements(template);
     if (requirements.some((requirement) => requirement.category.toLowerCase() === cleanCategory.toLowerCase())) return;
     updateTemplate({ categoryRequirements: [...requirements, { id: makeId("category"), category: cleanCategory, quantity: 1 }] });
@@ -3379,6 +3425,7 @@ function TemplateCard({
         <TemplateConfigureDialog
           template={template}
           items={items}
+          categories={categories}
           onCancel={() => setConfigureOpen(false)}
           onConfirm={(selections) => {
             onAddTemplate(template, true, selections);
@@ -3828,6 +3875,7 @@ function SettingsPage({
   onSync,
   items,
   setItems,
+  templates,
   quotes,
   setQuotes,
   sessions,
@@ -3843,6 +3891,7 @@ function SettingsPage({
   onSync: () => void;
   items: CatalogItem[];
   setItems: Dispatch<SetStateAction<CatalogItem[]>>;
+  templates: QuoteTemplate[];
   quotes: SavedQuote[];
   setQuotes: Dispatch<SetStateAction<SavedQuote[]>>;
   sessions: UserSessionRecord[];
@@ -3862,11 +3911,13 @@ function SettingsPage({
   const [passwordChangeOpen, setPasswordChangeOpen] = useState(false);
   const [passwordChange, setPasswordChange] = useState({ current: "", next: "", confirm: "", message: "" });
   const [pluginStatuses, setPluginStatuses] = useState<IntegrationPluginStatus[]>([]);
+  const [newSettingsCategory, setNewSettingsCategory] = useState("");
   const sections: { id: SettingsSection; label: string; admin?: boolean }[] = [
     { id: "account", label: "Account Info" },
     { id: "database", label: "Database" },
     { id: "export", label: "Export Options" },
     { id: "quoteDefaults", label: "Quote Defaults", admin: true },
+    { id: "categories", label: "Categories", admin: true },
     { id: "plugins", label: "Plugins", admin: true },
     { id: "sync", label: "Sync", admin: true },
     { id: "debug", label: "Debug Logs", admin: true },
@@ -3891,6 +3942,24 @@ function SettingsPage({
     });
     return [...filtered].sort((a, b) => (recoverySort === "name" ? (a.meta.customer || a.meta.project || a.meta.quoteNumber).localeCompare(b.meta.customer || b.meta.project || b.meta.quoteNumber) : new Date(b.deletedAt ?? 0).getTime() - new Date(a.deletedAt ?? 0).getTime()));
   }, [quotes, recoverySearch, recoverySort]);
+  const managedCategories = useMemo(() => allCategoryOptions(items.filter((item) => !item.deletedAt), settings.categories), [items, settings.categories]);
+  const categoryUsage = useMemo(() => {
+    const usage = new Map<string, { items: number; templates: number }>();
+    managedCategories.forEach((category) => usage.set(category, { items: 0, templates: 0 }));
+    items.forEach((item) => {
+      if (item.deletedAt) return;
+      const category = itemCategory(item);
+      const current = usage.get(category) ?? { items: 0, templates: 0 };
+      usage.set(category, { ...current, items: current.items + 1 });
+    });
+    templates.forEach((template) => {
+      templateCategoryRequirements(template).forEach((requirement) => {
+        const current = usage.get(requirement.category) ?? { items: 0, templates: 0 };
+        usage.set(requirement.category, { ...current, templates: current.templates + 1 });
+      });
+    });
+    return usage;
+  }, [items, managedCategories, templates]);
 
   useEffect(() => {
     let cancelled = false;
@@ -3946,6 +4015,15 @@ function SettingsPage({
       setQuotes((current) => current.filter((quote) => quote.id !== permanentDeleteTarget.id));
     }
     setPermanentDeleteTarget(null);
+  };
+  const addSettingsCategory = () => {
+    const category = newSettingsCategory.trim();
+    if (!category) return;
+    setSettings((current) => ({ ...current, categories: normalizeCategoryList([...(current.categories ?? []), category]) }));
+    setNewSettingsCategory("");
+  };
+  const removeSettingsCategory = (category: string) => {
+    setSettings((current) => ({ ...current, categories: normalizeCategoryList((current.categories ?? []).filter((item) => item !== category)) }));
   };
   const revokeSession = async (session: UserSessionRecord) => {
     const endedAt = new Date().toISOString();
@@ -4167,6 +4245,48 @@ function SettingsPage({
                     onChange={(event) => setSettings((current) => ({ ...current, defaultTaxPercent: Number(event.target.value) }))}
                   />
                 </label>
+              </div>
+            </section>
+          ) : null}
+          {activeSection === "categories" ? (
+            <section className="rounded-lg border border-stone-200 bg-stone-50 p-4">
+              <div>
+                <h3 className="font-black">Categories</h3>
+                <p className="mt-1 text-sm text-stone-600">Manage empty and active item categories used by items, templates, and quote setup.</p>
+              </div>
+              <div className="mt-4 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
+                <input className="input" value={newSettingsCategory} onChange={(event) => setNewSettingsCategory(event.target.value)} placeholder="New category name" />
+                <button className="button-secondary" onClick={addSettingsCategory} disabled={!newSettingsCategory.trim()}>
+                  <PackagePlus size={16} />
+                  Add category
+                </button>
+              </div>
+              <div className="mt-4 grid gap-2">
+                {managedCategories.length ? (
+                  managedCategories.map((category) => {
+                    const usage = categoryUsage.get(category) ?? { items: 0, templates: 0 };
+                    const isStored = normalizeCategoryList(settings.categories).includes(category);
+                    const canRemove = isStored && usage.items === 0 && usage.templates === 0;
+                    return (
+                      <div key={category} className="grid gap-3 rounded-lg border border-stone-200 bg-white p-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                        <div className="min-w-0">
+                          <p className="truncate font-black">{category}</p>
+                          <p className="mt-1 text-sm text-stone-600">
+                            {usage.items} item{usage.items === 1 ? "" : "s"} / {usage.templates} template use{usage.templates === 1 ? "" : "s"}
+                          </p>
+                          {!isStored ? <p className="mt-1 text-xs font-bold text-stone-500">Created from existing item data. Remove or recategorize those items before this can disappear.</p> : null}
+                          {isStored && !canRemove ? <p className="mt-1 text-xs font-bold text-amber-800">Remove items/templates using this category before deleting it.</p> : null}
+                        </div>
+                        <button className="button-ghost text-red-800 hover:bg-red-50" onClick={() => removeSettingsCategory(category)} disabled={!canRemove}>
+                          <Trash2 size={16} />
+                          Remove
+                        </button>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="rounded-lg border border-dashed border-stone-300 bg-white p-4 text-sm text-stone-500">No categories yet.</p>
+                )}
               </div>
             </section>
           ) : null}

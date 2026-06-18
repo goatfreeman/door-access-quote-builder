@@ -150,4 +150,5 @@ export type ServiceTitanSettings = {
   taxState?: string;
   defaultTaxPercent?: number;
   exportColumns?: ExportColumnKey[];
+  categories?: string[];
 };
