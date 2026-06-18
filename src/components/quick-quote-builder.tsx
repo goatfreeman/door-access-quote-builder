@@ -1084,6 +1084,10 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
     );
   }
 
+  if (!hydrated || !draftHydrated) {
+    return <QuickQuoteBuilderSkeleton />;
+  }
+
   return (
     <main className="min-h-screen bg-stone-100 text-stone-950">
       <header className="sticky top-0 z-40 border-b border-stone-200 bg-stone-100/95 px-4 py-3 backdrop-blur">
@@ -1363,6 +1367,65 @@ function QuoteStageProgress({ steps, currentStep, setStep }: { steps: QuoteStep[
         );
       })}
     </div>
+  );
+}
+
+function QuickQuoteBuilderSkeleton() {
+  return (
+    <main className="min-h-screen bg-stone-100 text-stone-950">
+      <header className="sticky top-0 z-40 border-b border-stone-200 bg-stone-100/95 px-4 py-3 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="grid size-10 place-items-center rounded-lg bg-stone-900 text-xl font-black text-white">Q</div>
+            <div className="hidden min-w-0 xl:block">
+              <div className="h-6 w-56 animate-pulse rounded-md bg-stone-300" />
+              <div className="mt-2 h-4 w-72 animate-pulse rounded-md bg-stone-200" />
+            </div>
+          </div>
+          <div className="hidden items-center gap-2 md:flex">
+            {[0, 1, 2, 3, 4].map((item) => (
+              <div key={item} className="h-10 w-24 animate-pulse rounded-md bg-stone-200" />
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="size-10 animate-pulse rounded-md bg-stone-200" />
+            <div className="size-10 animate-pulse rounded-md bg-stone-200" />
+          </div>
+        </div>
+      </header>
+      <section className="mx-auto grid min-h-[calc(100dvh-96px)] max-w-7xl gap-4 px-4 py-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+        <aside className="hidden rounded-lg border border-stone-200 bg-white p-4 shadow-sm lg:block">
+          <div className="h-5 w-36 animate-pulse rounded-md bg-stone-300" />
+          <div className="mt-4 space-y-3">
+            {[0, 1, 2, 3, 4].map((item) => (
+              <div key={item} className="h-14 animate-pulse rounded-lg bg-stone-100" />
+            ))}
+          </div>
+        </aside>
+        <div className="grid min-h-[70vh] grid-rows-[auto_minmax(0,1fr)_auto] rounded-lg border border-stone-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-stone-200 pb-4">
+            <div>
+              <div className="h-7 w-48 animate-pulse rounded-md bg-stone-300" />
+              <div className="mt-2 h-4 w-80 max-w-[70vw] animate-pulse rounded-md bg-stone-200" />
+            </div>
+            <div className="h-10 w-28 animate-pulse rounded-md bg-teal-100" />
+          </div>
+          <div className="grid content-start gap-3 py-4 md:grid-cols-2 xl:grid-cols-3">
+            {[0, 1, 2, 3, 4, 5].map((item) => (
+              <div key={item} className="rounded-lg border border-stone-200 bg-stone-50 p-4">
+                <div className="h-5 w-3/4 animate-pulse rounded-md bg-stone-300" />
+                <div className="mt-3 h-4 w-1/2 animate-pulse rounded-md bg-stone-200" />
+                <div className="mt-5 h-9 w-full animate-pulse rounded-md bg-stone-200" />
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center justify-between border-t border-stone-200 pt-4">
+            <div className="h-5 w-32 animate-pulse rounded-md bg-stone-200" />
+            <div className="h-11 w-40 animate-pulse rounded-md bg-teal-700/25" />
+          </div>
+        </div>
+      </section>
+    </main>
   );
 }
 
