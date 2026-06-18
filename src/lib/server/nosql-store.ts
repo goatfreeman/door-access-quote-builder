@@ -104,20 +104,11 @@ async function writeSupabaseItems(supabase: SupabaseClient, items: CatalogItem[]
 }
 
 async function readSupabaseTemplates(supabase: SupabaseClient): Promise<QuoteTemplate[]> {
-  const [templatesResult, linesResult, profiles] = await Promise.all([
+  const [templatesResult, profiles] = await Promise.all([
     supabase.from("quote_templates").select("*").order("updated_at", { ascending: false }),
-    supabase.from("template_lines").select("*"),
     readProfiles(supabase),
   ]);
   if (templatesResult.error) throw new Error(templatesResult.error.message);
-  if (linesResult.error) throw new Error(linesResult.error.message);
-
-  const linesByTemplate = new Map<string, { itemId: string; quantity: number }[]>();
-  for (const line of (linesResult.data ?? []) as DbRow[]) {
-    const current = linesByTemplate.get(line.template_id) ?? [];
-    current.push({ itemId: appId("item", line.item_id), quantity: line.quantity });
-    linesByTemplate.set(line.template_id, current);
-  }
 
   return ((templatesResult.data ?? []) as DbRow[]).map((template: DbRow) => {
     const metadata = parseTemplateDescription(template.description ?? "");
@@ -125,7 +116,7 @@ async function readSupabaseTemplates(supabase: SupabaseClient): Promise<QuoteTem
       id: appId("template", template.id),
       name: template.name,
       description: metadata.description,
-      lines: linesByTemplate.get(template.id) ?? [],
+      lines: [],
       categoryRequirements: metadata.categoryRequirements,
       createdBy: template.created_by ?? undefined,
       createdByName: displayName(profiles, template.created_by),
@@ -154,20 +145,6 @@ async function writeSupabaseTemplates(supabase: SupabaseClient, templates: Quote
     })),
   );
   if (templateError) throw new Error(templateError.message);
-
-  const lines = templates.flatMap((template) =>
-    template.lines
-      .map((line) => ({
-        template_id: dbUuid(template.id, "template"),
-        item_id: dbUuid(line.itemId, "item"),
-        quantity: Math.max(1, Number(line.quantity) || 1),
-      }))
-      .filter((line) => isUuid(line.template_id) && isUuid(line.item_id)),
-  );
-  if (!lines.length) return;
-
-  const { error: lineError } = await supabase.from("template_lines").insert(lines);
-  if (lineError) throw new Error(lineError.message);
 }
 
 async function readSupabaseQuotes(supabase: SupabaseClient): Promise<SavedQuote[]> {

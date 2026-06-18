@@ -57,12 +57,6 @@ type PrintableQuote = {
   createdAt?: string;
   revisionNumber?: number;
 };
-type TemplateRequirement = {
-  id: string;
-  label: string;
-  quantity: number;
-  terms: string[];
-};
 type ExportQuoteFormat = "print" | "pdf" | "excel" | "install";
 type RecoverySort = "recent" | "name";
 type PermanentDeleteTarget = { kind: "item"; id: string; label: string } | { kind: "quote"; id: string; label: string };
@@ -80,8 +74,14 @@ type QuoteHistoryEntry = {
 };
 type TemplateItemSelection = {
   requirementId?: string;
-  itemId: string;
+  itemId?: string;
   quantity: number;
+  customItem?: {
+    name: string;
+    sku: string;
+    unitPrice: number;
+    category: string;
+  };
 };
 type ExportColumnDefinition = {
   key: ExportColumnKey;
@@ -263,25 +263,6 @@ function normalizeSearchValue(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
-function getDoorTemplateRequirements(template: QuoteTemplate): TemplateRequirement[] {
-  const text = normalizeSearchValue(`${template.name} ${template.description}`);
-  if (!text.includes("door") && !text.includes("access")) return [];
-  const readerQuantity = /\b(2|two|dual)\b/.test(text) || text.includes("in out") || text.includes("entry exit") ? 2 : 1;
-
-  return [
-    { id: "strike", label: "Door strike", quantity: 1, terms: ["strike", "9600", "hes"] },
-    { id: "reader", label: readerQuantity > 1 ? "Readers" : "Reader", quantity: readerQuantity, terms: ["reader", "hid", "signo"] },
-    { id: "contact", label: "Door contact", quantity: 1, terms: ["contact", "door contact", "reed"] },
-    { id: "rex", label: "REX", quantity: 1, terms: ["rex", "request to exit", "motion"] },
-    { id: "panel", label: "Honeywell panel", quantity: 1, terms: ["honeywell", "panel", "controller", "pw6"] },
-  ];
-}
-
-function itemMatchesRequirement(item: CatalogItem, requirement: TemplateRequirement) {
-  const searchable = normalizeSearchValue(`${item.name} ${item.sku} ${item.category} ${item.vendor ?? ""} ${item.notes ?? ""}`);
-  return requirement.terms.some((term) => searchable.includes(normalizeSearchValue(term)));
-}
-
 function itemCategory(item: CatalogItem) {
   return item.category?.trim() || "Uncategorized";
 }
@@ -292,10 +273,6 @@ function uniqueItemCategories(items: CatalogItem[]) {
 
 function templateCategoryRequirements(template: QuoteTemplate) {
   return template.categoryRequirements ?? [];
-}
-
-function isCategoryTemplate(template: QuoteTemplate) {
-  return templateCategoryRequirements(template).length > 0;
 }
 
 function lineMarkupAmount(line: QuoteLine) {
@@ -874,10 +851,34 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
     });
   };
 
+  const addTemplateCustomItem = (selection: TemplateItemSelection, packageName: string, packageId: string) => {
+    if (!selection.customItem?.name.trim()) return;
+    const custom = selection.customItem;
+    setLines((current) => [
+      ...current,
+      {
+        lineId: makeId("line"),
+        itemId: makeId("custom-item"),
+        name: custom.name.trim(),
+        sku: custom.sku.trim() || "CUSTOM",
+        packageId,
+        packageName,
+        packageNickname: "",
+        packageSourceName: packageName,
+        quantity: Math.max(1, Number(selection.quantity) || 1),
+        unitPrice: Math.max(0, Number(custom.unitPrice) || 0),
+        notes: custom.category ? `Custom item from ${custom.category}` : "Custom item",
+      },
+    ]);
+  };
+
   const addTemplate = (template: QuoteTemplate, jumpToCustomize = true, selections?: TemplateItemSelection[]) => {
     const packageId = makeId("setup");
-    const selectedLines = selections?.length ? selections : template.lines;
-    selectedLines.forEach((line) => {
+    (selections ?? []).forEach((line) => {
+      if (line.customItem) {
+        addTemplateCustomItem(line, template.name, packageId);
+        return;
+      }
       const item = activeItems.find((candidate) => candidate.id === line.itemId);
       if (item) addItem(item, template.name, line.quantity, packageId, template.name);
     });
@@ -907,13 +908,6 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   };
 
   const deleteItemEverywhere = (itemId: string) => {
-    const usedTemplates = templates.filter((template) => template.lines.some((line) => line.itemId === itemId));
-    if (usedTemplates.length) {
-      const templateNames = usedTemplates.map((template) => template.name || "Unnamed template").join(", ");
-      const message = `This item is used by: ${templateNames}. Remove it from those templates before deleting it.`;
-      pushNotification("Item delete blocked", message);
-      return message;
-    }
     const deletedAt = new Date().toISOString();
     setItems((current) => current.map((item) => (item.id === itemId ? { ...item, deletedAt } : item)));
     setLines((current) => current.filter((line) => line.itemId !== itemId));
@@ -1767,13 +1761,13 @@ function CatalogPanel({
                     <p className="truncate font-black">{template.name || "Unnamed template"}</p>
                     {template.description ? <p className="mt-1 line-clamp-2 text-sm text-stone-600">{template.description}</p> : null}
                   </div>
-                  <button className="icon-button" onClick={() => (isCategoryTemplate(template) ? setTemplateConfigurator(template) : onAddTemplate(template))} aria-label={`Add template ${template.name || "Unnamed template"}`}>
+                  <button className="icon-button" onClick={() => setTemplateConfigurator(template)} aria-label={`Add template ${template.name || "Unnamed template"}`}>
                     <PackagePlus size={18} />
                   </button>
                 </div>
                 <div className="mt-3 flex items-center justify-between text-sm">
                   <span className="rounded-full bg-cyan-50 px-2 py-1 font-bold text-cyan-800">Template</span>
-                  <span className="font-black">{isCategoryTemplate(template) ? `${templateCategoryRequirements(template).length} categories` : `${template.lines.length} lines`}</span>
+                  <span className="font-black">{templateCategoryRequirements(template).length} categories</span>
                 </div>
               </article>
             ))
@@ -1824,16 +1818,7 @@ function QuoteWorkspace(props: {
 
   const addTemplateFromPicker = (template: QuoteTemplate) => {
     if (addedTemplateId) return;
-    if (isCategoryTemplate(template)) {
-      setTemplateConfigurator(template);
-      return;
-    }
-    setAddedTemplateId(template.id);
-    props.onAddTemplate(template, false);
-    window.setTimeout(() => {
-      setAddedTemplateId(null);
-      props.setStep("customize");
-    }, 900);
+    setTemplateConfigurator(template);
   };
 
   return (
@@ -1883,7 +1868,7 @@ function QuoteWorkspace(props: {
                       >
                         <p className="font-black">{template.name}</p>
                         <p className="mt-2 text-sm text-stone-600">{template.description}</p>
-                        <p className={`mt-4 text-sm font-bold ${isAdded ? "text-emerald-800" : "text-teal-800"}`}>{isAdded ? "Added to quote" : isCategoryTemplate(template) ? `${templateCategoryRequirements(template).length} category choices` : `${template.lines.length} preset lines`}</p>
+                        <p className={`mt-4 text-sm font-bold ${isAdded ? "text-emerald-800" : "text-teal-800"}`}>{isAdded ? "Added to quote" : `${templateCategoryRequirements(template).length} category choices`}</p>
                       </button>
                     );
                   })
@@ -1980,8 +1965,9 @@ function TemplateConfigureDialog({
     });
     return initial;
   });
-  const canConfirm = requirements.length > 0 && requirements.every((requirement) => selections[requirement.id]?.itemId);
-  const selectedCount = requirements.filter((requirement) => selections[requirement.id]?.itemId).length;
+  const isSelectionComplete = (selection?: TemplateItemSelection) => Boolean(selection?.itemId || selection?.customItem?.name.trim());
+  const canConfirm = requirements.length > 0 && requirements.every((requirement) => isSelectionComplete(selections[requirement.id]));
+  const selectedCount = requirements.filter((requirement) => isSelectionComplete(selections[requirement.id])).length;
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onClick={onCancel}>
@@ -2000,8 +1986,10 @@ function TemplateConfigureDialog({
             {requirements.map((requirement) => {
               const categoryItems = items.filter((item) => itemCategory(item) === requirement.category);
               const selection = selections[requirement.id] ?? { requirementId: requirement.id, itemId: "", quantity: requirement.quantity };
+              const isOther = Boolean(selection.customItem);
               return (
-                <div key={requirement.id} className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3 md:grid-cols-[180px_minmax(0,1fr)_100px] md:items-end">
+                <div key={requirement.id} className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3">
+                  <div className="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)_100px] md:items-end">
                   <div>
                     <p className="text-xs font-black uppercase tracking-normal text-stone-500">Category</p>
                     <p className="mt-1 font-black text-stone-950">{requirement.category}</p>
@@ -2010,8 +1998,17 @@ function TemplateConfigureDialog({
                     <span>Item</span>
                     <select
                       className="input"
-                      value={selection.itemId}
-                      onChange={(event) => setSelections((current) => ({ ...current, [requirement.id]: { ...selection, itemId: event.target.value } }))}
+                      value={isOther ? "__other__" : selection.itemId ?? ""}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setSelections((current) => ({
+                          ...current,
+                          [requirement.id]:
+                            value === "__other__"
+                              ? { requirementId: requirement.id, quantity: selection.quantity, customItem: { name: "", sku: "", unitPrice: 0, category: requirement.category } }
+                              : { requirementId: requirement.id, itemId: value, quantity: selection.quantity },
+                        }));
+                      }}
                     >
                       <option value="">Select item</option>
                       {categoryItems.map((item) => (
@@ -2019,6 +2016,7 @@ function TemplateConfigureDialog({
                           {item.name} / {item.sku}
                         </option>
                       ))}
+                      <option value="__other__">Other item</option>
                     </select>
                     {!categoryItems.length ? <span className="text-xs font-bold text-red-800">No active items in this category.</span> : null}
                   </label>
@@ -2032,6 +2030,23 @@ function TemplateConfigureDialog({
                       onChange={(event) => setSelections((current) => ({ ...current, [requirement.id]: { ...selection, quantity: Math.max(1, Number(event.target.value) || 1) } }))}
                     />
                   </label>
+                  </div>
+                  {isOther ? (
+                    <div className="grid gap-2 rounded-md border border-dashed border-stone-300 bg-white p-3 md:grid-cols-[minmax(0,1fr)_140px_120px]">
+                      <label className="field">
+                        <span>Custom item name</span>
+                        <input className="input" value={selection.customItem?.name ?? ""} onChange={(event) => setSelections((current) => ({ ...current, [requirement.id]: { ...selection, customItem: { ...(selection.customItem ?? { sku: "", unitPrice: 0, category: requirement.category }), name: event.target.value } } }))} placeholder="Item name" />
+                      </label>
+                      <label className="field">
+                        <span>SKU</span>
+                        <input className="input" value={selection.customItem?.sku ?? ""} onChange={(event) => setSelections((current) => ({ ...current, [requirement.id]: { ...selection, customItem: { ...(selection.customItem ?? { name: "", unitPrice: 0, category: requirement.category }), sku: event.target.value } } }))} placeholder="CUSTOM" />
+                      </label>
+                      <label className="field">
+                        <span>Unit price</span>
+                        <input className="input" type="number" min={0} step="0.01" value={selection.customItem?.unitPrice ?? 0} onChange={(event) => setSelections((current) => ({ ...current, [requirement.id]: { ...selection, customItem: { ...(selection.customItem ?? { name: "", sku: "", category: requirement.category }), unitPrice: Math.max(0, Number(event.target.value) || 0) } } }))} />
+                      </label>
+                    </div>
+                  ) : null}
                 </div>
               );
             })}
@@ -2041,7 +2056,7 @@ function TemplateConfigureDialog({
           <p className="text-sm font-bold text-stone-600">{selectedCount} of {requirements.length} categories selected</p>
           <div className="flex gap-2">
             <button className="button-ghost" onClick={onCancel}>Cancel</button>
-            <button className="button-primary" disabled={!canConfirm} onClick={() => onConfirm(requirements.map((requirement) => selections[requirement.id]).filter((selection): selection is TemplateItemSelection => Boolean(selection?.itemId)))}>
+            <button className="button-primary" disabled={!canConfirm} onClick={() => onConfirm(requirements.map((requirement) => selections[requirement.id]).filter((selection): selection is TemplateItemSelection => isSelectionComplete(selection)))}>
               Add to quote
             </button>
           </div>
@@ -3117,31 +3132,6 @@ function TemplateCard({
     updateTemplate({ categoryRequirements: [...requirements, { id: makeId("category"), category: cleanCategory, quantity: 1 }] });
     setNewCategoryName("");
   };
-  const requirements = useMemo(() => getDoorTemplateRequirements(template), [template]);
-  const requirementStatus = useMemo(() => {
-    return requirements.map((requirement) => {
-      const quantityInTemplate = template.lines.reduce((sum, line) => {
-        const item = items.find((candidate) => candidate.id === line.itemId);
-        return item && itemMatchesRequirement(item, requirement) ? sum + line.quantity : sum;
-      }, 0);
-      const suggestedItem = items.find((item) => itemMatchesRequirement(item, requirement));
-      return {
-        ...requirement,
-        quantityInTemplate,
-        missingQuantity: Math.max(requirement.quantity - quantityInTemplate, 0),
-        suggestedItem,
-      };
-    });
-  }, [items, requirements, template.lines]);
-  const addMissingRequirement = (requirement: (typeof requirementStatus)[number]) => {
-    if (!requirement.suggestedItem || !requirement.missingQuantity) return;
-    updateTemplate({
-      lines: template.lines.some((line) => line.itemId === requirement.suggestedItem?.id)
-        ? template.lines.map((line) => (line.itemId === requirement.suggestedItem?.id ? { ...line, quantity: line.quantity + requirement.missingQuantity } : line))
-        : [...template.lines, { itemId: requirement.suggestedItem.id, quantity: requirement.missingQuantity }],
-    });
-  };
-
   return (
     <article className="rounded-lg border border-stone-200 bg-stone-50">
       <details>
@@ -3179,9 +3169,7 @@ function TemplateCard({
               {template.collaborators?.length ? ` / ${template.collaborators.length} collaborator${template.collaborators.length === 1 ? "" : "s"}` : ""}
             </p>
             <p className="mt-1 text-sm text-stone-600">
-              {isCategoryTemplate(template)
-                ? `${templateCategoryRequirements(template).length} categories · Qty ${templateCategoryRequirements(template).reduce((sum, requirement) => sum + requirement.quantity, 0)}`
-                : `${template.lines.length} items · Qty ${template.lines.reduce((sum, line) => sum + line.quantity, 0)}`}
+              {templateCategoryRequirements(template).length} categories · Qty {templateCategoryRequirements(template).reduce((sum, requirement) => sum + requirement.quantity, 0)}
             </p>
           </div>
           <button
@@ -3198,11 +3186,7 @@ function TemplateCard({
             className="button-primary min-h-9 px-3 py-1"
             onClick={(event) => {
               event.preventDefault();
-              if (isCategoryTemplate(template)) {
-                setConfigureOpen(true);
-              } else {
-                onAddTemplate(template);
-              }
+              setConfigureOpen(true);
             }}
           >
             Add
@@ -3210,34 +3194,6 @@ function TemplateCard({
           <ChevronDown size={17} className="text-stone-500" />
         </summary>
         <div className="grid gap-3 border-t border-stone-200 p-4">
-          {!isCategoryTemplate(template) && requirements.length ? (
-        <div className="grid gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
-          <div>
-            <p className="text-sm font-black text-amber-950">Door template check</p>
-            <p className="text-xs font-medium text-amber-900">Checks common door access prerequisites from the item database.</p>
-          </div>
-          <div className="grid gap-2">
-            {requirementStatus.map((requirement) => (
-              <div key={requirement.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-md bg-white p-2 text-sm">
-                <div className="min-w-0">
-                  <p className="font-bold text-stone-950">{requirement.label}</p>
-                  <p className="text-xs text-stone-600">
-                    Need {requirement.quantity}, has {requirement.quantityInTemplate}
-                    {requirement.missingQuantity ? requirement.suggestedItem ? ` / can add ${requirement.suggestedItem.name}` : " / no matching catalog item" : " / complete"}
-                  </p>
-                </div>
-                {requirement.missingQuantity ? (
-                  <button className="button-secondary min-h-9 px-3 py-1" onClick={() => addMissingRequirement(requirement)} disabled={!requirement.suggestedItem}>
-                    Add
-                  </button>
-                ) : (
-                  <span className="rounded-md bg-teal-50 px-2 py-1 text-xs font-black text-teal-800">OK</span>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
       <div className="grid gap-2 rounded-lg border border-stone-200 bg-white p-3">
         <div>
           <p className="font-black">Categories</p>
@@ -3282,37 +3238,6 @@ function TemplateCard({
           <p className="rounded-lg border border-dashed border-stone-300 bg-stone-50 p-4 text-center text-sm text-stone-500">No categories yet.</p>
         )}
       </div>
-      {template.lines.length ? (
-        <div className="grid gap-2 rounded-lg border border-stone-200 bg-white p-3">
-          <div>
-            <p className="font-black">Legacy fixed items</p>
-            <p className="text-sm text-stone-600">Existing fixed item lines still work, but new templates should use categories.</p>
-          </div>
-          {template.lines.map((line) => {
-            const item = items.find((candidate) => candidate.id === line.itemId);
-            if (!item) return null;
-            return (
-              <div key={`${template.id}-${line.itemId}`} className="grid grid-cols-[minmax(0,1fr)_76px_auto] items-center gap-2 rounded-md bg-stone-50 p-2 text-sm">
-                <span className="truncate font-bold">{item.name}</span>
-                <input
-                  className="input min-h-9"
-                  type="number"
-                  min={1}
-                  value={line.quantity}
-                  onChange={(event) =>
-                    updateTemplate({
-                      lines: template.lines.map((candidate) => (candidate.itemId === line.itemId ? { ...candidate, quantity: Number(event.target.value) } : candidate)),
-                    })
-                  }
-                />
-                <button className="button-ghost" onClick={() => updateTemplate({ lines: template.lines.filter((candidate) => candidate.itemId !== line.itemId) })} aria-label={`Remove ${item.name}`}>
-                  <X size={16} />
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      ) : null}
       <label className="field">
         <span>Description</span>
         <textarea className="textarea" value={template.description} onChange={(event) => updateTemplate({ description: event.target.value })} placeholder="Template description" />
