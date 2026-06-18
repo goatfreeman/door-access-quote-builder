@@ -2026,18 +2026,47 @@ function TemplateConfigureDialog({
   onCancel: () => void;
   onConfirm: (selections: TemplateItemSelection[]) => void;
 }) {
-  const requirements = templateCategoryRequirements(template);
+  const [requirements, setRequirements] = useState(() => templateCategoryRequirements(template));
   const [selections, setSelections] = useState<Record<string, TemplateItemSelection>>(() => {
     const initial: Record<string, TemplateItemSelection> = {};
-    requirements.forEach((requirement) => {
+    templateCategoryRequirements(template).forEach((requirement) => {
       const match = items.find((item) => itemCategory(item) === requirement.category);
       initial[requirement.id] = { requirementId: requirement.id, itemId: match?.id ?? "", quantity: requirement.quantity };
     });
     return initial;
   });
+  const categoryOptions = useMemo(() => uniqueItemCategories(items), [items]);
   const isSelectionComplete = (selection?: TemplateItemSelection) => Boolean(selection?.itemId || selection?.customItem?.name.trim());
   const canConfirm = requirements.length > 0 && requirements.every((requirement) => isSelectionComplete(selections[requirement.id]));
   const selectedCount = requirements.filter((requirement) => isSelectionComplete(selections[requirement.id])).length;
+  const addExtraCategory = () => {
+    const category = categoryOptions.find((option) => !requirements.some((requirement) => requirement.category === option)) ?? categoryOptions[0] ?? "";
+    const id = makeId("requirement");
+    const match = items.find((item) => itemCategory(item) === category);
+    setRequirements((current) => [...current, { id, category, quantity: 1 }]);
+    setSelections((current) => ({ ...current, [id]: { requirementId: id, itemId: match?.id ?? "", quantity: 1 } }));
+  };
+  const updateExtraCategory = (requirementId: string, category: string) => {
+    const requirement = requirements.find((candidate) => candidate.id === requirementId);
+    const match = items.find((item) => itemCategory(item) === category);
+    setRequirements((current) => current.map((candidate) => (candidate.id === requirementId ? { ...candidate, category } : candidate)));
+    setSelections((current) => ({
+      ...current,
+      [requirementId]: {
+        requirementId,
+        itemId: match?.id ?? "",
+        quantity: current[requirementId]?.quantity ?? requirement?.quantity ?? 1,
+      },
+    }));
+  };
+  const removeExtraCategory = (requirementId: string) => {
+    setRequirements((current) => current.filter((requirement) => requirement.id !== requirementId));
+    setSelections((current) => {
+      const next = { ...current };
+      delete next[requirementId];
+      return next;
+    });
+  };
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onMouseDown={(event) => closeOnBackdropMouseDown(event, onCancel)}>
@@ -2045,7 +2074,7 @@ function TemplateConfigureDialog({
         <div className="flex items-start justify-between gap-3 border-b border-stone-200 p-5">
           <div>
             <h3 className="text-2xl font-black">{template.name || "Template"}</h3>
-            <p className="mt-1 text-sm text-stone-600">Choose the item that should satisfy each category for this quote.</p>
+            <p className="mt-1 text-sm text-stone-600">Choose the item that should satisfy each category for this quote. Extra categories only affect this quote.</p>
           </div>
           <button className="icon-button" onClick={onCancel} aria-label="Close template item chooser">
             <X size={18} />
@@ -2057,12 +2086,27 @@ function TemplateConfigureDialog({
               const categoryItems = items.filter((item) => itemCategory(item) === requirement.category);
               const selection = selections[requirement.id] ?? { requirementId: requirement.id, itemId: "", quantity: requirement.quantity };
               const isOther = Boolean(selection.customItem);
+              const isTemplateRequirement = templateCategoryRequirements(template).some((candidate) => candidate.id === requirement.id);
               return (
                 <div key={requirement.id} className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3">
                   <div className="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)_100px] md:items-end">
                   <div>
                     <p className="text-xs font-black uppercase tracking-normal text-stone-500">Category</p>
-                    <p className="mt-1 font-black text-stone-950">{requirement.category}</p>
+                    {isTemplateRequirement ? (
+                      <p className="mt-1 font-black text-stone-950">{requirement.category}</p>
+                    ) : (
+                      <select className="input mt-1" value={requirement.category} onChange={(event) => updateExtraCategory(requirement.id, event.target.value)}>
+                        {categoryOptions.length ? (
+                          categoryOptions.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))
+                        ) : (
+                          <option value="">No categories</option>
+                        )}
+                      </select>
+                    )}
                   </div>
                   <label className="field">
                     <span>Item</span>
@@ -2101,6 +2145,13 @@ function TemplateConfigureDialog({
                     />
                   </label>
                   </div>
+                  {!isTemplateRequirement ? (
+                    <div className="flex justify-end">
+                      <button className="button-ghost text-red-800 hover:bg-red-50" onClick={() => removeExtraCategory(requirement.id)}>
+                        Remove category
+                      </button>
+                    </div>
+                  ) : null}
                   {isOther ? (
                     <div className="grid gap-2 rounded-md border border-dashed border-stone-300 bg-white p-3 md:grid-cols-[minmax(0,1fr)_140px_120px]">
                       <label className="field">
@@ -2120,6 +2171,10 @@ function TemplateConfigureDialog({
                 </div>
               );
             })}
+            <button className="button-secondary w-fit" onClick={addExtraCategory} disabled={!categoryOptions.length}>
+              <Plus size={17} />
+              Add extra category
+            </button>
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 p-5">
