@@ -13,8 +13,7 @@ const collections = new Set<StoreCollection>(["items", "templates", "quotes", "s
 const nilUuid = "00000000-0000-0000-0000-000000000000";
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const exportColumnKeys: ExportColumnKey[] = ["item", "sku", "package", "quantity", "adiMsrp", "baseUnitPrice", "markupMode", "markupPercent", "markupPrice", "sellUnitPrice", "lineTotal", "notes"];
-const templateMetadataPrefix = "\n\n<!-- qqb-template:";
-const templateMetadataSuffix = " -->";
+const templateMetadataPrefix = "\n\nQQB_TEMPLATE_META:";
 
 export function isCollection(value: string): value is StoreCollection {
   return collections.has(value as StoreCollection);
@@ -468,11 +467,11 @@ function displayName(profiles: ProfileMap, id?: string | null) {
 
 function parseTemplateDescription(value: string): { description: string; categoryRequirements?: TemplateCategoryRequirement[] } {
   const markerIndex = value.lastIndexOf(templateMetadataPrefix);
-  if (markerIndex === -1 || !value.endsWith(templateMetadataSuffix)) return { description: value };
+  if (markerIndex === -1) return { description: value };
   const description = value.slice(0, markerIndex).trimEnd();
-  const encoded = value.slice(markerIndex + templateMetadataPrefix.length, -templateMetadataSuffix.length);
+  const metadataJson = value.slice(markerIndex + templateMetadataPrefix.length);
   try {
-    const parsed = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")) as { categoryRequirements?: unknown };
+    const parsed = JSON.parse(metadataJson) as { categoryRequirements?: unknown };
     const categoryRequirements = asTemplateCategoryRequirements(parsed.categoryRequirements);
     return { description, categoryRequirements };
   } catch {
@@ -484,8 +483,7 @@ function serializeTemplateDescription(template: QuoteTemplate) {
   const description = template.description ?? "";
   const categoryRequirements = asTemplateCategoryRequirements(template.categoryRequirements);
   if (!categoryRequirements.length) return description;
-  const encoded = Buffer.from(JSON.stringify({ categoryRequirements }), "utf8").toString("base64url");
-  return `${description}${templateMetadataPrefix}${encoded}${templateMetadataSuffix}`;
+  return `${description}${templateMetadataPrefix}${JSON.stringify({ categoryRequirements })}`;
 }
 
 function asTemplateCategoryRequirements(value: unknown): TemplateCategoryRequirement[] {
