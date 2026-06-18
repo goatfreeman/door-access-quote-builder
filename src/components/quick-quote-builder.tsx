@@ -78,6 +78,11 @@ type QuoteHistoryEntry = {
   total: number;
   changes: QuoteHistoryChange[];
 };
+type TemplateItemSelection = {
+  requirementId?: string;
+  itemId: string;
+  quantity: number;
+};
 type ExportColumnDefinition = {
   key: ExportColumnKey;
   label: string;
@@ -275,6 +280,22 @@ function getDoorTemplateRequirements(template: QuoteTemplate): TemplateRequireme
 function itemMatchesRequirement(item: CatalogItem, requirement: TemplateRequirement) {
   const searchable = normalizeSearchValue(`${item.name} ${item.sku} ${item.category} ${item.vendor ?? ""} ${item.notes ?? ""}`);
   return requirement.terms.some((term) => searchable.includes(normalizeSearchValue(term)));
+}
+
+function itemCategory(item: CatalogItem) {
+  return item.category?.trim() || "Uncategorized";
+}
+
+function uniqueItemCategories(items: CatalogItem[]) {
+  return Array.from(new Set(items.map(itemCategory))).sort((a, b) => a.localeCompare(b));
+}
+
+function templateCategoryRequirements(template: QuoteTemplate) {
+  return template.categoryRequirements ?? [];
+}
+
+function isCategoryTemplate(template: QuoteTemplate) {
+  return templateCategoryRequirements(template).length > 0;
 }
 
 function lineMarkupAmount(line: QuoteLine) {
@@ -853,9 +874,10 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
     });
   };
 
-  const addTemplate = (template: QuoteTemplate, jumpToCustomize = true) => {
+  const addTemplate = (template: QuoteTemplate, jumpToCustomize = true, selections?: TemplateItemSelection[]) => {
     const packageId = makeId("setup");
-    template.lines.forEach((line) => {
+    const selectedLines = selections?.length ? selections : template.lines;
+    selectedLines.forEach((line) => {
       const item = activeItems.find((candidate) => candidate.id === line.itemId);
       if (item) addItem(item, template.name, line.quantity, packageId, template.name);
     });
@@ -1649,10 +1671,11 @@ function CatalogPanel({
   setSearch: (value: string) => void;
   setCategory: (value: string) => void;
   onAdd: (item: CatalogItem) => void;
-  onAddTemplate: (template: QuoteTemplate) => void;
+  onAddTemplate: (template: QuoteTemplate, jumpToCustomize?: boolean, selections?: TemplateItemSelection[]) => void;
 }) {
   const [filterOpen, setFilterOpen] = useState(false);
   const [catalogMode, setCatalogMode] = useState<"items" | "templates">("items");
+  const [templateConfigurator, setTemplateConfigurator] = useState<QuoteTemplate | null>(null);
   const hasCategories = categories.some((item) => item !== "All");
   const visibleTemplates = useMemo(() => {
     const normalizedSearch = normalizeSearchValue(search);
@@ -1744,13 +1767,13 @@ function CatalogPanel({
                     <p className="truncate font-black">{template.name || "Unnamed template"}</p>
                     {template.description ? <p className="mt-1 line-clamp-2 text-sm text-stone-600">{template.description}</p> : null}
                   </div>
-                  <button className="icon-button" onClick={() => onAddTemplate(template)} aria-label={`Add template ${template.name || "Unnamed template"}`}>
+                  <button className="icon-button" onClick={() => (isCategoryTemplate(template) ? setTemplateConfigurator(template) : onAddTemplate(template))} aria-label={`Add template ${template.name || "Unnamed template"}`}>
                     <PackagePlus size={18} />
                   </button>
                 </div>
                 <div className="mt-3 flex items-center justify-between text-sm">
                   <span className="rounded-full bg-cyan-50 px-2 py-1 font-bold text-cyan-800">Template</span>
-                  <span className="font-black">{template.lines.length} lines</span>
+                  <span className="font-black">{isCategoryTemplate(template) ? `${templateCategoryRequirements(template).length} categories` : `${template.lines.length} lines`}</span>
                 </div>
               </article>
             ))
@@ -1759,6 +1782,17 @@ function CatalogPanel({
           )}
         </div>
       </div>
+      {templateConfigurator ? (
+        <TemplateConfigureDialog
+          template={templateConfigurator}
+          items={items}
+          onCancel={() => setTemplateConfigurator(null)}
+          onConfirm={(selections) => {
+            onAddTemplate(templateConfigurator, true, selections);
+            setTemplateConfigurator(null);
+          }}
+        />
+      ) : null}
     </aside>
   );
 }
@@ -1772,7 +1806,7 @@ function QuoteWorkspace(props: {
   totals: QuoteTotals;
   items: CatalogItem[];
   templates: QuoteTemplate[];
-  onAddTemplate: (template: QuoteTemplate, jumpToCustomize?: boolean) => void;
+  onAddTemplate: (template: QuoteTemplate, jumpToCustomize?: boolean, selections?: TemplateItemSelection[]) => void;
   onStartFresh: () => void;
   onAddItemToPackage: (item: CatalogItem, packageName?: string, quantity?: number, packageId?: string, packageSourceName?: string) => void;
   onUpdateLine: (lineId: string, patch: Partial<QuoteLine>) => void;
@@ -1786,9 +1820,14 @@ function QuoteWorkspace(props: {
   const steps: QuoteStep[] = ["pick", "customize", "review", "finalize"];
   const [addedTemplateId, setAddedTemplateId] = useState<string | null>(null);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [templateConfigurator, setTemplateConfigurator] = useState<QuoteTemplate | null>(null);
 
   const addTemplateFromPicker = (template: QuoteTemplate) => {
     if (addedTemplateId) return;
+    if (isCategoryTemplate(template)) {
+      setTemplateConfigurator(template);
+      return;
+    }
     setAddedTemplateId(template.id);
     props.onAddTemplate(template, false);
     window.setTimeout(() => {
@@ -1844,7 +1883,7 @@ function QuoteWorkspace(props: {
                       >
                         <p className="font-black">{template.name}</p>
                         <p className="mt-2 text-sm text-stone-600">{template.description}</p>
-                        <p className={`mt-4 text-sm font-bold ${isAdded ? "text-emerald-800" : "text-teal-800"}`}>{isAdded ? "Added to quote" : `${template.lines.length} preset lines`}</p>
+                        <p className={`mt-4 text-sm font-bold ${isAdded ? "text-emerald-800" : "text-teal-800"}`}>{isAdded ? "Added to quote" : isCategoryTemplate(template) ? `${templateCategoryRequirements(template).length} category choices` : `${template.lines.length} preset lines`}</p>
                       </button>
                     );
                   })
@@ -1852,6 +1891,22 @@ function QuoteWorkspace(props: {
                   <p className="rounded-lg border border-dashed border-stone-300 bg-stone-50 p-5 text-center text-stone-500 md:col-span-3">No templates yet.</p>
                 )}
               </div> : null}
+              {templateConfigurator ? (
+                <TemplateConfigureDialog
+                  template={templateConfigurator}
+                  items={props.items}
+                  onCancel={() => setTemplateConfigurator(null)}
+                  onConfirm={(selections) => {
+                    setAddedTemplateId(templateConfigurator.id);
+                    props.onAddTemplate(templateConfigurator, false, selections);
+                    setTemplateConfigurator(null);
+                    window.setTimeout(() => {
+                      setAddedTemplateId(null);
+                      props.setStep("customize");
+                    }, 700);
+                  }}
+                />
+              ) : null}
             </div>
           ) : null}
 
@@ -1902,6 +1957,97 @@ function QuoteWorkspace(props: {
         </div>
       </div>
     </section>
+  );
+}
+
+function TemplateConfigureDialog({
+  template,
+  items,
+  onCancel,
+  onConfirm,
+}: {
+  template: QuoteTemplate;
+  items: CatalogItem[];
+  onCancel: () => void;
+  onConfirm: (selections: TemplateItemSelection[]) => void;
+}) {
+  const requirements = templateCategoryRequirements(template);
+  const [selections, setSelections] = useState<Record<string, TemplateItemSelection>>(() => {
+    const initial: Record<string, TemplateItemSelection> = {};
+    requirements.forEach((requirement) => {
+      const match = items.find((item) => itemCategory(item) === requirement.category);
+      initial[requirement.id] = { requirementId: requirement.id, itemId: match?.id ?? "", quantity: requirement.quantity };
+    });
+    return initial;
+  });
+  const canConfirm = requirements.length > 0 && requirements.every((requirement) => selections[requirement.id]?.itemId);
+  const selectedCount = requirements.filter((requirement) => selections[requirement.id]?.itemId).length;
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onClick={onCancel}>
+      <div className="grid max-h-[calc(100vh-2rem)] w-full max-w-4xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3 border-b border-stone-200 p-5">
+          <div>
+            <h3 className="text-2xl font-black">{template.name || "Template"}</h3>
+            <p className="mt-1 text-sm text-stone-600">Choose the item that should satisfy each category for this quote.</p>
+          </div>
+          <button className="icon-button" onClick={onCancel} aria-label="Close template item chooser">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="min-h-0 overflow-y-auto p-5">
+          <div className="grid gap-3">
+            {requirements.map((requirement) => {
+              const categoryItems = items.filter((item) => itemCategory(item) === requirement.category);
+              const selection = selections[requirement.id] ?? { requirementId: requirement.id, itemId: "", quantity: requirement.quantity };
+              return (
+                <div key={requirement.id} className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3 md:grid-cols-[180px_minmax(0,1fr)_100px] md:items-end">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-normal text-stone-500">Category</p>
+                    <p className="mt-1 font-black text-stone-950">{requirement.category}</p>
+                  </div>
+                  <label className="field">
+                    <span>Item</span>
+                    <select
+                      className="input"
+                      value={selection.itemId}
+                      onChange={(event) => setSelections((current) => ({ ...current, [requirement.id]: { ...selection, itemId: event.target.value } }))}
+                    >
+                      <option value="">Select item</option>
+                      {categoryItems.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name} / {item.sku}
+                        </option>
+                      ))}
+                    </select>
+                    {!categoryItems.length ? <span className="text-xs font-bold text-red-800">No active items in this category.</span> : null}
+                  </label>
+                  <label className="field">
+                    <span>Qty</span>
+                    <input
+                      className="input"
+                      type="number"
+                      min={1}
+                      value={selection.quantity}
+                      onChange={(event) => setSelections((current) => ({ ...current, [requirement.id]: { ...selection, quantity: Math.max(1, Number(event.target.value) || 1) } }))}
+                    />
+                  </label>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 p-5">
+          <p className="text-sm font-bold text-stone-600">{selectedCount} of {requirements.length} categories selected</p>
+          <div className="flex gap-2">
+            <button className="button-ghost" onClick={onCancel}>Cancel</button>
+            <button className="button-primary" disabled={!canConfirm} onClick={() => onConfirm(requirements.map((requirement) => selections[requirement.id]).filter((selection): selection is TemplateItemSelection => Boolean(selection?.itemId)))}>
+              Add to quote
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -2741,26 +2887,30 @@ function TemplatesPage({
   items: CatalogItem[];
   user: SessionUser;
   setTemplates: Dispatch<SetStateAction<QuoteTemplate[]>>;
-  onAddTemplate: (template: QuoteTemplate, jumpToCustomize?: boolean) => void;
+  onAddTemplate: (template: QuoteTemplate, jumpToCustomize?: boolean, selections?: TemplateItemSelection[]) => void;
 }) {
   const [deleteTemplate, setDeleteTemplate] = useState<QuoteTemplate | null>(null);
   const [draftTemplate, setDraftTemplate] = useState<QuoteTemplate | null>(null);
-  const [draftSelectorOpen, setDraftSelectorOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const categories = useMemo(() => uniqueItemCategories(items), [items]);
   const confirmDeleteTemplate = () => {
     if (!deleteTemplate) return;
     setTemplates((current) => current.filter((template) => template.id !== deleteTemplate.id));
     setDeleteTemplate(null);
   };
-  const addTemplateDraftLine = (itemId: string) => {
+  const addDraftCategory = (category: string) => {
+    const cleanCategory = category.trim();
+    if (!cleanCategory) return;
     setDraftTemplate((current) => {
       if (!current) return current;
+      const requirements = templateCategoryRequirements(current);
+      if (requirements.some((requirement) => requirement.category.toLowerCase() === cleanCategory.toLowerCase())) return current;
       return {
         ...current,
-        lines: current.lines.some((line) => line.itemId === itemId)
-          ? current.lines.map((line) => (line.itemId === itemId ? { ...line, quantity: line.quantity + 1 } : line))
-          : [...current.lines, { itemId, quantity: 1 }],
+        categoryRequirements: [...requirements, { id: makeId("category"), category: cleanCategory, quantity: 1 }],
       };
     });
+    setNewCategoryName("");
   };
   const saveDraftTemplate = () => {
     if (!draftTemplate) return;
@@ -2794,6 +2944,7 @@ function TemplatesPage({
               name: "",
               description: "",
               lines: [],
+              categoryRequirements: [],
               createdBy: user.id,
               createdByName: user.name,
               updatedBy: user.id,
@@ -2858,43 +3009,55 @@ function TemplatesPage({
               </label>
               <div className="grid gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="font-black">Template items</p>
-                  <button className="button-secondary" onClick={() => setDraftSelectorOpen(true)}>
-                    <PackagePlus size={16} />
-                    Add item to list
-                  </button>
+                  <div>
+                    <p className="font-black">Template categories</p>
+                    <p className="text-sm text-stone-600">Items are selected from these categories when adding the template to a quote.</p>
+                  </div>
                 </div>
-                {draftTemplate.lines.length ? (
-                  draftTemplate.lines.map((line) => {
-                    const item = items.find((candidate) => candidate.id === line.itemId);
-                    if (!item) return null;
+                <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
+                  <select className="input" value="" onChange={(event) => addDraftCategory(event.target.value)}>
+                    <option value="">Add existing category</option>
+                    {categories.map((category) => (
+                      <option key={category} value={category}>{category}</option>
+                    ))}
+                  </select>
+                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                    <input className="input" value={newCategoryName} onChange={(event) => setNewCategoryName(event.target.value)} placeholder="New category name" />
+                    <button className="button-secondary" onClick={() => addDraftCategory(newCategoryName)}>
+                    <PackagePlus size={16} />
+                    Add category
+                  </button>
+                  </div>
+                </div>
+                {templateCategoryRequirements(draftTemplate).length ? (
+                  templateCategoryRequirements(draftTemplate).map((requirement) => {
                     return (
-                      <div key={line.itemId} className="grid grid-cols-[minmax(0,1fr)_76px_auto] items-center gap-2 rounded-md bg-white p-2 text-sm">
-                        <span className="truncate font-bold">{item.name}</span>
+                      <div key={requirement.id} className="grid grid-cols-[minmax(0,1fr)_76px_auto] items-center gap-2 rounded-md bg-white p-2 text-sm">
+                        <span className="truncate font-bold">{requirement.category}</span>
                         <input
                           className="input min-h-9"
                           type="number"
                           min={1}
-                          value={line.quantity}
+                          value={requirement.quantity}
                           onChange={(event) =>
                             setDraftTemplate((current) =>
                               current
                                 ? {
                                     ...current,
-                                    lines: current.lines.map((candidate) => (candidate.itemId === line.itemId ? { ...candidate, quantity: Number(event.target.value) } : candidate)),
+                                    categoryRequirements: templateCategoryRequirements(current).map((candidate) => (candidate.id === requirement.id ? { ...candidate, quantity: Math.max(1, Number(event.target.value) || 1) } : candidate)),
                                   }
                                 : current,
                             )
                           }
                         />
-                        <button className="button-ghost" onClick={() => setDraftTemplate((current) => (current ? { ...current, lines: current.lines.filter((candidate) => candidate.itemId !== line.itemId) } : current))} aria-label={`Remove ${item.name}`}>
+                        <button className="button-ghost" onClick={() => setDraftTemplate((current) => (current ? { ...current, categoryRequirements: templateCategoryRequirements(current).filter((candidate) => candidate.id !== requirement.id) } : current))} aria-label={`Remove ${requirement.category}`}>
                           <X size={16} />
                         </button>
                       </div>
                     );
                   })
                 ) : (
-                  <p className="rounded-lg border border-dashed border-stone-300 bg-white p-5 text-center text-stone-500">No items added yet.</p>
+                  <p className="rounded-lg border border-dashed border-stone-300 bg-white p-5 text-center text-stone-500">No categories added yet.</p>
                 )}
               </div>
               <label className="field">
@@ -2913,16 +3076,6 @@ function TemplatesPage({
           </div>
         </div>
       ) : null}
-      {draftSelectorOpen ? (
-        <TemplateItemSelector
-          items={items}
-          onCancel={() => setDraftSelectorOpen(false)}
-          onConfirm={(itemId) => {
-            addTemplateDraftLine(itemId);
-            setDraftSelectorOpen(false);
-          }}
-        />
-      ) : null}
     </section>
   );
 }
@@ -2939,12 +3092,14 @@ function TemplateCard({
   items: CatalogItem[];
   user: SessionUser;
   setTemplates: Dispatch<SetStateAction<QuoteTemplate[]>>;
-  onAddTemplate: (template: QuoteTemplate, jumpToCustomize?: boolean) => void;
+  onAddTemplate: (template: QuoteTemplate, jumpToCustomize?: boolean, selections?: TemplateItemSelection[]) => void;
   onDeleteTemplate: (template: QuoteTemplate) => void;
 }) {
-  const [selectorOpen, setSelectorOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
+  const [configureOpen, setConfigureOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const categories = useMemo(() => uniqueItemCategories(items), [items]);
   const updateTemplate = (patch: Partial<QuoteTemplate>) => {
     setTemplates((current) =>
       current.map((candidate) => {
@@ -2954,12 +3109,13 @@ function TemplateCard({
       }),
     );
   };
-  const addTemplateLine = (itemId: string) => {
-    updateTemplate({
-      lines: template.lines.some((line) => line.itemId === itemId)
-        ? template.lines.map((line) => (line.itemId === itemId ? { ...line, quantity: line.quantity + 1 } : line))
-        : [...template.lines, { itemId, quantity: 1 }],
-    });
+  const addTemplateCategory = (category: string) => {
+    const cleanCategory = category.trim();
+    if (!cleanCategory) return;
+    const requirements = templateCategoryRequirements(template);
+    if (requirements.some((requirement) => requirement.category.toLowerCase() === cleanCategory.toLowerCase())) return;
+    updateTemplate({ categoryRequirements: [...requirements, { id: makeId("category"), category: cleanCategory, quantity: 1 }] });
+    setNewCategoryName("");
   };
   const requirements = useMemo(() => getDoorTemplateRequirements(template), [template]);
   const requirementStatus = useMemo(() => {
@@ -3022,7 +3178,11 @@ function TemplateCard({
               Created by {template.createdByName ?? "User"}
               {template.collaborators?.length ? ` / ${template.collaborators.length} collaborator${template.collaborators.length === 1 ? "" : "s"}` : ""}
             </p>
-            <p className="mt-1 text-sm text-stone-600">{template.lines.length} items · Qty {template.lines.reduce((sum, line) => sum + line.quantity, 0)}</p>
+            <p className="mt-1 text-sm text-stone-600">
+              {isCategoryTemplate(template)
+                ? `${templateCategoryRequirements(template).length} categories · Qty ${templateCategoryRequirements(template).reduce((sum, requirement) => sum + requirement.quantity, 0)}`
+                : `${template.lines.length} items · Qty ${template.lines.reduce((sum, line) => sum + line.quantity, 0)}`}
+            </p>
           </div>
           <button
             className="icon-button min-h-9 min-w-9"
@@ -3038,7 +3198,11 @@ function TemplateCard({
             className="button-primary min-h-9 px-3 py-1"
             onClick={(event) => {
               event.preventDefault();
-              onAddTemplate(template);
+              if (isCategoryTemplate(template)) {
+                setConfigureOpen(true);
+              } else {
+                onAddTemplate(template);
+              }
             }}
           >
             Add
@@ -3046,7 +3210,7 @@ function TemplateCard({
           <ChevronDown size={17} className="text-stone-500" />
         </summary>
         <div className="grid gap-3 border-t border-stone-200 p-4">
-          {requirements.length ? (
+          {!isCategoryTemplate(template) && requirements.length ? (
         <div className="grid gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
           <div>
             <p className="text-sm font-black text-amber-950">Door template check</p>
@@ -3074,35 +3238,81 @@ function TemplateCard({
           </div>
         </div>
       ) : null}
-      <div className="grid gap-2">
-        {template.lines.map((line) => {
-          const item = items.find((candidate) => candidate.id === line.itemId);
-          if (!item) return null;
-          return (
-            <div key={`${template.id}-${line.itemId}`} className="grid grid-cols-[minmax(0,1fr)_76px_auto] items-center gap-2 rounded-md bg-white p-2 text-sm">
-              <span className="truncate font-bold">{item.name}</span>
+      <div className="grid gap-2 rounded-lg border border-stone-200 bg-white p-3">
+        <div>
+          <p className="font-black">Categories</p>
+          <p className="text-sm text-stone-600">Quote users choose matching items from these categories.</p>
+        </div>
+        <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
+          <select className="input" value="" onChange={(event) => addTemplateCategory(event.target.value)}>
+            <option value="">Add existing category</option>
+            {categories.map((category) => (
+              <option key={category} value={category}>{category}</option>
+            ))}
+          </select>
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <input className="input" value={newCategoryName} onChange={(event) => setNewCategoryName(event.target.value)} placeholder="New category name" />
+            <button className="button-secondary" onClick={() => addTemplateCategory(newCategoryName)}>
+              <PackagePlus size={16} />
+              Add category
+            </button>
+          </div>
+        </div>
+        {templateCategoryRequirements(template).length ? (
+          templateCategoryRequirements(template).map((requirement) => (
+            <div key={requirement.id} className="grid grid-cols-[minmax(0,1fr)_76px_auto] items-center gap-2 rounded-md bg-stone-50 p-2 text-sm">
+              <span className="truncate font-bold">{requirement.category}</span>
               <input
                 className="input min-h-9"
                 type="number"
                 min={1}
-                value={line.quantity}
+                value={requirement.quantity}
                 onChange={(event) =>
                   updateTemplate({
-                    lines: template.lines.map((candidate) => (candidate.itemId === line.itemId ? { ...candidate, quantity: Number(event.target.value) } : candidate)),
+                    categoryRequirements: templateCategoryRequirements(template).map((candidate) => (candidate.id === requirement.id ? { ...candidate, quantity: Math.max(1, Number(event.target.value) || 1) } : candidate)),
                   })
                 }
               />
-              <button className="button-ghost" onClick={() => updateTemplate({ lines: template.lines.filter((candidate) => candidate.itemId !== line.itemId) })} aria-label={`Remove ${item.name}`}>
+              <button className="button-ghost" onClick={() => updateTemplate({ categoryRequirements: templateCategoryRequirements(template).filter((candidate) => candidate.id !== requirement.id) })} aria-label={`Remove ${requirement.category}`}>
                 <X size={16} />
               </button>
             </div>
-          );
-        })}
+          ))
+        ) : (
+          <p className="rounded-lg border border-dashed border-stone-300 bg-stone-50 p-4 text-center text-sm text-stone-500">No categories yet.</p>
+        )}
       </div>
-      <button className="button-secondary w-full justify-start" onClick={() => setSelectorOpen(true)}>
-        <PackagePlus size={16} />
-        Add item to list
-      </button>
+      {template.lines.length ? (
+        <div className="grid gap-2 rounded-lg border border-stone-200 bg-white p-3">
+          <div>
+            <p className="font-black">Legacy fixed items</p>
+            <p className="text-sm text-stone-600">Existing fixed item lines still work, but new templates should use categories.</p>
+          </div>
+          {template.lines.map((line) => {
+            const item = items.find((candidate) => candidate.id === line.itemId);
+            if (!item) return null;
+            return (
+              <div key={`${template.id}-${line.itemId}`} className="grid grid-cols-[minmax(0,1fr)_76px_auto] items-center gap-2 rounded-md bg-stone-50 p-2 text-sm">
+                <span className="truncate font-bold">{item.name}</span>
+                <input
+                  className="input min-h-9"
+                  type="number"
+                  min={1}
+                  value={line.quantity}
+                  onChange={(event) =>
+                    updateTemplate({
+                      lines: template.lines.map((candidate) => (candidate.itemId === line.itemId ? { ...candidate, quantity: Number(event.target.value) } : candidate)),
+                    })
+                  }
+                />
+                <button className="button-ghost" onClick={() => updateTemplate({ lines: template.lines.filter((candidate) => candidate.itemId !== line.itemId) })} aria-label={`Remove ${item.name}`}>
+                  <X size={16} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
       <label className="field">
         <span>Description</span>
         <textarea className="textarea" value={template.description} onChange={(event) => updateTemplate({ description: event.target.value })} placeholder="Template description" />
@@ -3115,13 +3325,14 @@ function TemplateCard({
       </div>
         </div>
       </details>
-      {selectorOpen ? (
-        <TemplateItemSelector
+      {configureOpen ? (
+        <TemplateConfigureDialog
+          template={template}
           items={items}
-          onCancel={() => setSelectorOpen(false)}
-          onConfirm={(itemId) => {
-            addTemplateLine(itemId);
-            setSelectorOpen(false);
+          onCancel={() => setConfigureOpen(false)}
+          onConfirm={(selections) => {
+            onAddTemplate(template, true, selections);
+            setConfigureOpen(false);
           }}
         />
       ) : null}

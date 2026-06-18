@@ -16,11 +16,18 @@ export type TemplateLine = {
   quantity: number;
 };
 
+export type TemplateCategoryRequirement = {
+  id: string;
+  category: string;
+  quantity: number;
+};
+
 export type QuoteTemplate = {
   id: string;
   name: string;
   description: string;
   lines: TemplateLine[];
+  categoryRequirements?: TemplateCategoryRequirement[];
   createdBy?: string;
   createdByName?: string;
   updatedBy?: string;

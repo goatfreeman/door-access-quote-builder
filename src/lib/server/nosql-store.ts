@@ -1,4 +1,4 @@
-import type { CatalogItem, DebugLogEntry, DraftQuote, ExportColumnKey, QuoteMeta, QuoteRevision, QuoteTemplate, SavedQuote, ServiceTitanSettings, UserSessionRecord } from "@/lib/types";
+import type { CatalogItem, DebugLogEntry, DraftQuote, ExportColumnKey, QuoteMeta, QuoteRevision, QuoteTemplate, SavedQuote, ServiceTitanSettings, TemplateCategoryRequirement, UserSessionRecord } from "@/lib/types";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/schema-types";
 
@@ -13,6 +13,8 @@ const collections = new Set<StoreCollection>(["items", "templates", "quotes", "s
 const nilUuid = "00000000-0000-0000-0000-000000000000";
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const exportColumnKeys: ExportColumnKey[] = ["item", "sku", "package", "quantity", "adiMsrp", "baseUnitPrice", "markupMode", "markupPercent", "markupPrice", "sellUnitPrice", "lineTotal", "notes"];
+const templateMetadataPrefix = "\n\n<!-- qqb-template:";
+const templateMetadataSuffix = " -->";
 
 export function isCollection(value: string): value is StoreCollection {
   return collections.has(value as StoreCollection);
@@ -118,17 +120,21 @@ async function readSupabaseTemplates(supabase: SupabaseClient): Promise<QuoteTem
     linesByTemplate.set(line.template_id, current);
   }
 
-  return ((templatesResult.data ?? []) as DbRow[]).map((template: DbRow) => ({
-    id: appId("template", template.id),
-    name: template.name,
-    description: template.description ?? "",
-    lines: linesByTemplate.get(template.id) ?? [],
-    createdBy: template.created_by ?? undefined,
-    createdByName: displayName(profiles, template.created_by),
-    updatedBy: template.updated_by ?? undefined,
-    updatedByName: displayName(profiles, template.updated_by),
-    collaborators: template.collaborators ?? [],
-  }));
+  return ((templatesResult.data ?? []) as DbRow[]).map((template: DbRow) => {
+    const metadata = parseTemplateDescription(template.description ?? "");
+    return {
+      id: appId("template", template.id),
+      name: template.name,
+      description: metadata.description,
+      lines: linesByTemplate.get(template.id) ?? [],
+      categoryRequirements: metadata.categoryRequirements,
+      createdBy: template.created_by ?? undefined,
+      createdByName: displayName(profiles, template.created_by),
+      updatedBy: template.updated_by ?? undefined,
+      updatedByName: displayName(profiles, template.updated_by),
+      collaborators: template.collaborators ?? [],
+    };
+  });
 }
 
 async function writeSupabaseTemplates(supabase: SupabaseClient, templates: QuoteTemplate[]) {
@@ -141,7 +147,7 @@ async function writeSupabaseTemplates(supabase: SupabaseClient, templates: Quote
     templates.map((template) => ({
       id: dbUuid(template.id, "template"),
       name: template.name || "Untitled template",
-      description: template.description ?? "",
+      description: serializeTemplateDescription(template),
       created_by: nullableUuid(template.createdBy),
       updated_by: nullableUuid(template.updatedBy),
       collaborators: (template.collaborators ?? []).filter(isUuid),
@@ -458,6 +464,38 @@ function displayName(profiles: ProfileMap, id?: string | null) {
   if (!id) return undefined;
   const profile = profiles.get(id);
   return profile?.name ?? profile?.email;
+}
+
+function parseTemplateDescription(value: string): { description: string; categoryRequirements?: TemplateCategoryRequirement[] } {
+  const markerIndex = value.lastIndexOf(templateMetadataPrefix);
+  if (markerIndex === -1 || !value.endsWith(templateMetadataSuffix)) return { description: value };
+  const description = value.slice(0, markerIndex).trimEnd();
+  const encoded = value.slice(markerIndex + templateMetadataPrefix.length, -templateMetadataSuffix.length);
+  try {
+    const parsed = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")) as { categoryRequirements?: unknown };
+    const categoryRequirements = asTemplateCategoryRequirements(parsed.categoryRequirements);
+    return { description, categoryRequirements };
+  } catch {
+    return { description: value };
+  }
+}
+
+function serializeTemplateDescription(template: QuoteTemplate) {
+  const description = template.description ?? "";
+  const categoryRequirements = asTemplateCategoryRequirements(template.categoryRequirements);
+  if (!categoryRequirements.length) return description;
+  const encoded = Buffer.from(JSON.stringify({ categoryRequirements }), "utf8").toString("base64url");
+  return `${description}${templateMetadataPrefix}${encoded}${templateMetadataSuffix}`;
+}
+
+function asTemplateCategoryRequirements(value: unknown): TemplateCategoryRequirement[] {
+  return asArray<Partial<TemplateCategoryRequirement>>(value)
+    .map((requirement) => ({
+      id: typeof requirement.id === "string" && requirement.id ? requirement.id : crypto.randomUUID(),
+      category: typeof requirement.category === "string" ? requirement.category.trim() : "",
+      quantity: Math.max(1, Number(requirement.quantity) || 1),
+    }))
+    .filter((requirement) => requirement.category);
 }
 
 function asArray<T>(value: unknown): T[] {
