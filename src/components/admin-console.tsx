@@ -151,6 +151,7 @@ export function AdminConsole({ projects, databaseStatus, items, quotes, drafts, 
                   <div key={session.id} className="rounded-lg border border-stone-200 bg-white p-3">
                     <p className="font-black">{session.userName}</p>
                     <p className="text-sm text-stone-600">{session.deviceName}</p>
+                    <p className="break-all text-sm text-stone-600">IP address: {session.ipAddress || "Unknown"}</p>
                     <p className="text-xs font-bold text-stone-500">Last seen {new Date(session.lastSeenAt).toLocaleString()}</p>
                   </div>
                 ))

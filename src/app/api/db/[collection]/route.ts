@@ -1,4 +1,5 @@
 import { isCollection, readCollection, writeCollection } from "@/lib/server/nosql-store";
+import { sessionIpAddress } from "@/lib/server/session-ip";
 import { getSessionUser } from "@/lib/server/auth";
 import type { SessionUser } from "@/lib/auth-types";
 import type { DraftQuote, UserSessionRecord } from "@/lib/types";
@@ -41,7 +42,7 @@ export async function PUT(request: Request, context: { params: Promise<{ collect
     if (collection === "sessions" && Array.isArray(payload)) {
       const current = await readCollection(collection);
       const sharedSessions = Array.isArray(current) ? current.filter((record) => !isSessionOwnedByUser(record, user)) : [];
-      await writeCollection(collection, [...payload.map((record) => normalizeSessionOwner(record, user)), ...sharedSessions]);
+      await writeCollection(collection, [...payload.map((record) => normalizeSessionOwner(record, user, request.headers)), ...sharedSessions]);
       return Response.json({ ok: true });
     }
 
@@ -72,8 +73,8 @@ function normalizeDraftOwner(record: unknown, user: SessionUser): DraftQuote {
   return { ...(isObject(record) ? record : {}), owner: user.id, ownerName: user.name } as DraftQuote;
 }
 
-function normalizeSessionOwner(record: unknown, user: SessionUser): UserSessionRecord {
-  return { ...(isObject(record) ? record : {}), userId: user.id, userName: user.name } as UserSessionRecord;
+function normalizeSessionOwner(record: unknown, user: SessionUser, headers: Headers): UserSessionRecord {
+  return { ...(isObject(record) ? record : {}), userId: user.id, userName: user.name, ipAddress: sessionIpAddress(headers) } as UserSessionRecord;
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

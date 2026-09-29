@@ -4461,6 +4461,7 @@ function SettingsPage({
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div>
                           <p className="font-bold">{session.deviceName}</p>
+                          <p className="break-all text-sm text-stone-600">IP address: {session.ipAddress || "Unknown"}</p>
                           <p className="text-sm text-stone-600">Last seen {new Date(session.lastSeenAt).toLocaleString()}</p>
                         </div>
                         {session.deviceId === currentDeviceId ? (

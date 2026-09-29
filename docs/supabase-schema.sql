@@ -234,12 +234,16 @@ create table if not exists public.user_sessions (
   user_id uuid not null references public.profiles(id) on delete cascade,
   device_id text not null,
   device_name text not null,
+  ip_address text,
   revoked_at timestamptz,
   ended_at timestamptz,
   created_at timestamptz not null default now(),
   last_seen_at timestamptz not null default now(),
   unique (user_id, device_id)
 );
+
+-- Additive migration for existing installations; apply before deploying IP tracking.
+alter table public.user_sessions add column if not exists ip_address text;
 
 create table if not exists public.debug_logs (
   id uuid primary key default gen_random_uuid(),

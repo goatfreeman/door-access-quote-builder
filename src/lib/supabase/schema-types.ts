@@ -139,6 +139,7 @@ export type Database = {
           user_id: string;
           device_id: string;
           device_name: string;
+          ip_address: string | null;
           revoked_at: string | null;
           ended_at: string | null;
           created_at: string;

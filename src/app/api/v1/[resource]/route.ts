@@ -24,7 +24,7 @@ export async function POST(request: Request, context: { params: Promise<{ resour
   if (!isApiResource(resource)) return Response.json({ error: "Unknown resource" }, { status: 404 });
 
   try {
-    const record = await createResource(resource, await request.json().catch(() => null), user);
+    const record = await createResource(resource, await request.json().catch(() => null), user, request.headers);
     return Response.json({ data: record }, { status: 201 });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Create failed" }, { status: 400 });
