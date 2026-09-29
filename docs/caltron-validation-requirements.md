@@ -30,6 +30,9 @@ Apply the Caltron quote-tool requirements to the existing Quick Quote Builder wi
 | Control | Result | Status |
 |---|---|---|
 | Repository integration | The item-validation foundation is part of the existing Next.js application. | CONFIRMED |
+| Quote item trigger | Adding an individual catalog item starts a product-only companion-part and compatibility review against current quote SKUs. | CONFIRMED |
+| Fiber review prompt | The controlled question requires fiber mode, connector, wavelength, data-rate, patch-cable, and transceiver checks. | CONFIRMED |
+| Catalog CSV import | The administrator panel imports and updates catalog items by SKU with the controlled nine-column format. | CONFIRMED |
 | User boundary | `/validation` requires the existing application session. | CONFIRMED |
 | Confidentiality warning | The workspace prohibits client names, locations, network details, credentials, prices, and controlled drawings. | CONFIRMED |
 | Part-number control | The system preserves `sourcePartNumber` and derives `normalizedLookupKey` separately. | CONFIRMED |
@@ -46,7 +49,7 @@ Apply the Caltron quote-tool requirements to the existing Quick Quote Builder wi
 
 | Requirement | Current application result | Status | Next controlled increment |
 |---|---|---|---|
-| `BR-001` | Existing quote records are available. Multi-file upload, hashing, scanning, and source classification are not implemented. | OPEN | Add controlled source ingestion and a source register. |
+| `BR-001` | Administrator catalog CSV import is implemented. Multi-file project-document upload, hashing, scanning, and source classification are not implemented. | ASSUMED — catalog slice only | Add controlled project-source ingestion and a source register. |
 | `BR-002` | Compatibility reports contain evidence. A cited security-scope summary is not implemented. | OPEN | Add document extraction and requirement evidence. |
 | `BR-003` | The existing application authors equipment and labor quotes. The full Caltron section model is incomplete. | ASSUMED | Add subsystem, location, assumptions, terms, custom sections, and source-row identity. |
 | `BR-004` | Existing quote pricing remains active. `RULE-014` verifies line arithmetic. The divisor and cent-rounding policy remains unresolved. | CONFLICT | Obtain Finance and Estimating approval for the rounding sequence. |

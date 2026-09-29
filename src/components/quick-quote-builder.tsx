@@ -34,6 +34,8 @@ import { getSupabaseAuthClient } from "@/lib/supabase/auth-client";
 import type { SessionUser } from "@/lib/auth-types";
 import type { IntegrationPluginStatus } from "@/lib/plugins/types";
 import type { CatalogItem, DebugLogEntry, DraftQuote, ExportColumnKey, QuoteLine, QuoteMeta, QuoteTemplate, SavedQuote, ServiceTitanSettings, UserSessionRecord } from "@/lib/types";
+import { ItemVerificationPanel, quoteLineSignature, replaceItemVerificationEntry, type ItemVerificationEntry } from "@/components/item-verification-panel";
+import type { CompatibilityResult } from "@/lib/validation/domain";
 
 type View = "home" | "quote" | "items" | "templates" | "previous" | "settings" | "client";
 type QuoteStep = "pick" | "customize" | "review" | "finalize";
@@ -368,6 +370,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   const [quoteSaveError, setQuoteSaveError] = useState("");
   const [editingQuoteId, setEditingQuoteId] = useState("");
   const [notifications, setNotifications] = useState<NotificationBlock[]>([]);
+  const [itemVerifications, setItemVerifications] = useState<ItemVerificationEntry[]>([]);
   const [adminUnlocked, setAdminUnlocked] = useState(false);
   const [startFreshPromptOpen, setStartFreshPromptOpen] = useState(false);
   const [sessionUser] = useState<SessionUser>(initialUser ?? placeholderUser);
@@ -825,7 +828,55 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
     settingsHoldTimer.current = null;
   };
 
-  const addItem = (item: CatalogItem, packageName?: string, quantity = 1, packageId?: string, packageSourceName?: string) => {
+  const verifyAddedItem = async (item: CatalogItem, quoteItemIds?: string[], itemName = item.name, reviewedQuoteSignature?: string) => {
+    const verificationId = makeId("verification");
+    const reviewedItemIds = quoteItemIds ?? Array.from(new Set([...activeLines.map((line) => line.itemId), item.id]));
+    const quoteSignature = reviewedQuoteSignature ?? quoteLineSignature([...activeLines, { itemId: item.id, quantity: 1 }]);
+    if (!item.sku.trim()) {
+      const notice: ItemVerificationEntry = {
+        id: verificationId,
+        phase: "notice",
+        itemName,
+        quoteSignature,
+        message: "OPEN: This catalog item does not have a controlled SKU. Add the SKU before compatibility research.",
+      };
+      setItemVerifications((current) => [notice, ...current].slice(0, 10));
+      return;
+    }
+    const loadingEntry: ItemVerificationEntry = { id: verificationId, phase: "loading", itemName, quoteSignature };
+    setItemVerifications((current) => [
+      loadingEntry,
+      ...current,
+    ].slice(0, 10));
+    try {
+      const response = await fetch("/api/validation/codex", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          catalogItemId: item.id,
+          quoteItemIds: reviewedItemIds,
+        }),
+      });
+      const payload = await response.json() as { data?: CompatibilityResult; error?: string };
+      if (!response.ok || !payload.data) throw new Error(payload.error || "Item compatibility check failed");
+      setItemVerifications((current) => replaceItemVerificationEntry(
+        current,
+        verificationId,
+        { id: verificationId, phase: "complete", itemName, quoteSignature, result: payload.data! },
+      ));
+      pushNotification("Item verification complete", `${item.sku}: ${payload.data.finalStatus}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Item compatibility check failed";
+      setItemVerifications((current) => replaceItemVerificationEntry(
+        current,
+        verificationId,
+        { id: verificationId, phase: "error", itemName, quoteSignature, error: message },
+      ));
+      pushNotification("Item verification unavailable", `${item.sku}: ${message}`);
+    }
+  };
+
+  const addItem = (item: CatalogItem, packageName?: string, quantity = 1, packageId?: string, packageSourceName?: string, runVerification = true) => {
     setLines((current) => {
       const existing = current.find((line) => line.itemId === item.id && (packageId ? line.packageId === packageId : line.packageName === packageName));
       if (existing) {
@@ -865,16 +916,21 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
         },
       ];
     });
+    if (runVerification) {
+      const reviewedQuoteSignature = quoteLineSignature([...activeLines, { itemId: item.id, quantity }]);
+      void verifyAddedItem(item, undefined, item.name, reviewedQuoteSignature);
+    }
   };
 
   const addTemplateCustomItem = (selection: TemplateItemSelection, packageName: string, packageId: string) => {
     if (!selection.customItem?.name.trim()) return;
     const custom = selection.customItem;
+    const customItemId = makeId("custom-item");
     setLines((current) => [
       ...current,
       {
         lineId: makeId("line"),
-        itemId: makeId("custom-item"),
+        itemId: customItemId,
         name: custom.name.trim(),
         sku: custom.sku.trim() || "CUSTOM",
         packageId,
@@ -886,18 +942,51 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
         notes: custom.category ? `Custom item from ${custom.category}` : "Custom item",
       },
     ]);
+    return customItemId;
   };
 
   const addTemplate = (template: QuoteTemplate, jumpToCustomize = true, selections?: TemplateItemSelection[]) => {
     const packageId = makeId("setup");
+    const catalogItems: CatalogItem[] = [];
+    const customItemIds: string[] = [];
+    const snapshotAdditions: Array<{ itemId: string; quantity: number }> = [];
+    let customItemCount = 0;
     (selections ?? []).forEach((line) => {
       if (line.customItem) {
-        addTemplateCustomItem(line, template.name, packageId);
+        customItemCount += 1;
+        const customItemId = addTemplateCustomItem(line, template.name, packageId);
+        if (customItemId) {
+          customItemIds.push(customItemId);
+          snapshotAdditions.push({ itemId: customItemId, quantity: Math.max(1, Number(line.quantity) || 1) });
+        }
         return;
       }
       const item = activeItems.find((candidate) => candidate.id === line.itemId);
-      if (item) addItem(item, template.name, line.quantity, packageId, template.name);
+      if (item) {
+        catalogItems.push(item);
+        snapshotAdditions.push({ itemId: item.id, quantity: line.quantity });
+        addItem(item, template.name, line.quantity, packageId, template.name, false);
+      }
     });
+    if (catalogItems.length) {
+      const quoteItemIds = Array.from(new Set([
+        ...activeLines.map((line) => line.itemId),
+        ...catalogItems.map((item) => item.id),
+        ...customItemIds,
+      ]));
+      const reviewedQuoteSignature = quoteLineSignature([...activeLines, ...snapshotAdditions]);
+      const verificationAnchor = catalogItems.find((item) => item.sku.trim()) ?? catalogItems[0];
+      void verifyAddedItem(verificationAnchor, quoteItemIds, `${template.name || "Template"} package`, reviewedQuoteSignature);
+    }
+    if (customItemCount) {
+      const notice: ItemVerificationEntry = {
+        id: makeId("verification"),
+        phase: "notice",
+        itemName: `${template.name || "Template"} custom items`,
+        message: `OPEN: ${customItemCount} custom item(s) do not have controlled catalog identifiers. Add them to the catalog and run compatibility research before approval.`,
+      };
+      setItemVerifications((current) => [notice, ...current].slice(0, 10));
+    }
     pushNotification("Template added", `${template.name || "Template"} was added to the quote workspace.`);
     if (jumpToCustomize) {
       navigateToView("quote");
@@ -1254,6 +1343,8 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
               onRemoveLine={(id) => setLines((current) => current.filter((line) => line.lineId !== id))}
               onSave={saveQuote}
               saveError={quoteSaveError}
+              itemVerifications={itemVerifications}
+              onDismissItemVerification={(id) => setItemVerifications((current) => current.filter((entry) => entry.id !== id))}
               onPrint={printQuote}
               onEmail={() => {
                 setPendingEmail(meta.email);
@@ -1896,6 +1987,8 @@ function QuoteWorkspace(props: {
   onRemoveLine: (lineId: string) => void;
   onSave: () => void;
   saveError: string;
+  itemVerifications: ItemVerificationEntry[];
+  onDismissItemVerification: (id: string) => void;
   onPrint: () => void;
   onEmail: () => void;
 }) {
@@ -1925,6 +2018,12 @@ function QuoteWorkspace(props: {
           <div className="sm:hidden">
             <QuoteStageProgress steps={steps} currentStep={props.step} setStep={props.setStep} />
           </div>
+
+          <ItemVerificationPanel
+            currentQuoteSignature={quoteLineSignature(props.lines.filter((line) => !isLabor(line)))}
+            entries={props.itemVerifications}
+            onDismiss={props.onDismissItemVerification}
+          />
 
           {props.step === "pick" ? (
             <div className="grid gap-4">

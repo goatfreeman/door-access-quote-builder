@@ -72,7 +72,9 @@ create table if not exists public.catalog_items (
   sku text not null default '',
   name text not null,
   category text not null,
+  unit text,
   unit_price numeric(12, 2) not null default 0,
+  adi text,
   msrp numeric(12, 2),
   vendor text,
   inventory integer,
@@ -83,6 +85,65 @@ create table if not exists public.catalog_items (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.catalog_items add column if not exists unit text;
+alter table public.catalog_items add column if not exists adi text;
+create unique index if not exists catalog_items_sku_ci_unique
+  on public.catalog_items (upper(btrim(sku)))
+  where btrim(sku) <> '';
+
+create or replace function public.import_catalog_items(p_items jsonb)
+returns void
+language plpgsql
+set search_path = public
+as $$
+begin
+  insert into public.catalog_items (
+    id, sku, name, category, unit, unit_price, adi, msrp, inventory, notes, deleted_at
+  )
+  select
+    item.id,
+    item.sku,
+    item.name,
+    item.category,
+    item.unit,
+    item.unit_price,
+    item.adi,
+    item.msrp,
+    item.inventory,
+    item.notes,
+    null
+  from jsonb_to_recordset(p_items) as item(
+    id uuid,
+    sku text,
+    name text,
+    category text,
+    unit text,
+    unit_price numeric(12, 2),
+    adi text,
+    msrp numeric(12, 2),
+    inventory integer,
+    notes text,
+    deleted_at timestamptz
+  )
+  on conflict (upper(btrim(sku))) where btrim(sku) <> ''
+  do update set
+    sku = excluded.sku,
+    name = excluded.name,
+    category = excluded.category,
+    unit = excluded.unit,
+    unit_price = excluded.unit_price,
+    adi = excluded.adi,
+    msrp = excluded.msrp,
+    inventory = excluded.inventory,
+    notes = excluded.notes,
+    deleted_at = null,
+    updated_at = now();
+end;
+$$;
+
+revoke execute on function public.import_catalog_items(jsonb) from public;
+grant execute on function public.import_catalog_items(jsonb) to service_role;
 
 create table if not exists public.quote_templates (
   id uuid primary key default gen_random_uuid(),

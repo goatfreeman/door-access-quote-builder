@@ -118,6 +118,7 @@ export function parseAgentReport(value: unknown): AgentReport {
     if ((url.protocol !== "http:" && url.protocol !== "https:") || !url.hostname) {
       throw new Error("Evidence source must use http or https");
     }
+    if (!isPublicEvidenceUrl(url)) throw new Error("Evidence source must use a public web host");
   }
 
   const rawFindings = Array.isArray(report.findings) ? report.findings : fail("findings must be an array");
@@ -129,6 +130,33 @@ export function parseAgentReport(value: unknown): AgentReport {
     findings,
     sources,
   };
+}
+
+function isPublicEvidenceUrl(url: URL) {
+  if (url.username || url.password) return false;
+  if (url.port && url.port !== "80" && url.port !== "443") return false;
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.+$/, "");
+  const blockedSuffixes = ["localhost", "local", "internal", "lan", "home", "test", "invalid", "example"];
+  if (blockedSuffixes.some((suffix) => host === suffix || host.endsWith(`.${suffix}`))) return false;
+  if (host.includes(":")) return false;
+  const octets = host.split(".").map(Number);
+  const isIpv4 = octets.length === 4 && octets.every((octet) => Number.isInteger(octet) && octet >= 0 && octet <= 255);
+  if (!isIpv4) return host.includes(".");
+  const [first, second, third] = octets;
+  return !(first === 10
+    || first === 127
+    || first === 0
+    || (first === 100 && second >= 64 && second <= 127)
+    || (first === 169 && second === 254)
+    || (first === 172 && second >= 16 && second <= 31)
+    || (first === 192 && second === 0 && third === 0)
+    || (first === 192 && second === 0 && third === 2)
+    || (first === 192 && second === 88 && third === 99)
+    || (first === 192 && second === 168)
+    || (first === 198 && (second === 18 || second === 19))
+    || (first === 198 && second === 51 && third === 100)
+    || (first === 203 && second === 0 && third === 113)
+    || first >= 224);
 }
 
 export function runDeterministicRules(lines: QuoteValidationLine[]): DeterministicFinding[] {

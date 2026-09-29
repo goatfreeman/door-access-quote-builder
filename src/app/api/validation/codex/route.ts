@@ -5,6 +5,10 @@ import { normalizeCompatibilityRequest } from "@/lib/validation/domain";
 import { createJobGate, createSharedAsyncCache } from "@/lib/validation/job-control";
 import { orchestrateCompatibility } from "@/lib/validation/orchestrator";
 import { readJsonBodyLimited } from "@/lib/validation/request-body";
+import { markIncompleteCoverage, resolveCatalogItemVerification } from "@/lib/validation/item-verifier";
+import { readCollection } from "@/lib/server/nosql-store";
+import { assertPublicEvidenceDestinations } from "@/lib/server/evidence-destination";
+import type { CatalogItem } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -30,23 +34,33 @@ export async function GET() {
 export async function POST(request: Request) {
   const user = await getSessionUser();
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
-  if (user.role !== "admin") return Response.json({ error: "Forbidden" }, { status: 403 });
   if (!isCodexValidationEnabled()) return Response.json({ error: "Codex validation is disabled" }, { status: 503 });
 
   try {
     const body = await readJsonBodyLimited(request, 16_000) as Record<string, unknown>;
-    const compatibilityRequest = normalizeCompatibilityRequest({
-      manufacturer: body?.manufacturer,
-      sourcePartNumber: body?.sourcePartNumber,
-      description: body?.description,
-      relatedItems: Array.isArray(body?.relatedItems) ? body.relatedItems : [],
-      question: body?.question,
-    });
-    const data = await validationJobGate.run(user.id, () => processGate.run(user.id, async () => {
+    const isCatalogRequest = typeof body.catalogItemId === "string" && Array.isArray(body.quoteItemIds);
+    if (!isCatalogRequest && user.role !== "admin") return Response.json({ error: "Forbidden" }, { status: 403 });
+    const catalogResolution = isCatalogRequest
+      ? resolveCatalogItemVerification(
+        body.catalogItemId as string,
+        (body.quoteItemIds as unknown[]).filter((value): value is string => typeof value === "string"),
+        ((await readCollection("items")) as CatalogItem[]),
+      )
+      : null;
+    const compatibilityRequest = catalogResolution?.request ?? normalizeCompatibilityRequest({
+        manufacturer: body?.manufacturer,
+        sourcePartNumber: body?.sourcePartNumber,
+        description: body?.description,
+        relatedItems: Array.isArray(body?.relatedItems) ? body.relatedItems : [],
+        question: body?.question,
+      });
+    const reviewed = await validationJobGate.run(user.id, () => processGate.run(user.id, async () => {
       const status = await getCodexStatus();
       if (!status.installed || !status.authenticated) throw new Error("Codex CLI is not ready on this server");
       return orchestrateCompatibility(compatibilityRequest, (role, prompt) => runCodexAgent(role, prompt));
     }));
+    const data = catalogResolution ? markIncompleteCoverage(reviewed, catalogResolution.omittedItems) : reviewed;
+    await assertPublicEvidenceDestinations(data);
     return Response.json({ data });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Compatibility review failed";
