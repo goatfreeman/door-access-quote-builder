@@ -1486,6 +1486,9 @@ function HomePage({ user, meta, lines, total, drafts, onContinue, onLoadDraft }:
         <button className="button-primary w-fit" onClick={onContinue}>
           Open Quote Workspace
         </button>
+        <a className="button-secondary w-fit" href="/validation">
+          Open Item Compatibility Review
+        </a>
       </div>
     </section>
   );
