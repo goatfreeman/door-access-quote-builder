@@ -51,7 +51,7 @@ export function AdminConsole({ projects, databaseStatus, items, quotes, drafts, 
       </header>
 
       <section className="mx-auto grid max-w-7xl gap-4 p-4">
-        <AdminItemImport />
+        <AdminItemImport items={activeItems} />
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <AdminStat icon={Database} label="Database" value={databaseStatus.persistent ? "Connected" : "Offline"} detail={databaseStatus.provider} tone={databaseStatus.persistent ? "good" : "warn"} />
           <AdminStat icon={FileText} label="Active quotes" value={statFormatter.format(activeQuotes.length)} detail={`${moneyFormatter.format(totalQuoted)} quoted`} />

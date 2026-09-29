@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { catalogCsvHeader, exportCatalogCsv } from "../lib/catalog-csv";
+import type { CatalogItem } from "../lib/types";
 
-const csvHeader = "name,sku,category,unit,price,adi,msrp,inventory,link,notes";
+const csvHeader = catalogCsvHeader.join(",");
 
 export function formatImportFailure(status: number, _statusText: string, responseText: string, requestId?: string | null) {
   let payload: { error?: unknown; stage?: unknown } = {};
@@ -37,11 +39,23 @@ export function parseImportSuccess(responseText: string) {
   return { added: counts.added, updated: counts.updated };
 }
 
-export function AdminItemImport({ onImported = () => window.location.reload() }: { onImported?: () => void } = {}) {
+export function AdminItemImport({ items = [], onImported = () => window.location.reload() }: { items?: CatalogItem[]; onImported?: () => void } = {}) {
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+
+  function exportItems() {
+    const blob = new Blob(["\uFEFF", exportCatalogCsv(items)], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "catalog-items.csv";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
 
   async function importFile(event: React.FormEvent) {
     event.preventDefault();
@@ -82,6 +96,9 @@ export function AdminItemImport({ onImported = () => window.location.reload() }:
           <h2>Import catalog CSV</h2>
           <p>Add new catalog items or update existing items with the same SKU.</p>
         </div>
+        <button className="button-secondary" disabled={!items.some((item) => !item.deletedAt)} onClick={exportItems} type="button">
+          Export items
+        </button>
       </div>
       <form className="grid gap-3 p-4" onSubmit={importFile}>
         <div className="rounded-lg border border-stone-200 bg-stone-50 p-3">
@@ -97,7 +114,7 @@ export function AdminItemImport({ onImported = () => window.location.reload() }:
             type="file"
           />
         </label>
-        <p className="text-xs text-stone-600">The link column can contain the manufacturer or distributor item URL. The notes column is for item notes. Duplicate SKUs in one file are rejected.</p>
+        <p className="text-xs text-stone-600">The link column can contain the manufacturer or distributor item URL. The notes column is for item notes. A blank category is assigned to Uncategorized. New category names become available automatically. Duplicate SKUs in one file are rejected.</p>
         {message ? <p className="rounded-lg bg-teal-50 p-3 text-sm font-bold text-teal-900">{message}</p> : null}
         {error ? <p className="rounded-lg bg-red-50 p-3 text-sm font-bold text-red-900">{error}</p> : null}
         <button className="button-primary w-fit" disabled={!file || busy} type="submit">
