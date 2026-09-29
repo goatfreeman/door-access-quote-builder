@@ -4,6 +4,39 @@ import { useState } from "react";
 
 const csvHeader = "name,sku,category,unit,price,adi,msrp,inventory,notes";
 
+export function formatImportFailure(status: number, _statusText: string, responseText: string, requestId?: string | null) {
+  let payload: { error?: unknown; stage?: unknown } = {};
+  try {
+    const parsed = JSON.parse(responseText) as unknown;
+    payload = parsed !== null && typeof parsed === "object" ? parsed as { error?: unknown; stage?: unknown } : {};
+  } catch {
+    return `Import failed (HTTP ${status}): The server returned an unreadable error response.`;
+  }
+  const reason = typeof payload.error === "string" && payload.error.trim()
+    ? payload.error.trim()
+    : "The server did not provide an error description.";
+  const stage = typeof payload.stage === "string" && payload.stage.trim() ? ` during ${payload.stage.trim()}` : "";
+  const reference = requestId?.trim() ? ` Request ID: ${requestId.trim()}` : "";
+  return `Import failed${stage} (HTTP ${status}): ${reason}${reference}`;
+}
+
+export function parseImportSuccess(responseText: string) {
+  let result: unknown;
+  try {
+    result = JSON.parse(responseText) as unknown;
+  } catch {
+    throw new Error("Import completed, but the server returned an unreadable success response.");
+  }
+  if (result === null || typeof result !== "object") {
+    throw new Error("Import completed, but the server response did not include valid item counts.");
+  }
+  const counts = result as { added?: unknown; updated?: unknown };
+  if (typeof counts.added !== "number" || typeof counts.updated !== "number") {
+    throw new Error("Import completed, but the server response did not include valid item counts.");
+  }
+  return { added: counts.added, updated: counts.updated };
+}
+
 export function AdminItemImport({ onImported = () => window.location.reload() }: { onImported?: () => void } = {}) {
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -22,8 +55,16 @@ export function AdminItemImport({ onImported = () => window.location.reload() }:
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ csv: await file.text() }),
       });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Catalog import failed");
+      const responseText = await response.text();
+      if (!response.ok) {
+        throw new Error(formatImportFailure(
+          response.status,
+          response.statusText,
+          responseText,
+          response.headers.get("x-vercel-id") || response.headers.get("x-request-id"),
+        ));
+      }
+      const result = parseImportSuccess(responseText);
       setMessage(`Import complete: ${result.added} added and ${result.updated} updated.`);
       setFile(null);
       onImported();
