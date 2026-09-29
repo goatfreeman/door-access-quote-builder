@@ -28,6 +28,7 @@ import {
 import type { Dispatch, MouseEvent as ReactMouseEvent, SetStateAction } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getPendingWriteCount, readDb, syncPendingWrites, writeDb } from "@/lib/client-db";
+import { applyCatalogItemEdit, changedCatalogItemEditPatch, hasCatalogItemEditChanges } from "@/lib/catalog-item-editor";
 import { writeDebugLog } from "@/lib/debug-log";
 import { groupQuoteLines, quoteLineExportGroup, quoteLinePrimaryLabel, quoteLineSecondaryLabel } from "@/lib/quote/line-labels";
 import { getSupabaseAuthClient } from "@/lib/supabase/auth-client";
@@ -63,6 +64,7 @@ type ExportQuoteFormat = "print" | "pdf" | "excel" | "install";
 type RecoverySort = "recent" | "name";
 type PermanentDeleteTarget = { kind: "item"; id: string; label: string } | { kind: "quote"; id: string; label: string };
 type NotificationBlock = { id: string; title: string; message: string; createdAt: string };
+type CatalogItemEditState = { baseline: CatalogItem; draft: CatalogItem };
 type QuoteHistoryChange = { kind: "added" | "removed" | "changed" | "same"; text: string };
 type QuoteHistoryEntry = {
   id: string;
@@ -104,6 +106,9 @@ const isProductionStage = appStage.toLowerCase() === "production";
 const recoveryRetentionDays = 30;
 const dayInMs = 24 * 60 * 60 * 1000;
 const requiredQuoteDetailsError = "Add a customer name, project, and quote number before saving this quote.";
+const unsavedItemChangesMessage = "This item has unsaved changes. Select OK to discard them, or Cancel to keep editing.";
+const unsavedCategoryNameMessage = "This category name is not saved. Select OK to discard it, or Cancel to keep editing.";
+const historyPositionKey = "qqbPosition";
 const placeholderUser: SessionUser = { id: "local-user", name: "User" };
 const STORAGE_KEYS = {
   session: "qqb.session.v1",
@@ -389,6 +394,12 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   const settingsHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sessionsRef = useRef<UserSessionRecord[]>([]);
   const previousOnlineRef = useRef(isOnline);
+  const itemEditsDirtyRef = useRef(false);
+  const historyPositionRef = useRef(0);
+  const ignoreRestoredPopStateRef = useRef(false);
+  const handleItemEditDirtyChange = useCallback((dirty: boolean) => {
+    itemEditsDirtyRef.current = dirty;
+  }, []);
   const pushNotification = useCallback((title: string, message: string) => {
     setNotifications((current) => [{ id: makeId("note"), title, message, createdAt: new Date().toISOString() }, ...current].slice(0, 8));
   }, []);
@@ -416,11 +427,17 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   const cartCount = activeLines.reduce((sum, line) => sum + line.quantity, 0);
 
   const navigateToView = (nextView: View, quote?: SavedQuote) => {
+    if (view === "items" && nextView !== "items" && itemEditsDirtyRef.current && !window.confirm(unsavedItemChangesMessage)) return;
+    if (nextView !== "items") itemEditsDirtyRef.current = false;
     setView(nextView);
     setRouteQuoteSlug(quote?.shareToken ?? "");
     if (typeof window === "undefined") return;
     const nextPath = viewPath(nextView, quote);
-    if (window.location.pathname !== nextPath) window.history.pushState({ view: nextView }, "", nextPath);
+    if (window.location.pathname !== nextPath) {
+      const nextPosition = historyPositionRef.current + 1;
+      historyPositionRef.current = nextPosition;
+      window.history.pushState({ view: nextView, [historyPositionKey]: nextPosition }, "", nextPath);
+    }
   };
 
   useEffect(() => {
@@ -494,8 +511,36 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   }, [quoteStep, sessionUser, view]);
 
   useEffect(() => {
-    const handlePopState = () => {
+    const currentHistoryState = typeof window.history.state === "object" && window.history.state ? window.history.state : {};
+    const currentPosition = currentHistoryState[historyPositionKey];
+    if (typeof currentPosition === "number") {
+      historyPositionRef.current = currentPosition;
+    } else {
+      window.history.replaceState({ ...currentHistoryState, view, [historyPositionKey]: historyPositionRef.current }, "", window.location.href);
+    }
+
+    const handlePopState = (event: PopStateEvent) => {
+      const nextPosition = typeof event.state?.[historyPositionKey] === "number" ? event.state[historyPositionKey] : null;
+      if (ignoreRestoredPopStateRef.current) {
+        ignoreRestoredPopStateRef.current = false;
+        if (nextPosition !== null) historyPositionRef.current = nextPosition;
+        return;
+      }
       const pathView = viewFromPath();
+      if (pathView !== "items" && itemEditsDirtyRef.current && !window.confirm(unsavedItemChangesMessage)) {
+        if (nextPosition === null) {
+          window.history.replaceState({ view: "items", [historyPositionKey]: historyPositionRef.current }, "", viewPath("items"));
+          return;
+        }
+        const restoreDelta = historyPositionRef.current - nextPosition;
+        if (restoreDelta) {
+          ignoreRestoredPopStateRef.current = true;
+          window.history.go(restoreDelta);
+        }
+        return;
+      }
+      if (nextPosition !== null) historyPositionRef.current = nextPosition;
+      if (pathView && pathView !== "items") itemEditsDirtyRef.current = false;
       if (pathView) setView(pathView);
       setRouteQuoteSlug(quoteSlugFromPath());
     };
@@ -1354,7 +1399,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
           </>
         ) : null}
 
-        {view === "items" ? <ItemsPage items={activeItems} categories={sharedCategories} setItems={setItems} setSettings={setSettings} onDeleteItem={deleteItemEverywhere} /> : null}
+        {view === "items" ? <ItemsPage items={activeItems} categories={sharedCategories} setItems={setItems} setSettings={setSettings} onDeleteItem={deleteItemEverywhere} onDirtyChange={handleItemEditDirtyChange} /> : null}
         {view === "templates" ? <TemplatesPage templates={templates} items={activeItems} categories={sharedCategories} user={sessionUser} setTemplates={setTemplates} setSettings={setSettings} onAddTemplate={addTemplate} /> : null}
         {view === "previous" ? (
           <PreviousQuotes
@@ -2800,12 +2845,14 @@ function ItemsPage({
   setItems,
   setSettings,
   onDeleteItem,
+  onDirtyChange,
 }: {
   items: CatalogItem[];
   categories: string[];
   setItems: Dispatch<SetStateAction<CatalogItem[]>>;
   setSettings: Dispatch<SetStateAction<ServiceTitanSettings>>;
   onDeleteItem: (itemId: string) => string | null;
+  onDirtyChange: (dirty: boolean) => void;
 }) {
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [itemSearch, setItemSearch] = useState("");
@@ -2825,6 +2872,9 @@ function ItemsPage({
   const [deleteItemError, setDeleteItemError] = useState("");
   const [categoryEditor, setCategoryEditor] = useState<{ target: "draft" | "item"; itemId?: string } | null>(null);
   const [newCategoryName, setNewCategoryName] = useState("");
+  const [itemEdits, setItemEdits] = useState<Record<string, CatalogItemEditState>>({});
+  const clickAwayDecisionRef = useRef<{ decision: "allow" | "block"; expiresAt: number } | null>(null);
+  const clickAwayDecisionTimerRef = useRef<number | null>(null);
   const filterCategories = useMemo(() => ["All", ...categories], [categories]);
   const itemCategoryOptions = categories;
   const sortedItems = useMemo(() => {
@@ -2847,7 +2897,114 @@ function ItemsPage({
       setCategoryFilter("All");
     }
   }, [categoryFilter, itemCategoryOptions]);
-  const updateItem = (id: string, patch: Partial<CatalogItem>) => setItems((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  const dirtyItemIds = useMemo(
+    () => Object.entries(itemEdits).filter(([, edit]) => hasCatalogItemEditChanges(edit.baseline, edit.draft)).map(([itemId]) => itemId),
+    [itemEdits],
+  );
+  const categoryNameIsDirty = Boolean(categoryEditor && newCategoryName.trim());
+  const hasUnsavedItemChanges = dirtyItemIds.length > 0 || categoryNameIsDirty;
+  const discardAllItemEdits = useCallback(() => {
+    setItemEdits({});
+    setCategoryEditor(null);
+    setNewCategoryName("");
+    onDirtyChange(false);
+  }, [onDirtyChange]);
+  const updateItemDraft = (item: CatalogItem, patch: Partial<CatalogItem>) => {
+    setItemEdits((current) => ({
+      ...current,
+      [item.id]: {
+        baseline: current[item.id]?.baseline ?? item,
+        draft: applyCatalogItemEdit(current[item.id]?.draft ?? item, patch),
+      },
+    }));
+  };
+  const discardItemEdit = (itemId: string) => {
+    setItemEdits((current) => {
+      const next = { ...current };
+      delete next[itemId];
+      return next;
+    });
+  };
+  const confirmItemEdit = (item: CatalogItem, draft: CatalogItem) => {
+    const baseline = itemEdits[item.id]?.baseline ?? item;
+    const changedFields = changedCatalogItemEditPatch(baseline, draft);
+    setItems((current) => current.map((currentItem) => (currentItem.id === item.id ? applyCatalogItemEdit(currentItem, changedFields) : currentItem)));
+    if (draft.category.trim()) {
+      setSettings((current) => ({ ...current, categories: normalizeCategoryList([...(current.categories ?? []), draft.category]) }));
+    }
+    discardItemEdit(item.id);
+  };
+  useEffect(() => {
+    onDirtyChange(hasUnsavedItemChanges);
+  }, [hasUnsavedItemChanges, onDirtyChange]);
+  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
+  useEffect(() => {
+    if (!hasUnsavedItemChanges) return;
+    const isSafeEditTarget = (target: EventTarget | null) => {
+      if (!(target instanceof Element)) return false;
+      if (target.closest("[data-category-editor]")) return true;
+      const editor = target.closest<HTMLElement>("[data-item-editor-id]");
+      return Boolean(editor?.dataset.itemEditorId && dirtyItemIds.includes(editor.dataset.itemEditorId));
+    };
+    const stopEvent = (event: Event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    const rememberPointerDecision = (decision: "allow" | "block") => {
+      clickAwayDecisionRef.current = { decision, expiresAt: Date.now() + 1000 };
+      if (clickAwayDecisionTimerRef.current) window.clearTimeout(clickAwayDecisionTimerRef.current);
+      clickAwayDecisionTimerRef.current = window.setTimeout(() => {
+        clickAwayDecisionRef.current = null;
+        clickAwayDecisionTimerRef.current = null;
+      }, 1000);
+    };
+    const clearPointerDecision = () => {
+      clickAwayDecisionRef.current = null;
+      if (clickAwayDecisionTimerRef.current) window.clearTimeout(clickAwayDecisionTimerRef.current);
+      clickAwayDecisionTimerRef.current = null;
+    };
+    const handlePointerDownAway = (event: PointerEvent) => {
+      if (isSafeEditTarget(event.target)) return;
+      if (window.confirm(unsavedItemChangesMessage)) {
+        rememberPointerDecision("allow");
+        return;
+      }
+      rememberPointerDecision("block");
+      stopEvent(event);
+    };
+    const handleClickAway = (event: MouseEvent) => {
+      const pointerDecision = clickAwayDecisionRef.current;
+      if (pointerDecision && pointerDecision.expiresAt >= Date.now()) {
+        clearPointerDecision();
+        if (pointerDecision.decision === "block") {
+          stopEvent(event);
+        } else {
+          discardAllItemEdits();
+        }
+        return;
+      }
+      clearPointerDecision();
+      if (isSafeEditTarget(event.target)) return;
+      if (window.confirm(unsavedItemChangesMessage)) {
+        discardAllItemEdits();
+        return;
+      }
+      stopEvent(event);
+    };
+    document.addEventListener("pointerdown", handlePointerDownAway, true);
+    document.addEventListener("click", handleClickAway, true);
+    return () => {
+      clearPointerDecision();
+      document.removeEventListener("pointerdown", handlePointerDownAway, true);
+      document.removeEventListener("click", handleClickAway, true);
+    };
+  }, [dirtyItemIds, discardAllItemEdits, hasUnsavedItemChanges]);
+  useEffect(() => {
+    if (!hasUnsavedItemChanges) return;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [hasUnsavedItemChanges]);
   const confirmDeleteItem = (id: string) => {
     const error = onDeleteItem(id);
     if (error) {
@@ -2865,14 +3022,19 @@ function ItemsPage({
     setCategoryEditor(null);
     setNewCategoryName("");
   };
+  const requestCloseCategoryEditor = () => {
+    if (newCategoryName.trim() && !window.confirm(unsavedCategoryNameMessage)) return;
+    closeCategoryEditor();
+  };
   const saveCategoryName = () => {
     const category = newCategoryName.trim();
     if (!category || !categoryEditor) return;
-    setSettings((current) => ({ ...current, categories: normalizeCategoryList([...(current.categories ?? []), category]) }));
     if (categoryEditor.target === "draft") {
+      setSettings((current) => ({ ...current, categories: normalizeCategoryList([...(current.categories ?? []), category]) }));
       setDraftItem((current) => ({ ...current, category }));
     } else if (categoryEditor.itemId) {
-      updateItem(categoryEditor.itemId, { category });
+      const item = items.find((candidate) => candidate.id === categoryEditor.itemId);
+      if (item) updateItemDraft(item, { category });
     }
     closeCategoryEditor();
   };
@@ -2939,9 +3101,24 @@ function ItemsPage({
           </label>
         </aside>
         <div className="grid content-start gap-3">
-          {sortedItems.length ? sortedItems.map((item) => (
-            <details key={item.id} className="rounded-lg border border-stone-200 bg-stone-50">
-              <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto] items-center gap-3 p-4 [&::-webkit-details-marker]:hidden">
+          {sortedItems.length ? sortedItems.map((item) => {
+            const itemEdit = itemEdits[item.id];
+            const itemDraft = itemEdit?.draft ?? item;
+            const itemIsDirty = Boolean(itemEdit && hasCatalogItemEditChanges(itemEdit.baseline, itemEdit.draft));
+            const categoryOptions = normalizeCategoryList([...itemCategoryOptions, itemDraft.category]);
+            return (
+            <details key={item.id} data-item-editor-id={item.id} className="rounded-lg border border-stone-200 bg-stone-50">
+              <summary
+                className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto] items-center gap-3 p-4 [&::-webkit-details-marker]:hidden"
+                onClick={(event) => {
+                  if (!event.currentTarget.parentElement?.hasAttribute("open") || !itemIsDirty) return;
+                  if (!window.confirm(unsavedItemChangesMessage)) {
+                    event.preventDefault();
+                    return;
+                  }
+                  discardItemEdit(item.id);
+                }}
+              >
                 <div>
                   <p className="font-black">{item.name}</p>
                   <p className="font-mono text-xs text-stone-500">{item.category || "No category"} / {item.sku}</p>
@@ -2949,33 +3126,36 @@ function ItemsPage({
                 <strong>{money.format(item.unitPrice)}</strong>
               </summary>
               <div className="grid gap-3 border-t border-stone-200 p-4 md:grid-cols-3">
+                <p className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm font-bold text-blue-950 md:col-span-3">
+                  Changes are not saved until you select Confirm changes.
+                </p>
                 <label className="field">
                   <span>Name</span>
-                  <input className="input" value={item.name} onChange={(event) => updateItem(item.id, { name: event.target.value })} />
+                  <input className="input" value={itemDraft.name} onChange={(event) => updateItemDraft(item, { name: event.target.value })} />
                 </label>
                 <label className="field">
                   <span>SKU</span>
-                  <input className="input" value={item.sku} onChange={(event) => updateItem(item.id, { sku: event.target.value })} />
+                  <input className="input" value={itemDraft.sku} onChange={(event) => updateItemDraft(item, { sku: event.target.value })} />
                 </label>
                 <label className="field">
                   <span>Category</span>
                   <select
                     className="input"
-                    value={item.category || ""}
+                    value={itemDraft.category || ""}
                     onChange={(event) => {
                       if (event.target.value === "__new__") {
                         openCategoryEditor("item", item.id);
                         return;
                       }
-                      updateItem(item.id, { category: event.target.value });
+                      updateItemDraft(item, { category: event.target.value });
                     }}
                   >
-                    {!item.category ? (
+                    {!itemDraft.category ? (
                       <option value="" disabled>
                         Add new category
                       </option>
                     ) : null}
-                    {itemCategoryOptions.map((option) => (
+                    {categoryOptions.map((option) => (
                       <option key={option} value={option}>
                         {option}
                       </option>
@@ -2985,28 +3165,30 @@ function ItemsPage({
                 </label>
                 <label className="field">
                   <span>Unit price</span>
-                  <input className="input" type="number" value={item.unitPrice} onChange={(event) => updateItem(item.id, { unitPrice: Number(event.target.value) })} />
+                  <input className="input" type="number" value={itemDraft.unitPrice} onChange={(event) => updateItemDraft(item, { unitPrice: Number(event.target.value) })} />
                 </label>
                 <label className="field">
                   <span>ADI MSRP</span>
-                  <input className="input" type="number" value={item.msrp ?? 0} onChange={(event) => updateItem(item.id, { msrp: Number(event.target.value) })} />
+                  <input className="input" type="number" value={itemDraft.msrp ?? 0} onChange={(event) => updateItemDraft(item, { msrp: Number(event.target.value) })} />
                 </label>
                 <label className="field">
                   <span>Inventory</span>
-                  <input className="input" type="number" value={item.inventory ?? 0} onChange={(event) => updateItem(item.id, { inventory: Number(event.target.value) })} />
+                  <input className="input" type="number" value={itemDraft.inventory ?? 0} onChange={(event) => updateItemDraft(item, { inventory: Number(event.target.value) })} />
                 </label>
                 <label className="field md:col-span-3">
                   <span>Product link</span>
-                  <input className="input" type="url" value={item.link ?? ""} onChange={(event) => updateItem(item.id, { link: event.target.value })} placeholder="https://manufacturer.example/item" />
+                  <input className="input" type="url" value={itemDraft.link ?? ""} onChange={(event) => updateItemDraft(item, { link: event.target.value })} placeholder="https://manufacturer.example/item" />
                 </label>
                 <label className="field md:col-span-3">
                   <span>Notes</span>
-                  <textarea className="textarea" value={item.notes ?? ""} onChange={(event) => updateItem(item.id, { notes: event.target.value })} placeholder="Optional item notes" />
+                  <textarea className="textarea" value={itemDraft.notes ?? ""} onChange={(event) => updateItemDraft(item, { notes: event.target.value })} placeholder="Optional item notes" />
                 </label>
-                <div className="flex justify-end md:col-span-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 md:col-span-3">
                   <button
                     className="button-ghost text-red-800 hover:bg-red-100"
                     onClick={() => {
+                      if (itemIsDirty && !window.confirm("This item has unsaved changes. Select OK to discard them and continue with deletion, or Cancel to keep editing.")) return;
+                      discardItemEdit(item.id);
                       setDeleteItem(item);
                       setDeleteItemError("");
                     }}
@@ -3014,10 +3196,21 @@ function ItemsPage({
                     <Trash2 size={16} />
                     Delete item
                   </button>
+                  <div className="flex items-center gap-2">
+                    {itemIsDirty ? <span className="text-sm font-bold text-amber-800">Unsaved changes</span> : null}
+                    <button className="button-ghost" onClick={() => discardItemEdit(item.id)} disabled={!itemIsDirty}>
+                      Cancel
+                    </button>
+                    <button className="button-primary" onClick={() => confirmItemEdit(item, itemDraft)} disabled={!itemIsDirty}>
+                      <Save size={16} />
+                      Confirm changes
+                    </button>
+                  </div>
                 </div>
               </div>
             </details>
-          )) : (
+          );
+          }) : (
             <p className="rounded-lg border border-dashed border-stone-300 bg-stone-50 p-8 text-center text-stone-500">No items match this filter.</p>
           )}
         </div>
@@ -3109,14 +3302,14 @@ function ItemsPage({
         </div>
       ) : null}
       {categoryEditor ? (
-        <div className="fixed inset-0 z-[60] grid place-items-center bg-black/45 p-4" onMouseDown={(event) => closeOnBackdropMouseDown(event, closeCategoryEditor)}>
+        <div data-category-editor data-item-editor-id={categoryEditor.target === "item" ? categoryEditor.itemId : undefined} className="fixed inset-0 z-[60] grid place-items-center bg-black/45 p-4" onMouseDown={(event) => closeOnBackdropMouseDown(event, requestCloseCategoryEditor)}>
           <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="text-2xl font-black">Add Category</h3>
                 <p className="mt-2 text-sm text-stone-600">Name the category you want to use for this item.</p>
               </div>
-              <button className="icon-button" onClick={closeCategoryEditor} aria-label="Close category editor">
+              <button className="icon-button" onClick={requestCloseCategoryEditor} aria-label="Close category editor">
                 <X size={18} />
               </button>
             </div>
@@ -3125,7 +3318,7 @@ function ItemsPage({
               <input className="input" autoFocus value={newCategoryName} onChange={(event) => setNewCategoryName(event.target.value)} placeholder="Example: Door Hardware" />
             </label>
             <div className="mt-5 flex justify-end gap-2">
-              <button className="button-ghost" onClick={closeCategoryEditor}>
+              <button className="button-ghost" onClick={requestCloseCategoryEditor}>
                 Cancel
               </button>
               <button className="button-primary" onClick={saveCategoryName} disabled={!newCategoryName.trim()}>
