@@ -32,6 +32,9 @@ export async function PUT(request: Request, context: { params: Promise<{ collect
 
   try {
     const payload = await request.json();
+    if (collection === "sessions" && !Array.isArray(payload)) {
+      return Response.json({ error: "Session collection must be an array" }, { status: 400 });
+    }
     if (collection === "drafts" && Array.isArray(payload)) {
       const current = await readCollection(collection);
       const sharedDrafts = Array.isArray(current) ? current.filter((record) => !isDraftOwnedByUser(record, user)) : [];

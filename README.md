@@ -195,7 +195,7 @@ These endpoints use the same login session as the web app. Items and quotes are 
 
 Session writes capture an optional `ipAddress` on the server, replacing any value in request JSON. The server uses the first comma-separated address from `x-vercel-forwarded-for`, falling back to `x-forwarded-for` only when the preferred header is absent, and validates IPv4 or IPv6. Missing or invalid addresses are stored as null and displayed as `Unknown`. This assumes Vercel's deployment-provided headers; other hosting must configure a trusted proxy to overwrite these headers. The address reflects the latest session write, including revocation requests.
 
-Before deploying session IP tracking to an existing database, apply `alter table public.user_sessions add column if not exists ip_address text;` from [docs/supabase-schema.sql](docs/supabase-schema.sql). Existing sessions remain readable without an IP address.
+Before deploying session IP tracking to an existing database, apply the `user_sessions` migration and policy changes from [docs/supabase-schema.sql](docs/supabase-schema.sql). The migration adds the nullable `ip_address` column, removes direct authenticated writes, and keeps application writes on the server service role. Existing sessions remain readable without an IP address.
 
 Supabase PostgreSQL is the source of truth when `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are configured. The app no longer seeds items from a bundled CSV file or reads stale browser caches as database fallbacks.
 

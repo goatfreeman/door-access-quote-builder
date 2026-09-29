@@ -367,8 +367,8 @@ create policy "sessions owner read" on public.user_sessions
   for select to authenticated using (user_id = auth.uid() or public.is_admin());
 
 drop policy if exists "sessions owner write" on public.user_sessions;
-create policy "sessions owner write" on public.user_sessions
-  for all to authenticated using (user_id = auth.uid() or public.is_admin()) with check (user_id = auth.uid() or public.is_admin());
+-- Session writes must pass through the server so clients cannot set ip_address.
+revoke insert, update, delete on public.user_sessions from authenticated;
 
 drop policy if exists "debug logs admin read" on public.debug_logs;
 create policy "debug logs admin read" on public.debug_logs

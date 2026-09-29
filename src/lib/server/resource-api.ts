@@ -49,17 +49,29 @@ export async function updateResource(resource: ApiResourceName, id: string, body
   if (!canWriteRecord(resource, current, user)) return "forbidden" as const;
 
   const patch = isObject(body) ? body : {};
-  const updated = {
-    ...current,
-    ...patch,
-    ...(resource === "sessions" ? { ipAddress: sessionIpAddress(headers) } : {}),
-    id: current.id,
-    updatedAt: "updatedAt" in current ? new Date().toISOString() : (patch.updatedAt as string | undefined),
-  } as ResourceRecord;
+  const now = new Date().toISOString();
+  const updated = resource === "sessions"
+    ? updateSessionRecord(current as UserSessionRecord, patch, headers, now)
+    : {
+      ...current,
+      ...patch,
+      id: current.id,
+      updatedAt: "updatedAt" in current ? now : (patch.updatedAt as string | undefined),
+    } as ResourceRecord;
   const next = [...records];
   next[index] = updated;
   await writeResource(resource, next);
   return updated;
+}
+
+function updateSessionRecord(current: UserSessionRecord, patch: Record<string, unknown>, headers: Headers | undefined, now: string): UserSessionRecord {
+  return {
+    ...current,
+    deviceName: stringOr(patch.deviceName, current.deviceName),
+    lastSeenAt: now,
+    endedAt: current.endedAt ?? (typeof patch.endedAt === "string" && patch.endedAt.trim() ? now : undefined),
+    ipAddress: sessionIpAddress(headers),
+  };
 }
 
 export async function deleteResource(resource: ApiResourceName, id: string, user: SessionUser) {

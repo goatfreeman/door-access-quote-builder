@@ -41,6 +41,7 @@ describe("hosted Responses adapter", () => {
     expect(body).toMatchObject({ model: "gpt-5-mini", input: "Product-only question", store: false,
       tools: [{ type: "web_search" }], tool_choice: "required",
       text: { format: { type: "json_schema", strict: true, name: "agent_report", schema } } });
+    expect(body.text.format.schema).not.toHaveProperty("$schema");
     expect(body.instructions).toContain("researcher");
     expect(JSON.stringify(body).includes(environment.OPENAI_API_KEY)).toBe(false);
     function strictObjects(node: Record<string, unknown>) {

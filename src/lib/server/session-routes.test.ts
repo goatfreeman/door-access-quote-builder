@@ -70,6 +70,37 @@ describe("authenticated session writes", () => {
     await PATCH(new Request("http://localhost/api/v1/sessions/session-1", {
       method: "PATCH", headers: { "x-forwarded-for": "192.0.2.1" }, body: "{}",
     }), { params: Promise.resolve({ resource: "sessions", id: session.id }) });
-    expect(mocks.write).toHaveBeenCalledWith("sessions", [{ ...session, ipAddress: "192.0.2.1", updatedAt: undefined }, other]);
+    expect(mocks.write).toHaveBeenCalledWith("sessions", [expect.objectContaining({
+      id: session.id, userId: session.userId, userName: session.userName,
+      deviceId: session.deviceId, deviceName: session.deviceName,
+      createdAt: session.createdAt, ipAddress: "192.0.2.1",
+    }), other]);
+  });
+
+  it("preserves session identity and server timestamps during PATCH", async () => {
+    mocks.read.mockResolvedValue([session]);
+    await PATCH(new Request("http://localhost/api/v1/sessions/session-1", {
+      method: "PATCH",
+      headers: { "x-vercel-forwarded-for": "192.0.2.1" },
+      body: JSON.stringify({
+        userId: "other-user", userName: "Other", deviceId: "other-device", createdAt: "2000-01-01T00:00:00Z",
+        lastSeenAt: "2000-01-01T00:00:00Z", deviceName: "Updated browser", endedAt: "2000-01-01T00:00:00Z",
+      }),
+    }), { params: Promise.resolve({ resource: "sessions", id: session.id }) });
+    const saved = mocks.write.mock.calls[0][1][0] as UserSessionRecord;
+    expect(saved).toMatchObject({
+      id: session.id, userId: session.userId, userName: session.userName, deviceId: session.deviceId,
+      createdAt: session.createdAt, deviceName: "Updated browser", ipAddress: "192.0.2.1",
+    });
+    expect(saved.lastSeenAt).not.toBe("2000-01-01T00:00:00Z");
+    expect(saved.endedAt).not.toBe("2000-01-01T00:00:00Z");
+  });
+
+  it("rejects a non-array legacy session collection without writing", async () => {
+    const response = await PUT(new Request("http://localhost/api/db/sessions", {
+      method: "PUT", body: JSON.stringify(session),
+    }), { params: Promise.resolve({ collection: "sessions" }) });
+    expect(response.status).toBe(400);
+    expect(mocks.write).not.toHaveBeenCalled();
   });
 });
