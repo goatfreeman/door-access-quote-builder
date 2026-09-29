@@ -5,6 +5,7 @@ import type { Json } from "@/lib/supabase/schema-types";
 export type StoreCollection = "items" | "templates" | "quotes" | "settings" | "drafts" | "sessions" | "debugLogs";
 type SupabaseClient = {
   from: (tableName: string) => any;
+  rpc: (functionName: string, parameters: Record<string, unknown>) => any;
 };
 type DbRow = Record<string, any>;
 type ProfileMap = Map<string, { name?: string; email?: string }>;
@@ -43,6 +44,13 @@ export async function writeCollection(collection: StoreCollection, value: unknow
   await writeSupabaseCollection(collection, value);
 }
 
+export async function upsertCatalogItems(items: CatalogItem[]) {
+  if (!isSupabaseStoreEnabled()) throw new Error("Supabase is not configured");
+  if (!items.length) return;
+  const { error } = await getSupabaseClient().rpc("import_catalog_items", { p_items: catalogImportRows(items) });
+  if (error) throw new Error(error.message);
+}
+
 async function readSupabaseCollection(collection: StoreCollection) {
   const supabase = getSupabaseClient();
   if (collection === "items") return readSupabaseItems(supabase);
@@ -73,7 +81,9 @@ async function readSupabaseItems(supabase: SupabaseClient): Promise<CatalogItem[
     sku: row.sku,
     name: row.name,
     category: row.category,
+    unit: row.unit ?? undefined,
     unitPrice: Number(row.unit_price ?? 0),
+    adi: row.adi ?? undefined,
     msrp: nullableNumber(row.msrp),
     vendor: row.vendor ?? undefined,
     inventory: nullableNumber(row.inventory),
@@ -86,21 +96,41 @@ async function writeSupabaseItems(supabase: SupabaseClient, items: CatalogItem[]
   await deleteMissingUuidRows(supabase, "catalog_items", items.map((item) => dbUuid(item.id, "item")).filter(isUuid));
   if (!items.length) return;
 
-  const { error } = await supabase.from("catalog_items").upsert(
-    items.map((item) => ({
-      id: dbUuid(item.id, "item"),
-      sku: item.sku ?? "",
-      name: item.name || "Unnamed item",
-      category: item.category || "Uncategorized",
-      unit_price: item.unitPrice ?? 0,
-      msrp: item.msrp ?? null,
-      vendor: item.vendor ?? null,
-      inventory: item.inventory ?? null,
-      notes: item.notes ?? null,
-      deleted_at: item.deletedAt ?? null,
-    })),
-  );
+  const { error } = await supabase.from("catalog_items").upsert(catalogItemRows(items));
   if (error) throw new Error(error.message);
+}
+
+function catalogItemRows(items: CatalogItem[]) {
+  return items.map((item) => ({
+    id: dbUuid(item.id, "item"),
+    sku: item.sku ?? "",
+    name: item.name || "Unnamed item",
+    category: item.category || "Uncategorized",
+    unit: item.unit ?? null,
+    unit_price: item.unitPrice ?? 0,
+    adi: item.adi ?? null,
+    msrp: item.msrp ?? null,
+    vendor: item.vendor ?? null,
+    inventory: item.inventory ?? null,
+    notes: item.notes ?? null,
+    deleted_at: item.deletedAt ?? null,
+  }));
+}
+
+function catalogImportRows(items: CatalogItem[]) {
+  return items.map((item) => ({
+    id: dbUuid(item.id, "item"),
+    sku: item.sku,
+    name: item.name,
+    category: item.category,
+    unit: item.unit ?? null,
+    unit_price: item.unitPrice,
+    adi: item.adi ?? null,
+    msrp: item.msrp ?? null,
+    inventory: item.inventory ?? null,
+    notes: item.notes ?? null,
+    deleted_at: null,
+  }));
 }
 
 async function readSupabaseTemplates(supabase: SupabaseClient): Promise<QuoteTemplate[]> {

@@ -3,7 +3,9 @@ export type CatalogItem = {
   sku: string;
   name: string;
   category: string;
+  unit?: string;
   unitPrice: number;
+  adi?: string;
   msrp?: number;
   vendor?: string;
   inventory?: number;

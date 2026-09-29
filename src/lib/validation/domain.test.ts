@@ -58,6 +58,37 @@ describe("parseAgentReport", () => {
       }),
     ).toThrow("http or https");
   });
+
+  it("rejects evidence URLs that target local or private network hosts", () => {
+    for (const source of [
+      "http://localhost/admin",
+      "http://localhost./admin",
+      "http://127.0.0.1/status",
+      "https://192.168.1.10/manual",
+      "http://100.64.0.1/status",
+      "https://192.0.2.1/manual",
+      "http://224.0.0.1/status",
+      "http://[::ffff:127.0.0.1]/status",
+      "http://intranet/manual",
+      "https://example.internal/manual",
+    ]) {
+      expect(() => parseAgentReport({
+        role: "researcher",
+        status: "CONFIRMED",
+        summary: "Found evidence.",
+        findings: [],
+        sources: [source],
+      })).toThrow("public web host");
+    }
+
+    expect(() => parseAgentReport({
+      role: "researcher",
+      status: "CONFIRMED",
+      summary: "Found evidence.",
+      findings: [],
+      sources: ["https://fccc.com/manual"],
+    })).not.toThrow();
+  });
 });
 
 describe("runDeterministicRules", () => {

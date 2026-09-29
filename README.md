@@ -113,6 +113,16 @@ The `/validation` workspace accepts product identifiers and a compatibility ques
 
 Every result uses `CONFIRMED`, `ASSUMED`, `OPEN`, `CONFLICT`, `BLOCKED`, or `NOT APPLICABLE`. Every result remains a draft for a qualified Caltron reviewer.
 
+When a user adds an individual catalog item to a quote, the quote workspace starts the same controlled review automatically. The review asks for required companion parts and checks the new item against the product identifiers already in the quote. Fiber reviews explicitly check singlemode or multimode fiber, connector type, wavelength, data rate, and required patch cables or transceivers. A template addition starts one package review after its catalog lines are added. Custom template lines receive an `OPEN` notice because they do not have controlled catalog identifiers. The result history keeps separate entries so a late response cannot replace a newer item result.
+
+Administrators can import catalog items from `/admin` with this exact CSV header:
+
+```text
+name,sku,category,unit,price,adi,msrp,inventory,notes
+```
+
+The import adds new SKUs and updates existing SKUs without changing their record identifiers. The `notes` value can contain the item link. Duplicate headers, duplicate SKUs, incorrect row widths, malformed quoting, and invalid or out-of-range numeric values are rejected. The import updates only the affected database rows and preserves catalog fields that are outside the CSV contract. Apply the `catalog_items.unit`, `catalog_items.adi`, case-insensitive SKU index, and `import_catalog_items` function in `docs/supabase-schema.sql` before using this feature with an existing Supabase database.
+
 The current adapter uses a separately authorized Codex CLI session on the application server. The application does not inspect or retain Codex credential files. Enable the adapter only on a controlled local or self-hosted server:
 
 ```text
