@@ -14,6 +14,9 @@ Next.js, React, TypeScript, Tailwind CSS, and shadcn/ui app for building quick e
 - Settings page with account, database, admin-only plugin status, sync button, and last sync time
 - Mobile-friendly slide-out navigation and bottom total bar
 - Print/save-as-PDF workflow and customer email prompt
+- Controlled item-compatibility workspace at `/validation`
+- Independent Codex researcher, verifier, and tester stages with structured evidence
+- Deterministic `RULE-014` arithmetic checks for normalized quote-line data
 
 ## Run Locally
 
@@ -99,6 +102,31 @@ AZURE_SSO_DOMAINS=example.com
 ```
 
 The UI shows a `Dev Build` badge unless `NEXT_PUBLIC_APP_STAGE` is set to `production`.
+
+## Caltron Item Validation
+
+The `/validation` workspace accepts product identifiers and a compatibility question. It preserves the source part number and creates a separate normalized lookup key. It then runs three distinct stages:
+
+1. Researcher: finds current manufacturer evidence.
+2. Verifier: checks the evidence and claim independently.
+3. Tester: challenges the conclusion and defines measurable tests.
+
+Every result uses `CONFIRMED`, `ASSUMED`, `OPEN`, `CONFLICT`, `BLOCKED`, or `NOT APPLICABLE`. Every result remains a draft for a qualified Caltron reviewer.
+
+The current adapter uses a separately authorized Codex CLI session on the application server. The application does not inspect or retain Codex credential files. Enable the adapter only on a controlled local or self-hosted server:
+
+```text
+CODEX_VALIDATION_ENABLED=true
+CODEX_VALIDATION_ISOLATED=true
+```
+
+This adapter is not available on a standard Vercel deployment because Vercel does not provide the authorized local CLI session. All modes require `CODEX_VALIDATION_ISOLATED=true`. Set that value only when a separate operating-system account or container restricts the worker's filesystem and credential access. The setting does not create the isolation boundary. Do not send client names, project locations, device locations, network details, credentials, prices, or controlled drawings to the validation workflow.
+
+See [docs/caltron-validation-requirements.md](docs/caltron-validation-requirements.md) for the requirement traceability matrix, implemented controls, open inputs, and phased work.
+
+## Change and Deployment Workflow
+
+Create a feature branch for every change. Run `npm test` and `npm run build`. Push the branch with GitHub Desktop. Create a pull request before merge or deployment. Do not merge a failed or unreviewed pull request. Repository branch protection remains an administrator decision.
 
 ## Future Database and Integrations
 
