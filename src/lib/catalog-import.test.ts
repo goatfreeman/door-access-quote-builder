@@ -5,7 +5,7 @@ import { importCatalogCsv } from "./catalog-import";
 describe("importCatalogCsv", () => {
   it("maps the required CSV columns and preserves ADI and unit values", () => {
     const result = importCatalogCsv(
-      "name,sku,category,unit,price,adi,msrp,inventory,notes\r\nComNet SFP,CNFE2MC/2,Media Converter,EA,125.50,ADI-001,199.99,4,https://example.com/item",
+      "name,sku,category,unit,price,adi,msrp,inventory,link,notes\r\nComNet SFP,CNFE2MC/2,Media Converter,EA,125.50,ADI-001,199.99,4,https://example.com/item,Preferred stock item",
       [],
       () => "item-new",
     );
@@ -21,7 +21,8 @@ describe("importCatalogCsv", () => {
         adi: "ADI-001",
         msrp: 199.99,
         inventory: 4,
-        notes: "https://example.com/item",
+        link: "https://example.com/item",
+        notes: "Preferred stock item",
       }],
       changedItems: [{
         id: "item-new",
@@ -33,7 +34,8 @@ describe("importCatalogCsv", () => {
         adi: "ADI-001",
         msrp: 199.99,
         inventory: 4,
-        notes: "https://example.com/item",
+        link: "https://example.com/item",
+        notes: "Preferred stock item",
       }],
       added: 1,
       updated: 0,
@@ -52,7 +54,7 @@ describe("importCatalogCsv", () => {
     };
 
     const result = importCatalogCsv(
-      "name,sku,category,unit,price,adi,msrp,inventory,notes\nNew name,ABC-1,Fiber,EA,12.25,,,2,",
+      "name,sku,category,unit,price,adi,msrp,inventory,link,notes\nNew name,ABC-1,Fiber,EA,12.25,,,2,,",
       [existing],
       () => "unused",
     );
@@ -65,65 +67,65 @@ describe("importCatalogCsv", () => {
   });
 
   it("supports quoted commas and rejects duplicate SKUs", () => {
-    const csv = "name,sku,category,unit,price,adi,msrp,inventory,notes\n\"Converter, multimode\",MM-1,Fiber,EA,10,,,1,\"Link, with note\"\nOther,mm-1,Fiber,EA,11,,,1,";
+    const csv = "name,sku,category,unit,price,adi,msrp,inventory,link,notes\n\"Converter, multimode\",MM-1,Fiber,EA,10,,,1,,\"Text, with comma\"\nOther,mm-1,Fiber,EA,11,,,1,,";
     expect(() => importCatalogCsv(csv, [], () => "item-new")).toThrow("Duplicate SKU on row 3");
   });
 
   it("rejects a file that does not have the exact required header set", () => {
     expect(() => importCatalogCsv("name,sku,category,price\nItem,A-1,Fiber,1", [], () => "item-new"))
-      .toThrow("Missing CSV columns: unit, adi, msrp, inventory, notes");
+      .toThrow("Missing CSV columns: unit, adi, msrp, inventory, link, notes");
   });
 
   it("rejects duplicate headers and rows with the wrong number of cells", () => {
     expect(() => importCatalogCsv(
-      "name,sku,category,unit,price,adi,msrp,inventory,name\nItem,A-1,Fiber,EA,1,,,1,Duplicate",
+      "name,sku,category,unit,price,adi,msrp,inventory,link,name\nItem,A-1,Fiber,EA,1,,,1,,Duplicate",
       [],
       () => "item-new",
     )).toThrow("Duplicate CSV column: name");
 
     expect(() => importCatalogCsv(
-      "name,sku,category,unit,price,adi,msrp,inventory,notes\nWidget,W1,Fiber,EA,1,000,100,2,4,link",
+      "name,sku,category,unit,price,adi,msrp,inventory,link,notes\nWidget,W1,Fiber,EA,1,000,100,2,4,link,note",
       [],
       () => "item-new",
-    )).toThrow("CSV row 2 must contain exactly 9 cells");
+    )).toThrow("CSV row 2 must contain exactly 10 cells");
   });
 
   it("rejects quotes inside unquoted fields and text after a closing quote", () => {
     expect(() => importCatalogCsv(
-      "name,sku,category,unit,price,adi,msrp,inventory,notes\nItem,AB\"CD\",Fiber,EA,1,,,1,",
+      "name,sku,category,unit,price,adi,msrp,inventory,link,notes\nItem,AB\"CD\",Fiber,EA,1,,,1,,",
       [],
       () => "item-new",
     )).toThrow("CSV contains invalid quoting");
 
     expect(() => importCatalogCsv(
-      "name,sku,category,unit,price,adi,msrp,inventory,notes\nItem,\"AB\"CD,Fiber,EA,1,,,1,",
+      "name,sku,category,unit,price,adi,msrp,inventory,link,notes\nItem,\"AB\"CD,Fiber,EA,1,,,1,,",
       [],
       () => "item-new",
     )).toThrow("CSV contains invalid quoting");
   });
 
   it("rejects short rows even when every cell is empty", () => {
-    expect(() => importCatalogCsv("name,sku,category,unit,price,adi,msrp,inventory,notes\n,,", []))
-      .toThrow("CSV row 2 must contain exactly 9 cells");
-    expect(() => importCatalogCsv('name,sku,category,unit,price,adi,msrp,inventory,notes\n""', []))
-      .toThrow("CSV row 2 must contain exactly 9 cells");
+    expect(() => importCatalogCsv("name,sku,category,unit,price,adi,msrp,inventory,link,notes\n,,", []))
+      .toThrow("CSV row 2 must contain exactly 10 cells");
+    expect(() => importCatalogCsv('name,sku,category,unit,price,adi,msrp,inventory,link,notes\n""', []))
+      .toThrow("CSV row 2 must contain exactly 10 cells");
   });
 
   it("rejects invalid or out-of-range database numbers", () => {
     expect(() => importCatalogCsv(
-      "name,sku,category,unit,price,adi,msrp,inventory,notes\nItem,A-1,Fiber,EA,$,,,1,",
+      "name,sku,category,unit,price,adi,msrp,inventory,link,notes\nItem,A-1,Fiber,EA,$,,,1,,",
       [],
       () => "item-new",
     )).toThrow("price must be a nonnegative decimal number on row 2");
 
     expect(() => importCatalogCsv(
-      "name,sku,category,unit,price,adi,msrp,inventory,notes\nItem,A-1,Fiber,EA,10000000000,,,1,",
+      "name,sku,category,unit,price,adi,msrp,inventory,link,notes\nItem,A-1,Fiber,EA,10000000000,,,1,,",
       [],
       () => "item-new",
     )).toThrow("price exceeds the database limit on row 2");
 
     expect(() => importCatalogCsv(
-      "name,sku,category,unit,price,adi,msrp,inventory,notes\nItem,A-1,Fiber,EA,1,,,2147483648,",
+      "name,sku,category,unit,price,adi,msrp,inventory,link,notes\nItem,A-1,Fiber,EA,1,,,2147483648,,",
       [],
       () => "item-new",
     )).toThrow("inventory exceeds the database limit on row 2");

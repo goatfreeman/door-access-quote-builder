@@ -745,7 +745,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
     const query = search.trim().toLowerCase();
     return activeItems.filter((item) => {
       const matchesCategory = category === "All" || item.category === category;
-      const matchesSearch = !query || [item.name, item.sku, item.vendor, item.notes].some((value) => value?.toLowerCase().includes(query));
+      const matchesSearch = !query || [item.name, item.sku, item.vendor, item.link, item.notes].some((value) => value?.toLowerCase().includes(query));
       return matchesCategory && matchesSearch;
     });
   }, [activeItems, search, category]);
@@ -2832,7 +2832,7 @@ function ItemsPage({
     return items
       .filter((item) => {
         const matchesCategory = categoryFilter === "All" || item.category === categoryFilter;
-        const matchesSearch = !query || normalizeSearchValue(`${item.name} ${item.sku} ${item.category} ${item.vendor ?? ""} ${item.notes ?? ""}`).includes(query);
+        const matchesSearch = !query || normalizeSearchValue(`${item.name} ${item.sku} ${item.category} ${item.vendor ?? ""} ${item.link ?? ""} ${item.notes ?? ""}`).includes(query);
         return matchesCategory && matchesSearch;
       })
       .slice()
@@ -2904,7 +2904,7 @@ function ItemsPage({
       <div className="panel-header">
         <div>
           <h2>Items</h2>
-          <p>Full catalog view with editable pricing, MSRP, inventory, and notes.</p>
+          <p>Full catalog view with editable pricing, MSRP, inventory, links, and notes.</p>
         </div>
         <button className="button-primary" onClick={() => setAddItemOpen(true)}>
           <PackagePlus size={17} />
@@ -2919,7 +2919,7 @@ function ItemsPage({
           </div>
           <label className="field">
             <span>Search</span>
-            <input className="input" value={itemSearch} onChange={(event) => setItemSearch(event.target.value)} placeholder="Name, SKU, vendor, notes" />
+            <input className="input" value={itemSearch} onChange={(event) => setItemSearch(event.target.value)} placeholder="Name, SKU, vendor, link, notes" />
           </label>
           <label className="field">
             <span>Category</span>
@@ -2994,6 +2994,10 @@ function ItemsPage({
                 <label className="field">
                   <span>Inventory</span>
                   <input className="input" type="number" value={item.inventory ?? 0} onChange={(event) => updateItem(item.id, { inventory: Number(event.target.value) })} />
+                </label>
+                <label className="field md:col-span-3">
+                  <span>Product link</span>
+                  <input className="input" type="url" value={item.link ?? ""} onChange={(event) => updateItem(item.id, { link: event.target.value })} placeholder="https://manufacturer.example/item" />
                 </label>
                 <label className="field md:col-span-3">
                   <span>Notes</span>
@@ -3082,6 +3086,10 @@ function ItemsPage({
               <label className="field">
                 <span>Inventory</span>
                 <input className="input" type="number" value={draftItem.inventory ?? 0} onChange={(event) => setDraftItem((current) => ({ ...current, inventory: Number(event.target.value) }))} />
+              </label>
+              <label className="field md:col-span-3">
+                <span>Product link</span>
+                <input className="input" type="url" value={draftItem.link ?? ""} onChange={(event) => setDraftItem((current) => ({ ...current, link: event.target.value }))} placeholder="https://manufacturer.example/item" />
               </label>
               <label className="field md:col-span-3">
                 <span>Notes</span>

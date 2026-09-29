@@ -78,6 +78,7 @@ create table if not exists public.catalog_items (
   msrp numeric(12, 2),
   vendor text,
   inventory integer,
+  link text,
   notes text,
   created_by uuid references public.profiles(id),
   updated_by uuid references public.profiles(id),
@@ -88,6 +89,7 @@ create table if not exists public.catalog_items (
 
 alter table public.catalog_items add column if not exists unit text;
 alter table public.catalog_items add column if not exists adi text;
+alter table public.catalog_items add column if not exists link text;
 create unique index if not exists catalog_items_sku_ci_unique
   on public.catalog_items (upper(btrim(sku)))
   where btrim(sku) <> '';
@@ -99,7 +101,7 @@ set search_path = public
 as $$
 begin
   insert into public.catalog_items (
-    id, sku, name, category, unit, unit_price, adi, msrp, inventory, notes, deleted_at
+    id, sku, name, category, unit, unit_price, adi, msrp, inventory, link, notes, deleted_at
   )
   select
     item.id,
@@ -111,6 +113,7 @@ begin
     item.adi,
     item.msrp,
     item.inventory,
+    item.link,
     item.notes,
     null
   from jsonb_to_recordset(p_items) as item(
@@ -123,6 +126,7 @@ begin
     adi text,
     msrp numeric(12, 2),
     inventory integer,
+    link text,
     notes text,
     deleted_at timestamptz
   )
@@ -136,6 +140,7 @@ begin
     adi = excluded.adi,
     msrp = excluded.msrp,
     inventory = excluded.inventory,
+    link = excluded.link,
     notes = excluded.notes,
     deleted_at = null,
     updated_at = now();

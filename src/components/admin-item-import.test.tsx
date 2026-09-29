@@ -6,7 +6,7 @@ describe("AdminItemImport", () => {
   it("shows the controlled CSV format and import action", () => {
     const html = renderToStaticMarkup(<AdminItemImport />);
     expect(html).toContain("Import catalog CSV");
-    expect(html).toContain("name,sku,category,unit,price,adi,msrp,inventory,notes");
+    expect(html).toContain("name,sku,category,unit,price,adi,msrp,inventory,link,notes");
     expect(html).toContain('type="file"');
   });
 

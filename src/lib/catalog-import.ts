@@ -1,6 +1,6 @@
 import type { CatalogItem } from "./types";
 
-const requiredHeaders = ["name", "sku", "category", "unit", "price", "adi", "msrp", "inventory", "notes"] as const;
+const requiredHeaders = ["name", "sku", "category", "unit", "price", "adi", "msrp", "inventory", "link", "notes"] as const;
 const maxDatabaseMoney = 9_999_999_999.99;
 const maxDatabaseInteger = 2_147_483_647;
 
@@ -57,6 +57,7 @@ export function importCatalogCsv(
       adi: value.adi || undefined,
       msrp: money(value.msrp, "msrp", rowNumber, false),
       inventory: integer(value.inventory, "inventory", rowNumber),
+      link: value.link || undefined,
       notes: value.notes || undefined,
     };
     delete item.deletedAt;

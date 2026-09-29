@@ -9,6 +9,7 @@ export type CatalogItem = {
   msrp?: number;
   vendor?: string;
   inventory?: number;
+  link?: string;
   notes?: string;
   deletedAt?: string;
 };
