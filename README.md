@@ -15,7 +15,7 @@ Next.js, React, TypeScript, Tailwind CSS, and shadcn/ui app for building quick e
 - Mobile-friendly slide-out navigation and bottom total bar
 - Print/save-as-PDF workflow and customer email prompt
 - Controlled item-compatibility workspace at `/validation`
-- Independent Codex researcher, verifier, and tester stages with structured evidence
+- Independent hosted researcher, verifier, and tester stages with structured evidence
 - Deterministic `RULE-014` arithmetic checks for normalized quote-line data
 
 ## Run Locally
@@ -123,14 +123,21 @@ name,sku,category,unit,price,adi,msrp,inventory,link,notes
 
 The import adds new SKUs and updates existing SKUs without changing their record identifiers. A blank `category` value is assigned to `Uncategorized`. A new category name becomes available automatically after import. The `link` value stores the manufacturer or distributor item URL. The `notes` value stores item notes. Duplicate headers, duplicate SKUs, incorrect row widths, malformed quoting, and invalid or out-of-range numeric values are rejected. The import updates only the affected database rows and preserves catalog fields that are outside the CSV contract. Administrators can export all active catalog items from `/admin` in the same CSV format. Apply the `catalog_items.unit`, `catalog_items.adi`, `catalog_items.link`, case-insensitive SKU index, and `import_catalog_items` function in `docs/supabase-schema.sql` before using this feature with an existing Supabase database.
 
-The current adapter uses a separately authorized Codex CLI session on the application server. The application does not inspect or retain Codex credential files. Enable the adapter only on a controlled local or self-hosted server:
+The validation adapter runs in standard Vercel Node.js functions using server-side fetch to the OpenAI Responses API. Each researcher, verifier, and tester call uses hosted `web_search` and strict JSON-schema output, validated by the existing domain parser. The client endpoint remains `/api/validation/codex`.
+
+Set these protected **server-only** Vercel environment variables, then redeploy:
 
 ```text
-CODEX_VALIDATION_ENABLED=true
-CODEX_VALIDATION_ISOLATED=true
+OPENAI_VALIDATION_ENABLED=true
+OPENAI_API_KEY=<project-api-key>
+OPENAI_VALIDATION_MODEL=gpt-5-mini
 ```
 
-This adapter is not available on a standard Vercel deployment because Vercel does not provide the authorized local CLI session. All modes require `CODEX_VALIDATION_ISOLATED=true`. Set that value only when a separate operating-system account or container restricts the worker's filesystem and credential access. The setting does not create the isolation boundary. Do not send client names, project locations, device locations, network details, credentials, prices, or controlled drawings to the validation workflow.
+The model override is optional and defaults to `gpt-5-mini`. Never expose the key using a `NEXT_PUBLIC_` variable. Legacy `CODEX_VALIDATION_ENABLED=true` is supported when the new enable flag is unset; `CODEX_VALIDATION_ISOLATED` is ignored. No CLI, persistent login, child process, or persistent filesystem is needed by validation.
+
+The route requests a 300-second function duration; the hosting allowance must accommodate three sequential calls with an 85-second timeout each. Status reports local API configuration, with access verified on the next review. Existing `installed` and `authenticated` fields remain compatibility aliases for adapter presence and configuration. Instance-local concurrency/cooldown gates are not a deployment-wide quota. Tests use mocked fetch; no live API call is required for verification.
+
+Do not send client names, project locations, device locations, network details, credentials, prices, or controlled drawings to the validation workflow.
 
 See [docs/caltron-validation-requirements.md](docs/caltron-validation-requirements.md) for the requirement traceability matrix, implemented controls, open inputs, and phased work.
 

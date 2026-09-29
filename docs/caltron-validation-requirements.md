@@ -39,11 +39,11 @@ Apply the Caltron quote-tool requirements to the existing Quick Quote Builder wi
 | Evidence status | Domain validation permits only the six controlled status values. | CONFIRMED |
 | Evidence URL control | Agent reports accept only `http` and `https` source URLs. | CONFIRMED |
 | Agent separation | Jobs run in the order researcher, verifier, and tester. Later stages receive prior reports. | CONFIRMED |
-| Prompt-injection control | Each prompt treats retrieved content as untrusted. All execution remains blocked without an operating-system or container isolation assertion. | ASSUMED |
-| Structured output | Codex must return a report that conforms to `agent-report.schema.json`. | CONFIRMED |
-| Codex credentials | The server uses the separately authorized CLI session. The application does not read or store credential files. | CONFIRMED |
+| Prompt-injection control | Each prompt treats retrieved content as untrusted. Hosted execution has no local process or filesystem tools. | ASSUMED |
+| Structured output | The Responses API must return a report that conforms to `agent-report.schema.json`. | CONFIRMED |
+| API credentials | The server uses protected OPENAI_API_KEY environment configuration. No key is sent to the browser or stored in credential files. | CONFIRMED |
 | Deterministic validation | An unintegrated domain module checks nonnegative quantity and line-extension arithmetic. The quote workspace does not call it yet. | ASSUMED — prototype only |
-| Automated verification | Tests cover request normalization, URL policy, arithmetic, orchestration, role checks, CLI output handling, job gating, production gating, and the UI safety notice. | CONFIRMED |
+| Automated verification | Tests cover request normalization, URL policy, arithmetic, orchestration, role checks, hosted API output handling, job gating, hosted configuration, and the UI safety notice. | CONFIRMED |
 
 ## 4. Business-requirement traceability
 
@@ -80,7 +80,7 @@ The source spelling `Compatability` is retained for `RULE-001` through `RULE-003
 | Source device | Source signal | Destination | Required action | Cable or protocol | Power source | Test step | Status |
 |---|---|---|---|---|---|---|---|
 | Authenticated browser | Product identifiers and question | `/api/validation/codex` | Validate fields and start controlled review | HTTPS / JSON | User workstation | Submit valid and invalid requests | CONFIRMED |
-| Next.js server | CLI status request | Codex CLI | Check installed version and authorized account state | Local process | Application server | Run status check with authorized and unauthorized sessions | CONFIRMED |
+| Next.js server | Product research request | OpenAI Responses API | Use hosted web search and strict structured reports | HTTPS / JSON | Vercel function | Mock configured, missing-key, and API failure cases | CONFIRMED |
 | Researcher | Structured report | Verifier | Supply evidence for independent verification | Internal JSON | Application server | Verify role order and prior-report transfer | CONFIRMED |
 | Verifier | Structured report | Tester | Supply independently checked findings | Internal JSON | Application server | Verify both prior reports reach tester | CONFIRMED |
 | Tester | Final draft status and test steps | Browser | Display evidence and qualified-review notice | HTTPS / JSON | Application server | Verify all statuses, findings, and URLs render | ASSUMED — browser acceptance test required |
@@ -88,10 +88,9 @@ The source spelling `Compatability` is retained for `RULE-001` through `RULE-003
 
 ## 7. Assumptions and deviations
 
-- `ASSUMED`: The first deploy target for CLI-backed research is an isolated local Node.js pilot with non-sensitive product identifiers only.
-- `DEVIATION`: A standard Vercel runtime cannot use the locally authorized Codex CLI session.
-- `REQUIRED`: Every execution mode remains disabled unless `CODEX_VALIDATION_ISOLATED=true`. This setting is an administrator assertion. It does not create isolation. A separate operating-system account or container must limit filesystem and credential access.
-- `DEVIATION`: The current API runs the three agents synchronously. A production release needs a durable queue, cancellation, retry limits, and job history.
+- `ASSUMED`: The deploy target is a standard Vercel Node.js function using hosted OpenAI research with non-sensitive product identifiers only.
+- `REQUIRED`: Enable hosted validation and set a protected server API key as described below. No CLI installation, persistent login, local process, isolation assertion, or persistent filesystem is used by the adapter.
+- `DEVIATION`: The current API runs the three agents synchronously. Each stage has an 85-second timeout and follows request cancellation. A durable queue, retry policy, and job history remain future work.
 - `REQUIRED`: Historical quote analyses must not establish current compatibility, lifecycle, price, or approval.
 - `REQUIRED`: Do not enable external AI processing for confidential records until Cybersecurity and the Manager approve the data boundary.
 
@@ -101,14 +100,14 @@ The source spelling `Compatability` is retained for `RULE-001` through `RULE-003
 |---|---|---|
 | Public research receives confidential project data | Enforce the product-only input boundary and complete cybersecurity review. | BLOCKED for confidential data |
 | Manufacturer web evidence changes | Store retrieval date, excerpt, URL, and hash in a durable evidence record. | OPEN |
-| Synchronous jobs exceed hosting limits | Use a durable worker queue on an approved self-hosted platform. | OPEN |
+| Synchronous jobs exceed hosting limits | Configure the 300-second function duration; use a durable queue if longer reviews are needed. | OPEN |
 | AI output appears approved | Keep the draft notice and add reviewer disposition and audit records. | OPEN |
 | Direct changes reach production without review | Use feature branches and pull requests. Enable protected-branch rules. | OPEN — repository administrator |
 | Dependency audit reports known vulnerabilities | Review dependency paths and approve safe upgrades before production. | OPEN |
 
 ## 9. Required decisions
 
-1. Select the approved self-hosted or private model boundary.
+1. Approve the hosted API data boundary for the intended product-only inputs.
 2. Approve the manufacturer and product-family scope.
 3. Approve the source-domain policy.
 4. Approve the pricing divisor and cent-rounding sequence.
@@ -123,3 +122,18 @@ The source spelling `Compatability` is retained for `RULE-001` through `RULE-003
 3. `https://github.com/goatfreeman/door-access-quote-builder`, baseline commit `cc71dfd4006ba26d60a74ad3a81d8f58f7614765`.
 
 The supplied historical quote-analysis Markdown files remain reference evidence. They are not current product facts.
+## 11. Hosted validation deployment
+
+The existing GET/POST `/api/validation/codex` endpoint is retained for client compatibility. Its implementation runs in a standard Vercel Node.js function and calls `POST https://api.openai.com/v1/responses` with server-side fetch. The researcher, independent verifier, and tester each use hosted `web_search` and `text.format` with `type: json_schema`, `strict: true`, and the bundled report schema. Responses are not stored (`store: false`). No SDK or new dependency is required.
+
+Set these protected server environment variables in the applicable Vercel environments and redeploy:
+
+- `OPENAI_API_KEY`: required project API key with Responses/model access. Never prefix it with `NEXT_PUBLIC_` or put it in client code.
+- `OPENAI_VALIDATION_ENABLED=true`: opt in to hosted validation. When unset, legacy `CODEX_VALIDATION_ENABLED=true` is accepted. An explicit new flag takes precedence.
+- `OPENAI_VALIDATION_MODEL`: optional; defaults to `gpt-5-mini`. An override must support Responses, hosted web search, and structured outputs.
+
+`CODEX_VALIDATION_ISOLATED` is ignored. The route exports `maxDuration = 300`; configure a Vercel function duration allowance that accommodates three sequential 85-second calls plus authentication and evidence checks. The in-memory job gate limits only one warm instance, not all deployed instances. Status checks are configuration-only and do not incur API requests: `provider=openai`, `configured` and `available` reflect usable local settings, not proven upstream access. Legacy `installed=true` means the hosted adapter is present, `authenticated` aliases configured, and `version=null`. No raw environment values are returned. A failed review reports a fixed, actionable error without upstream bodies or diagnostics. Existing response envelopes, authorization, role order, status reconciliation, and public evidence checks remain intact.
+
+Mocked tests verify the transport and failure cases without credentials or billable calls. A live deployment smoke test still requires the configured Vercel environment and account access.
+
+API references: [hosted web search](https://developers.openai.com/api/docs/guides/tools-web-search), [structured outputs](https://developers.openai.com/api/docs/guides/structured-outputs).
