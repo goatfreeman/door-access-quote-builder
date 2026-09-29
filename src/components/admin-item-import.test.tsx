@@ -8,6 +8,7 @@ describe("AdminItemImport", () => {
     expect(html).toContain("Import catalog CSV");
     expect(html).toContain("name,sku,category,unit,price,adi,msrp,inventory,link,notes");
     expect(html).toContain('type="file"');
+    expect(html).toContain("Export items");
   });
 
   it("formats structured API errors with the stage, HTTP status, and request identifier", () => {

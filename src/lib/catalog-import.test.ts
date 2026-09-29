@@ -66,6 +66,26 @@ describe("importCatalogCsv", () => {
     expect(result.items[0].deletedAt).toBeUndefined();
   });
 
+  it("assigns Uncategorized when an imported item has no category", () => {
+    const result = importCatalogCsv(
+      "name,sku,category,unit,price,adi,msrp,inventory,link,notes\nUnsorted item,NO-CAT-1,,EA,10,,,,,",
+      [],
+      () => "item-new",
+    );
+
+    expect(result.items[0].category).toBe("Uncategorized");
+  });
+
+  it("preserves apostrophe-prefixed text from an externally authored CSV", () => {
+    const result = importCatalogCsv(
+      "name,sku,category,unit,price,adi,msrp,inventory,link,notes\n'=literal text,'+LITERAL-SKU,Test,EA,6,,,,,",
+      [],
+      () => "item-new",
+    );
+
+    expect(result.items[0]).toMatchObject({ name: "'=literal text", sku: "'+LITERAL-SKU" });
+  });
+
   it("supports quoted commas and rejects duplicate SKUs", () => {
     const csv = "name,sku,category,unit,price,adi,msrp,inventory,link,notes\n\"Converter, multimode\",MM-1,Fiber,EA,10,,,1,,\"Text, with comma\"\nOther,mm-1,Fiber,EA,11,,,1,,";
     expect(() => importCatalogCsv(csv, [], () => "item-new")).toThrow("Duplicate SKU on row 3");

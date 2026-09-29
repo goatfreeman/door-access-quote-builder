@@ -1,6 +1,7 @@
 import type { CatalogItem } from "./types";
+import { catalogCsvHeader } from "./catalog-csv";
 
-const requiredHeaders = ["name", "sku", "category", "unit", "price", "adi", "msrp", "inventory", "link", "notes"] as const;
+const requiredHeaders = catalogCsvHeader;
 const maxDatabaseMoney = 9_999_999_999.99;
 const maxDatabaseInteger = 2_147_483_647;
 
@@ -51,7 +52,7 @@ export function importCatalogCsv(
       id: currentItem?.id ?? createId(),
       name: required(value.name, "name", rowNumber),
       sku: value.sku,
-      category: required(value.category, "category", rowNumber),
+      category: value.category || "Uncategorized",
       unit: required(value.unit, "unit", rowNumber),
       unitPrice: money(value.price, "price", rowNumber, true) ?? 0,
       adi: value.adi || undefined,
