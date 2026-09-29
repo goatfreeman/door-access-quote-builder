@@ -38,10 +38,10 @@ export function ValidationWorkspace() {
     fetch("/api/validation/codex", { cache: "no-store" })
       .then(async (response) => {
         const payload = (await response.json()) as StatusResponse & { error?: string };
-        if (!response.ok) throw new Error(payload.error || "Could not read Codex status");
+        if (!response.ok) throw new Error(payload.error || "Could not read validation status");
         setStatus(payload);
       })
-      .catch((statusError) => setError(statusError instanceof Error ? statusError.message : "Could not read Codex status"));
+      .catch((statusError) => setError(statusError instanceof Error ? statusError.message : "Could not read validation status"));
   }, []);
 
   const submit = async (event: FormEvent) => {
@@ -95,8 +95,8 @@ export function ValidationWorkspace() {
         <section className="panel">
           <div className="panel-header">
             <div>
-              <h2>Codex connection</h2>
-              <p>The server checks the separately authorized Codex CLI session. It does not read or store account credentials.</p>
+              <h2>Hosted validation connection</h2>
+              <p>Reviews use the OpenAI API with web search. Access is verified when a review runs.</p>
             </div>
             <span className={`rounded-full border px-3 py-1 text-xs font-black ${ready ? statusClasses.CONFIRMED : statusClasses.OPEN}`}>
               {status === null ? "CHECKING" : ready ? "READY" : "OPEN"}
@@ -104,7 +104,7 @@ export function ValidationWorkspace() {
           </div>
           <div className="grid gap-2 p-4 text-sm text-stone-700 sm:grid-cols-3">
             <p><strong className="text-stone-950">Feature:</strong> {status?.enabled ? "Enabled" : "Disabled"}</p>
-            <p><strong className="text-stone-950">CLI:</strong> {status?.installed ? status.version : "Not available"}</p>
+            <p><strong className="text-stone-950">Provider:</strong> {status?.installed ? "OpenAI" : "Not available"}</p>
             <p><strong className="text-stone-950">Account:</strong> {status?.accountDetail ?? "Checking"}</p>
           </div>
         </section>
@@ -142,7 +142,7 @@ export function ValidationWorkspace() {
                 <Search size={17} />
                 {running ? "Running three-stage review…" : "Run Compatibility Review"}
               </button>
-              {!ready ? <p className="text-sm font-bold text-amber-800">Set `CODEX_VALIDATION_ENABLED=true` and authorize the Codex CLI on this server.</p> : null}
+              {!ready ? <p className="text-sm font-bold text-amber-800">Ask your administrator to enable hosted validation and configure its server API key.</p> : null}
               {error ? <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-900">{error}</p> : null}
             </div>
           </form>

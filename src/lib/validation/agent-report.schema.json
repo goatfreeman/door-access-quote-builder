@@ -1,11 +1,10 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
   "required": ["role", "status", "summary", "findings", "sources"],
   "properties": {
-    "role": { "enum": ["researcher", "verifier", "tester"] },
-    "status": { "enum": ["CONFIRMED", "ASSUMED", "OPEN", "CONFLICT", "BLOCKED", "NOT APPLICABLE"] },
+    "role": { "type": "string", "enum": ["researcher", "verifier", "tester"] },
+    "status": { "type": "string", "enum": ["CONFIRMED", "ASSUMED", "OPEN", "CONFLICT", "BLOCKED", "NOT APPLICABLE"] },
     "summary": { "type": "string" },
     "findings": {
       "type": "array",
@@ -16,7 +15,7 @@
         "properties": {
           "title": { "type": "string" },
           "detail": { "type": "string" },
-          "status": { "enum": ["CONFIRMED", "ASSUMED", "OPEN", "CONFLICT", "BLOCKED", "NOT APPLICABLE"] },
+          "status": { "type": "string", "enum": ["CONFIRMED", "ASSUMED", "OPEN", "CONFLICT", "BLOCKED", "NOT APPLICABLE"] },
           "affectedItems": { "type": "array", "items": { "type": "string" } },
           "evidence": { "type": "array", "items": { "type": "string" } },
           "recommendedAction": { "type": "string" }

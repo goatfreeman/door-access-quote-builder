@@ -25,7 +25,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ resou
   if (!isApiResource(resource)) return Response.json({ error: "Unknown resource" }, { status: 404 });
 
   try {
-    const result = await updateResource(resource, id, await request.json().catch(() => null), user);
+    const result = await updateResource(resource, id, await request.json().catch(() => null), user, request.headers);
     if (result === "forbidden") return Response.json({ error: "Forbidden" }, { status: 403 });
     if (!result) return Response.json({ error: "Not found" }, { status: 404 });
     return Response.json({ data: result });

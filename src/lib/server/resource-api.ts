@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { sessionIpAddress } from "./session-ip";
 import type { SessionUser } from "@/lib/auth-types";
 import type { CatalogItem, DebugLogEntry, DraftQuote, QuoteTemplate, SavedQuote, UserSessionRecord } from "@/lib/types";
 import { readCollection, writeCollection, type StoreCollection } from "@/lib/server/nosql-store";
@@ -29,10 +30,10 @@ export async function getResource(resource: ApiResourceName, id: string, user: S
   return records.find((record) => record.id === id) ?? null;
 }
 
-export async function createResource(resource: ApiResourceName, body: unknown, user: SessionUser) {
+export async function createResource(resource: ApiResourceName, body: unknown, user: SessionUser, headers?: Headers) {
   const records = await readResource(resource);
   const now = new Date().toISOString();
-  const next = normalizeRecord(resource, body, user, now);
+  const next = normalizeRecord(resource, body, user, now, headers);
   if (records.some((record) => record.id === next.id)) {
     throw new Error(`${resource} record already exists`);
   }
@@ -40,7 +41,7 @@ export async function createResource(resource: ApiResourceName, body: unknown, u
   return next;
 }
 
-export async function updateResource(resource: ApiResourceName, id: string, body: unknown, user: SessionUser) {
+export async function updateResource(resource: ApiResourceName, id: string, body: unknown, user: SessionUser, headers?: Headers) {
   const records = await readResource(resource);
   const index = records.findIndex((record) => record.id === id);
   if (index < 0) return null;
@@ -48,16 +49,29 @@ export async function updateResource(resource: ApiResourceName, id: string, body
   if (!canWriteRecord(resource, current, user)) return "forbidden" as const;
 
   const patch = isObject(body) ? body : {};
-  const updated = {
-    ...current,
-    ...patch,
-    id: current.id,
-    updatedAt: "updatedAt" in current ? new Date().toISOString() : (patch.updatedAt as string | undefined),
-  } as ResourceRecord;
+  const now = new Date().toISOString();
+  const updated = resource === "sessions"
+    ? updateSessionRecord(current as UserSessionRecord, patch, headers, now)
+    : {
+      ...current,
+      ...patch,
+      id: current.id,
+      updatedAt: "updatedAt" in current ? now : (patch.updatedAt as string | undefined),
+    } as ResourceRecord;
   const next = [...records];
   next[index] = updated;
   await writeResource(resource, next);
   return updated;
+}
+
+function updateSessionRecord(current: UserSessionRecord, patch: Record<string, unknown>, headers: Headers | undefined, now: string): UserSessionRecord {
+  return {
+    ...current,
+    deviceName: stringOr(patch.deviceName, current.deviceName),
+    lastSeenAt: now,
+    endedAt: current.endedAt ?? (typeof patch.endedAt === "string" && patch.endedAt.trim() ? now : undefined),
+    ipAddress: sessionIpAddress(headers),
+  };
 }
 
 export async function deleteResource(resource: ApiResourceName, id: string, user: SessionUser) {
@@ -89,7 +103,7 @@ async function writeResource(resource: ApiResourceName, records: ResourceRecord[
   await writeCollection(resource as StoreCollection, records);
 }
 
-function normalizeRecord(resource: ApiResourceName, body: unknown, user: SessionUser, now: string): ResourceRecord {
+function normalizeRecord(resource: ApiResourceName, body: unknown, user: SessionUser, now: string, headers?: Headers): ResourceRecord {
   const value = isObject(body) ? body : {};
   const id = typeof value.id === "string" && value.id.trim() ? value.id : `${resource}-${randomUUID()}`;
 
@@ -98,7 +112,7 @@ function normalizeRecord(resource: ApiResourceName, body: unknown, user: Session
   }
 
   if (resource === "sessions") {
-    return { ...value, id, userId: user.id, userName: user.name, createdAt: stringOr(value.createdAt, now), lastSeenAt: now } as UserSessionRecord;
+    return { ...value, id, ipAddress: sessionIpAddress(headers), userId: user.id, userName: user.name, createdAt: stringOr(value.createdAt, now), lastSeenAt: now } as UserSessionRecord;
   }
 
   if (resource === "quotes") {

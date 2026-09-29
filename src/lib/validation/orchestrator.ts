@@ -45,7 +45,7 @@ function reconcileStatus(...reports: AgentReport[]): EvidenceStatus {
 
 async function runChecked(role: AgentRole, prompt: string, runAgent: AgentRunner) {
   const report = await runAgent(role, prompt);
-  if (report.role !== role) throw new Error(`Codex agent role mismatch: expected ${role}, got ${report.role}`);
+  if (report.role !== role) throw new Error(`Validation agent role mismatch: expected ${role}, got ${report.role}`);
   return report;
 }
 

@@ -116,6 +116,7 @@ export type UserSessionRecord = {
   userName: string;
   deviceId: string;
   deviceName: string;
+  ipAddress?: string;
   createdAt: string;
   lastSeenAt: string;
   endedAt?: string;
