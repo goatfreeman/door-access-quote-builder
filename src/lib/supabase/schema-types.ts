@@ -37,6 +37,7 @@ export type Database = {
           msrp: number | null;
           vendor: string | null;
           inventory: number | null;
+          link: string | null;
           notes: string | null;
           created_by: string | null;
           updated_by: string | null;

@@ -118,10 +118,10 @@ When a user adds an individual catalog item to a quote, the quote workspace star
 Administrators can import catalog items from `/admin` with this exact CSV header:
 
 ```text
-name,sku,category,unit,price,adi,msrp,inventory,notes
+name,sku,category,unit,price,adi,msrp,inventory,link,notes
 ```
 
-The import adds new SKUs and updates existing SKUs without changing their record identifiers. The `notes` value can contain the item link. Duplicate headers, duplicate SKUs, incorrect row widths, malformed quoting, and invalid or out-of-range numeric values are rejected. The import updates only the affected database rows and preserves catalog fields that are outside the CSV contract. Apply the `catalog_items.unit`, `catalog_items.adi`, case-insensitive SKU index, and `import_catalog_items` function in `docs/supabase-schema.sql` before using this feature with an existing Supabase database.
+The import adds new SKUs and updates existing SKUs without changing their record identifiers. The `link` value stores the manufacturer or distributor item URL. The `notes` value stores item notes. Duplicate headers, duplicate SKUs, incorrect row widths, malformed quoting, and invalid or out-of-range numeric values are rejected. The import updates only the affected database rows and preserves catalog fields that are outside the CSV contract. Apply the `catalog_items.unit`, `catalog_items.adi`, `catalog_items.link`, case-insensitive SKU index, and `import_catalog_items` function in `docs/supabase-schema.sql` before using this feature with an existing Supabase database.
 
 The current adapter uses a separately authorized Codex CLI session on the application server. The application does not inspect or retain Codex credential files. Enable the adapter only on a controlled local or self-hosted server:
 

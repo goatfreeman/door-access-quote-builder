@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-const csvHeader = "name,sku,category,unit,price,adi,msrp,inventory,notes";
+const csvHeader = "name,sku,category,unit,price,adi,msrp,inventory,link,notes";
 
 export function formatImportFailure(status: number, _statusText: string, responseText: string, requestId?: string | null) {
   let payload: { error?: unknown; stage?: unknown } = {};
@@ -97,7 +97,7 @@ export function AdminItemImport({ onImported = () => window.location.reload() }:
             type="file"
           />
         </label>
-        <p className="text-xs text-stone-600">The notes column can contain the manufacturer or distributor item link. Duplicate SKUs in one file are rejected.</p>
+        <p className="text-xs text-stone-600">The link column can contain the manufacturer or distributor item URL. The notes column is for item notes. Duplicate SKUs in one file are rejected.</p>
         {message ? <p className="rounded-lg bg-teal-50 p-3 text-sm font-bold text-teal-900">{message}</p> : null}
         {error ? <p className="rounded-lg bg-red-50 p-3 text-sm font-bold text-red-900">{error}</p> : null}
         <button className="button-primary w-fit" disabled={!file || busy} type="submit">

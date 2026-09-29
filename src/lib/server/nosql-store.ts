@@ -87,6 +87,7 @@ async function readSupabaseItems(supabase: SupabaseClient): Promise<CatalogItem[
     msrp: nullableNumber(row.msrp),
     vendor: row.vendor ?? undefined,
     inventory: nullableNumber(row.inventory),
+    link: row.link ?? undefined,
     notes: row.notes ?? undefined,
     deletedAt: row.deleted_at ?? undefined,
   }));
@@ -112,6 +113,7 @@ function catalogItemRows(items: CatalogItem[]) {
     msrp: item.msrp ?? null,
     vendor: item.vendor ?? null,
     inventory: item.inventory ?? null,
+    link: item.link ?? null,
     notes: item.notes ?? null,
     deleted_at: item.deletedAt ?? null,
   }));
@@ -128,6 +130,7 @@ function catalogImportRows(items: CatalogItem[]) {
     adi: item.adi ?? null,
     msrp: item.msrp ?? null,
     inventory: item.inventory ?? null,
+    link: item.link ?? null,
     notes: item.notes ?? null,
     deleted_at: null,
   }));
