@@ -1539,50 +1539,14 @@ export function TakeoffStageBar({ currentStep, onStep }: { currentStep: QuoteSte
 
 export function QuickQuoteBuilderSkeleton() {
   return (
-    <main className="min-h-screen bg-stone-100 text-stone-950" aria-label="Loading estimating desk" aria-busy="true">
-      <header className="border-b border-stone-700 bg-stone-900 px-4 py-3 text-white">
-        <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <div className="grid size-10 place-items-center rounded-sm border border-teal-500 bg-teal-700 text-xl font-black">C</div>
-            <div>
-              <p className="text-lg font-black leading-tight">Estimating Desk</p>
-              <p className="text-xs text-stone-300">Equipment takeoff and quote control</p>
-            </div>
-          </div>
-          <div className="h-8 w-44 animate-pulse rounded-sm bg-stone-700" />
+    <main className="grid min-h-screen place-items-center bg-stone-100 px-6 text-stone-950" aria-label="Loading estimating desk" aria-busy="true">
+      <section className="grid justify-items-center gap-4 text-center" role="status" aria-live="polite">
+        <div className="grid size-12 place-items-center rounded-sm border border-teal-500 bg-teal-700 text-2xl font-black text-white">C</div>
+        <div>
+          <h1 className="text-xl font-black">Estimating Desk</h1>
+          <p className="mt-1 text-sm font-medium text-stone-600">Loading quote workspace</p>
         </div>
-      </header>
-      <div className="takeoff-stage-bar" aria-hidden="true">
-        <span className="takeoff-stage takeoff-stage-active">1 Equipment</span>
-        <span className="takeoff-stage">2 Pricing &amp; scope</span>
-        <span className="takeoff-stage">3 Review &amp; issue</span>
-      </div>
-      <section className="takeoff-loading-grid">
-        <aside className="takeoff-loading-pane hidden xl:block">
-          <div className="takeoff-pane-head"><strong>Equipment index</strong><small>Search by description or part number.</small></div>
-          <div className="p-3"><div className="h-10 animate-pulse rounded-sm bg-stone-200" /></div>
-          <div className="border-t border-stone-200">
-            {[0, 1, 2, 3, 4, 5].map((item) => <div key={item} className="grid grid-cols-[1fr_36px] gap-3 border-b border-stone-200 p-3"><div><div className="h-4 w-3/4 animate-pulse bg-stone-300" /><div className="mt-2 h-3 w-1/2 animate-pulse bg-stone-200" /></div><div className="size-8 animate-pulse bg-teal-100" /></div>)}
-          </div>
-        </aside>
-        <section className="takeoff-loading-pane">
-          <div className="takeoff-pane-head flex items-center justify-between"><div><strong>Quote equipment</strong><small>Loading equipment schedule</small></div><div className="h-6 w-24 animate-pulse bg-stone-200" /></div>
-          <div className="quote-schedule-columns">
-            <span>Description / part number</span><span>Type</span><span>Qty</span><span>Unit sell</span><span>Extension</span><span />
-          </div>
-          <div>
-            {[0, 1, 2, 3, 4, 5, 6].map((item) => <div key={item} className="takeoff-loading-row"><div><div className="h-4 w-3/4 animate-pulse bg-stone-300" /><div className="mt-1 h-3 w-1/2 animate-pulse bg-stone-200" /></div><div className="h-3 w-16 animate-pulse bg-stone-200" /><div className="h-4 animate-pulse bg-stone-200" /><div className="h-4 animate-pulse bg-stone-200" /><div className="h-4 animate-pulse bg-stone-300" /></div>)}
-          </div>
-        </section>
-        <aside className="takeoff-loading-pane hidden 2xl:block">
-          <div className="takeoff-pane-head"><strong>Compatibility ledger</strong><small>Exceptions before quote release</small></div>
-          <div className="grid grid-cols-4 border-b border-stone-200 bg-stone-50 p-2">
-            {[0, 1, 2, 3].map((item) => <div key={item} className="mx-1 h-9 animate-pulse bg-stone-200" />)}
-          </div>
-          <div className="space-y-2 p-3">
-            {[0, 1, 2].map((item) => <div key={item} className="h-20 animate-pulse border border-stone-200 bg-stone-50" />)}
-          </div>
-        </aside>
+        <div className="size-7 animate-spin rounded-full border-2 border-stone-300 border-t-teal-700 motion-reduce:animate-none" aria-hidden="true" />
       </section>
     </main>
   );
@@ -1875,7 +1839,7 @@ function CartDropdown({
   );
 }
 
-function CatalogPanel({
+export function CatalogPanel({
   items,
   templates,
   allCategories,
@@ -1908,7 +1872,7 @@ function CatalogPanel({
     return templates.filter((template) => normalizeSearchValue(`${template.name} ${template.description}`).includes(normalizedSearch));
   }, [search, templates]);
   return (
-    <aside className="panel catalog-ledger flex min-h-[70dvh] flex-col overflow-hidden lg:h-full lg:min-h-0">
+    <aside className="panel catalog-ledger flex flex-col overflow-hidden">
       <div className="takeoff-pane-head">
         <div>
           <h2>Equipment index</h2>
@@ -1932,7 +1896,7 @@ function CatalogPanel({
           </button>
         </div>
         {catalogMode === "items" && filterOpen ? (
-          <div className="grid grid-cols-2 gap-2 rounded-lg border border-stone-200 bg-stone-50 p-2">
+          <div className="catalog-category-filter grid max-h-48 grid-cols-2 gap-2 overflow-y-auto rounded-lg border border-stone-200 bg-stone-50 p-2">
             {hasCategories ? (
               categories.map((item) => (
                 <button
@@ -1961,11 +1925,11 @@ function CatalogPanel({
             <strong>{visibleTemplates.length}</strong>
           </div>
         )}
-        <div className="grid min-h-0 content-start gap-2 overflow-auto pr-1">
+        <div className="catalog-ledger-results grid min-h-0 content-start gap-2 overflow-y-auto pr-1" role="list" aria-label="Equipment index results">
           {catalogMode === "items" ? (
             items.length ? (
               items.map((item) => (
-                <article key={item.id} className="catalog-ledger-row">
+                <article key={item.id} className="catalog-ledger-row" role="listitem">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="font-black">{item.name}</p>
@@ -1986,7 +1950,7 @@ function CatalogPanel({
             )
           ) : visibleTemplates.length ? (
             visibleTemplates.map((template) => (
-              <article key={template.id} className="rounded-lg border border-stone-200 bg-white p-3">
+              <article key={template.id} className="rounded-lg border border-stone-200 bg-white p-3" role="listitem">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="truncate font-black">{template.name || "Unnamed template"}</p>

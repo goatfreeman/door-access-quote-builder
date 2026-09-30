@@ -144,18 +144,6 @@ summary {
     @apply mt-0.5 block text-xs font-medium text-stone-500;
   }
 
-  .takeoff-loading-grid {
-    @apply mx-auto grid min-h-[calc(100dvh-106px)] w-full max-w-[1600px] grid-cols-1 gap-3 p-3 xl:grid-cols-[300px_minmax(0,1fr)] 2xl:grid-cols-[300px_minmax(720px,1fr)_300px];
-  }
-
-  .takeoff-loading-pane {
-    @apply min-w-0 overflow-hidden border border-stone-300 bg-white;
-  }
-
-  .takeoff-loading-row {
-    @apply grid min-h-14 grid-cols-[minmax(180px,2fr)_minmax(80px,.8fr)_45px_80px_90px] items-center gap-3 border-b border-stone-200 px-3;
-  }
-
   .quote-takeoff-grid {
     @apply xl:grid-cols-[300px_minmax(0,1fr)] 2xl:grid-cols-[300px_minmax(720px,1fr)_300px];
   }
@@ -171,6 +159,17 @@ summary {
 
   .catalog-ledger-row {
     @apply border border-stone-300 bg-white p-3 transition hover:border-teal-700 hover:bg-teal-50/30;
+  }
+
+  .catalog-ledger {
+    height: calc(100dvh - 8rem);
+    min-height: 28rem;
+    max-height: 52rem;
+  }
+
+  .catalog-ledger-results {
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
   }
 
   .catalog-ledger-category {
@@ -281,16 +280,6 @@ summary {
 }
 
 @media (max-width: 767px) {
-  .takeoff-loading-row {
-    grid-template-columns: minmax(0, 1fr) 42px;
-  }
-
-  .takeoff-loading-row > :nth-child(2),
-  .takeoff-loading-row > :nth-child(4),
-  .takeoff-loading-row > :nth-child(5) {
-    display: none;
-  }
-
   .quote-schedule-row {
     grid-template-columns: minmax(0, 1fr) auto auto 18px;
   }
