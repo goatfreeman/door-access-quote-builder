@@ -1347,10 +1347,14 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
 
       {menuOpen && !isClientView ? <MobileMenu nav={nav} view={view} setView={navigateToView} goToQuote={goToQuote} close={() => setMenuOpen(false)} onSignOut={signOut} onSettingsHoldStart={startSettingsHold} onSettingsHoldEnd={cancelSettingsHold} /> : null}
 
-      <section className={`mx-auto grid min-h-[calc(100dvh-96px)] max-w-[1600px] items-stretch gap-3 px-3 py-3 sm:px-4 ${view === "quote" && quoteStep !== "pick" && quoteStep !== "finalize" ? "quote-takeoff-grid" : ""}`}>
-        {view === "home" ? <HomePage user={sessionUser} meta={meta} lines={activeLines} total={totals.total} drafts={userDraftQuotes} onContinue={goToQuote} onLoadDraft={loadDraftQuote} /> : null}
+      <section className={`mx-auto grid min-h-[calc(100dvh-96px)] max-w-[1600px] items-stretch gap-3 px-3 py-3 sm:px-4 ${view === "quote" ? "quote-shell-grid" : ""} ${view === "quote" && quoteStep !== "pick" && quoteStep !== "finalize" ? "quote-takeoff-grid" : ""}`}>
+        {view === "home" ? <HomePage user={sessionUser} meta={meta} lines={activeLines} total={totals.total} drafts={userDraftQuotes} onContinue={() => {
+          setQuoteStep(quoteEntryStep(activeLines.length > 0 || Boolean(meta.customer || meta.project)));
+          goToQuote();
+        }} onLoadDraft={loadDraftQuote} /> : null}
         {view === "quote" ? (
           <>
+            <TakeoffStageBar currentStep={quoteStep} onStep={setQuoteStep} />
             {quoteStep !== "pick" && quoteStep !== "finalize" ? (
               <CatalogPanel
                 items={visibleItems}
@@ -1506,81 +1510,79 @@ function previousStep(step: QuoteStep): QuoteStep {
   return "pick";
 }
 
-function QuoteStageProgress({ steps, currentStep, setStep, dark = false }: { steps: QuoteStep[]; currentStep: QuoteStep; setStep: (step: QuoteStep) => void; dark?: boolean }) {
+export function quoteEntryStep(hasUnsavedQuote: boolean): QuoteStep {
+  return hasUnsavedQuote ? "customize" : "pick";
+}
+
+export function TakeoffStageBar({ currentStep, onStep }: { currentStep: QuoteStep; onStep: (step: QuoteStep) => void }) {
+  const stages: Array<{ label: string; target: QuoteStep; active: boolean }> = [
+    { label: "1 Equipment", target: currentStep === "pick" ? "pick" : "customize", active: currentStep === "pick" || currentStep === "customize" },
+    { label: "2 Pricing & scope", target: "review", active: currentStep === "review" },
+    { label: "3 Review & issue", target: "finalize", active: currentStep === "finalize" },
+  ];
+
   return (
-    <div className="grid grid-cols-[auto_1fr_auto_1fr_auto_1fr_auto] items-start gap-2">
-      {steps.map((step, index) => {
-        const isActive = currentStep === step;
-        return (
-          <div key={step} className="contents">
-            <button className="group grid justify-items-center gap-1" onClick={() => setStep(step)} aria-current={isActive ? "step" : undefined}>
-              <span className={`grid size-9 place-items-center rounded-full border text-sm font-black transition ${isActive ? "border-teal-600 bg-teal-700 text-white" : dark ? "border-stone-500 bg-stone-700 text-stone-100 group-hover:border-teal-400" : "border-stone-300 bg-white text-stone-600 group-hover:border-teal-700 group-hover:text-teal-800"}`}>
-                {index + 1}
-              </span>
-              <span className={`text-xs font-black capitalize ${isActive ? (dark ? "text-teal-300" : "text-teal-800") : dark ? "text-stone-300 group-hover:text-white" : "text-stone-500 group-hover:text-teal-800"}`}>{step}</span>
-            </button>
-            {index < steps.length - 1 ? <span className="mt-4 h-px min-w-5 bg-stone-300" /> : null}
-          </div>
-        );
-      })}
-    </div>
+    <nav className="takeoff-stage-bar" aria-label="Quote workflow">
+      {stages.map((stage) => (
+        <button
+          key={stage.label}
+          className={`takeoff-stage ${stage.active ? "takeoff-stage-active" : ""}`}
+          aria-current={stage.active ? "step" : undefined}
+          onClick={() => onStep(stage.target)}
+        >
+          {stage.label}
+        </button>
+      ))}
+    </nav>
   );
 }
 
-function QuickQuoteBuilderSkeleton() {
+export function QuickQuoteBuilderSkeleton() {
   return (
-    <main className="min-h-screen bg-stone-100 text-stone-950">
-      <header className="sticky top-0 z-40 border-b border-stone-200 bg-stone-100/95 px-4 py-3 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <div className="grid size-10 place-items-center rounded-lg bg-stone-900 text-xl font-black text-white">Q</div>
-            <div className="hidden min-w-0 xl:block">
-              <div className="h-6 w-56 animate-pulse rounded-md bg-stone-300" />
-              <div className="mt-2 h-4 w-72 animate-pulse rounded-md bg-stone-200" />
+    <main className="min-h-screen bg-stone-100 text-stone-950" aria-label="Loading estimating desk" aria-busy="true">
+      <header className="border-b border-stone-700 bg-stone-900 px-4 py-3 text-white">
+        <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <div className="grid size-10 place-items-center rounded-sm border border-teal-500 bg-teal-700 text-xl font-black">C</div>
+            <div>
+              <p className="text-lg font-black leading-tight">Estimating Desk</p>
+              <p className="text-xs text-stone-300">Equipment takeoff and quote control</p>
             </div>
           </div>
-          <div className="hidden items-center gap-2 md:flex">
-            {[0, 1, 2, 3, 4].map((item) => (
-              <div key={item} className="h-10 w-24 animate-pulse rounded-md bg-stone-200" />
-            ))}
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="size-10 animate-pulse rounded-md bg-stone-200" />
-            <div className="size-10 animate-pulse rounded-md bg-stone-200" />
-          </div>
+          <div className="h-8 w-44 animate-pulse rounded-sm bg-stone-700" />
         </div>
       </header>
-      <section className="mx-auto grid min-h-[calc(100dvh-96px)] max-w-7xl gap-4 px-4 py-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-        <aside className="hidden rounded-lg border border-stone-200 bg-white p-4 shadow-sm lg:block">
-          <div className="h-5 w-36 animate-pulse rounded-md bg-stone-300" />
-          <div className="mt-4 space-y-3">
-            {[0, 1, 2, 3, 4].map((item) => (
-              <div key={item} className="h-14 animate-pulse rounded-lg bg-stone-100" />
-            ))}
+      <div className="takeoff-stage-bar" aria-hidden="true">
+        <span className="takeoff-stage takeoff-stage-active">1 Equipment</span>
+        <span className="takeoff-stage">2 Pricing &amp; scope</span>
+        <span className="takeoff-stage">3 Review &amp; issue</span>
+      </div>
+      <section className="takeoff-loading-grid">
+        <aside className="takeoff-loading-pane hidden xl:block">
+          <div className="takeoff-pane-head"><strong>Equipment index</strong><small>Search by description or part number.</small></div>
+          <div className="p-3"><div className="h-10 animate-pulse rounded-sm bg-stone-200" /></div>
+          <div className="border-t border-stone-200">
+            {[0, 1, 2, 3, 4, 5].map((item) => <div key={item} className="grid grid-cols-[1fr_36px] gap-3 border-b border-stone-200 p-3"><div><div className="h-4 w-3/4 animate-pulse bg-stone-300" /><div className="mt-2 h-3 w-1/2 animate-pulse bg-stone-200" /></div><div className="size-8 animate-pulse bg-teal-100" /></div>)}
           </div>
         </aside>
-        <div className="grid min-h-[70vh] grid-rows-[auto_minmax(0,1fr)_auto] rounded-lg border border-stone-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-stone-200 pb-4">
-            <div>
-              <div className="h-7 w-48 animate-pulse rounded-md bg-stone-300" />
-              <div className="mt-2 h-4 w-80 max-w-[70vw] animate-pulse rounded-md bg-stone-200" />
-            </div>
-            <div className="h-10 w-28 animate-pulse rounded-md bg-teal-100" />
+        <section className="takeoff-loading-pane">
+          <div className="takeoff-pane-head flex items-center justify-between"><div><strong>Quote equipment</strong><small>Loading equipment schedule</small></div><div className="h-6 w-24 animate-pulse bg-stone-200" /></div>
+          <div className="quote-schedule-columns">
+            <span>Description / part number</span><span>Type</span><span>Qty</span><span>Unit sell</span><span>Extension</span><span />
           </div>
-          <div className="grid content-start gap-3 py-4 md:grid-cols-2 xl:grid-cols-3">
-            {[0, 1, 2, 3, 4, 5].map((item) => (
-              <div key={item} className="rounded-lg border border-stone-200 bg-stone-50 p-4">
-                <div className="h-5 w-3/4 animate-pulse rounded-md bg-stone-300" />
-                <div className="mt-3 h-4 w-1/2 animate-pulse rounded-md bg-stone-200" />
-                <div className="mt-5 h-9 w-full animate-pulse rounded-md bg-stone-200" />
-              </div>
-            ))}
+          <div>
+            {[0, 1, 2, 3, 4, 5, 6].map((item) => <div key={item} className="takeoff-loading-row"><div><div className="h-4 w-3/4 animate-pulse bg-stone-300" /><div className="mt-1 h-3 w-1/2 animate-pulse bg-stone-200" /></div><div className="h-3 w-16 animate-pulse bg-stone-200" /><div className="h-4 animate-pulse bg-stone-200" /><div className="h-4 animate-pulse bg-stone-200" /><div className="h-4 animate-pulse bg-stone-300" /></div>)}
           </div>
-          <div className="flex items-center justify-between border-t border-stone-200 pt-4">
-            <div className="h-5 w-32 animate-pulse rounded-md bg-stone-200" />
-            <div className="h-11 w-40 animate-pulse rounded-md bg-teal-700/25" />
+        </section>
+        <aside className="takeoff-loading-pane hidden 2xl:block">
+          <div className="takeoff-pane-head"><strong>Compatibility ledger</strong><small>Exceptions before quote release</small></div>
+          <div className="grid grid-cols-4 border-b border-stone-200 bg-stone-50 p-2">
+            {[0, 1, 2, 3].map((item) => <div key={item} className="mx-1 h-9 animate-pulse bg-stone-200" />)}
           </div>
-        </div>
+          <div className="space-y-2 p-3">
+            {[0, 1, 2].map((item) => <div key={item} className="h-20 animate-pulse border border-stone-200 bg-stone-50" />)}
+          </div>
+        </aside>
       </section>
     </main>
   );
@@ -1907,7 +1909,7 @@ function CatalogPanel({
   }, [search, templates]);
   return (
     <aside className="panel catalog-ledger flex min-h-[70dvh] flex-col overflow-hidden lg:h-full lg:min-h-0">
-      <div className="panel-header">
+      <div className="takeoff-pane-head">
         <div>
           <h2>Equipment index</h2>
           <p>{catalogMode === "items" ? "Search by description or part number." : "Add a standard system package."}</p>
@@ -2044,7 +2046,6 @@ function QuoteWorkspace(props: {
   onPrint: () => void;
   onEmail: () => void;
 }) {
-  const steps: QuoteStep[] = ["pick", "customize", "review", "finalize"];
   const [addedTemplateId, setAddedTemplateId] = useState<string | null>(null);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [templateConfigurator, setTemplateConfigurator] = useState<QuoteTemplate | null>(null);
@@ -2055,30 +2056,19 @@ function QuoteWorkspace(props: {
   };
 
   return (
-    <section className="grid min-h-0 gap-3 lg:h-full">
-      <div className="panel quote-ledger flex min-h-0 flex-col overflow-hidden">
-        <div className="panel-header">
+    <section className="grid min-h-0 lg:h-full">
+      <div className="quote-ledger flex min-h-0 flex-col overflow-hidden border border-stone-300 bg-white">
+        <div className="quote-ledger-head">
           <div>
-            <h2>Equipment schedule</h2>
-            <p>{props.step === "pick" ? "Start a takeoff or use a standard package." : "Build the takeoff. Resolve exceptions. Issue the quote."}</p>
+            <h2>{props.step === "pick" ? "Start estimate" : "Quote equipment"}</h2>
+            <p>{props.step === "pick" ? "Start a takeoff or use a standard package." : `${props.lines.length} lines · Base cost and sell price shown`}</p>
           </div>
-          <div className="hidden min-w-[360px] sm:grid sm:gap-2">
-            <QuoteStageProgress steps={steps} currentStep={props.step} setStep={props.setStep} dark />
-            <div className="flex items-center justify-end gap-3 border-t border-stone-600 pt-2 text-xs">
-              <span className="text-stone-300">Current quote</span>
-              <strong className="font-mono text-base tabular-nums text-white">{money.format(props.totals.total)}</strong>
-            </div>
+          <div className="text-right">
+            <span className="block text-[10px] font-black uppercase tracking-wide text-stone-500">Current quote</span>
+            <strong className="font-mono text-lg tabular-nums text-stone-950">{money.format(props.totals.total)}</strong>
           </div>
         </div>
-        <div className="flex min-h-0 flex-1 flex-col gap-4 p-4">
-          <div className="sm:hidden">
-            <QuoteStageProgress steps={steps} currentStep={props.step} setStep={props.setStep} />
-            <div className="mt-3 flex items-center justify-between border-y border-stone-300 bg-stone-50 px-3 py-2 text-sm">
-              <span className="font-bold text-stone-600">Current quote</span>
-              <strong className="font-mono tabular-nums">{money.format(props.totals.total)}</strong>
-            </div>
-          </div>
-
+        <div className="flex min-h-0 flex-1 flex-col gap-3 p-3">
           {showWorkspaceCompatibilityPanel(props.step) ? (
             <QuoteCompatibilityPanel
               currentQuoteSignature={quoteLineSignature(props.lines.filter((line) => !isLabor(line)))}
@@ -2146,7 +2136,7 @@ function QuoteWorkspace(props: {
           ) : null}
 
           {props.step === "customize" || props.step === "review" || props.step === "finalize" ? (
-            <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+            <div className="quote-ledger-schedule">
               <QuoteLines lines={props.lines} items={props.items} onAddItemToPackage={props.onAddItemToPackage} onUpdateLine={props.onUpdateLine} onRemoveLine={props.onRemoveLine} />
             </div>
           ) : null}
@@ -2155,7 +2145,7 @@ function QuoteWorkspace(props: {
             <FinalizePanel meta={props.meta} setMeta={props.setMeta} totals={props.totals} saveError={props.saveError} />
           ) : null}
           {props.step !== "pick" ? (
-            <div className="mt-auto flex flex-wrap items-center justify-between gap-2 rounded-lg border border-stone-200 bg-stone-50/95 p-3 shadow-sm backdrop-blur">
+            <div className="quote-ledger-footer">
               <button className="button-secondary" onClick={() => props.setStep(previousStep(props.step))}>
                 Back
               </button>
