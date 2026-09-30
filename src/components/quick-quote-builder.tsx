@@ -1233,7 +1233,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   }
 
   return (
-    <main className="min-h-screen bg-stone-100 text-stone-950">
+    <main className={`${view === "quote" ? "quote-screen" : "min-h-screen"} bg-stone-100 text-stone-950`}>
       <header className="sticky top-0 z-40 border-b border-stone-700 bg-stone-900 px-4 py-3 text-white">
         <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
@@ -1347,7 +1347,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
 
       {menuOpen && !isClientView ? <MobileMenu nav={nav} view={view} setView={navigateToView} goToQuote={goToQuote} close={() => setMenuOpen(false)} onSignOut={signOut} onSettingsHoldStart={startSettingsHold} onSettingsHoldEnd={cancelSettingsHold} /> : null}
 
-      <section className={`mx-auto grid min-h-[calc(100dvh-96px)] max-w-[1600px] items-stretch gap-3 px-3 py-3 sm:px-4 ${view === "quote" ? "quote-shell-grid" : ""} ${view === "quote" && quoteStep !== "pick" && quoteStep !== "finalize" ? "quote-takeoff-grid" : ""}`}>
+      <section className={`mx-auto grid max-w-[1600px] items-stretch gap-3 px-3 py-3 sm:px-4 ${view === "quote" ? "quote-shell-grid min-h-0 w-full" : "min-h-[calc(100dvh-96px)]"} ${view === "quote" && quoteStep !== "pick" && quoteStep !== "finalize" ? "quote-takeoff-grid" : ""}`}>
         {view === "home" ? <HomePage user={sessionUser} meta={meta} lines={activeLines} total={totals.total} drafts={userDraftQuotes} onContinue={() => {
           setQuoteStep(quoteEntryStep(activeLines.length > 0 || Boolean(meta.customer || meta.project)));
           goToQuote();
@@ -1757,7 +1757,7 @@ function CartDropdown({
   }, [lines]);
 
   return (
-    <div className="fixed inset-0 z-50 grid h-[100dvh] w-full max-w-[100vw] grid-rows-[auto_minmax(0,1fr)_auto_auto] gap-3 overflow-hidden rounded-none border border-stone-200 bg-white p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] text-stone-950 shadow-2xl sm:p-4 sm:pb-[calc(1rem+env(safe-area-inset-bottom))] md:absolute md:inset-auto md:right-0 md:top-12 md:h-auto md:max-h-[calc(100vh-7rem)] md:w-[min(390px,calc(100vw-1.5rem))] md:grid-rows-none md:overflow-auto md:rounded-lg md:pb-4">
+    <div className="fixed inset-0 z-50 grid h-[100dvh] w-full max-w-[100vw] grid-rows-[auto_minmax(0,1fr)_auto_auto] gap-3 overflow-hidden rounded-none border border-stone-200 bg-white p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] text-stone-950 shadow-2xl sm:p-4 sm:pb-[calc(1rem+env(safe-area-inset-bottom))] md:absolute md:inset-auto md:right-0 md:top-12 md:h-[min(680px,calc(100dvh-7rem))] md:w-[min(390px,calc(100vw-1.5rem))] md:grid-rows-[auto_minmax(0,1fr)_auto_auto] md:overflow-hidden md:rounded-lg md:pb-4">
       <div className="flex items-center justify-between">
         <div>
           <p className="font-black">Quote lines</p>
@@ -1880,15 +1880,15 @@ export function CatalogPanel({
         </div>
         <PackagePlus size={20} />
       </div>
-      <div className="grid min-h-0 flex-1 grid-rows-[auto_auto_auto_minmax(0,1fr)] gap-3 p-3">
-        <div className="grid grid-cols-2 gap-2 rounded-lg border border-stone-200 bg-stone-50 p-1">
+      <div className="catalog-ledger-body catalog-ledger-controls flex min-h-0 flex-1 flex-col gap-3 p-3">
+        <div className="grid shrink-0 grid-cols-2 gap-2 rounded-lg border border-stone-200 bg-stone-50 p-1">
           <button className={`chip justify-center ${catalogMode === "items" ? "chip-active" : ""}`} onClick={() => setCatalogMode("items")}>
             Items
           </button>
           <button className={`chip justify-center ${catalogMode === "templates" ? "chip-active" : ""}`} onClick={() => setCatalogMode("templates")}>
             Templates
           </button>
-        </div>
+          </div>
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
           <input className="input" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={catalogMode === "items" ? "Search items or SKU" : "Search templates"} />
           <button className={`icon-button ${filterOpen ? "border-teal-700 text-teal-800" : ""}`} onClick={() => setFilterOpen((open) => !open)} aria-label="Filter categories" disabled={catalogMode === "templates"}>
@@ -1896,7 +1896,7 @@ export function CatalogPanel({
           </button>
         </div>
         {catalogMode === "items" && filterOpen ? (
-          <div className="catalog-category-filter grid max-h-48 grid-cols-2 gap-2 overflow-y-auto rounded-lg border border-stone-200 bg-stone-50 p-2">
+          <div className="catalog-category-control catalog-category-filter grid max-h-48 grid-cols-2 gap-2 overflow-y-auto rounded-lg border border-stone-200 bg-stone-50 p-2">
             {hasCategories ? (
               categories.map((item) => (
                 <button
@@ -1915,17 +1915,17 @@ export function CatalogPanel({
             )}
           </div>
         ) : catalogMode === "items" ? (
-          <div className="flex items-center justify-between rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm">
+          <div className="catalog-category-control flex items-center justify-between rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm">
             <span className="font-bold text-stone-600">Category</span>
             <strong>{hasCategories ? category : "None"}</strong>
           </div>
         ) : (
-          <div className="flex items-center justify-between rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm">
+          <div className="catalog-category-control flex items-center justify-between rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm">
             <span className="font-bold text-stone-600">Templates</span>
             <strong>{visibleTemplates.length}</strong>
           </div>
         )}
-        <div className="catalog-ledger-results grid min-h-0 content-start gap-2 overflow-y-auto pr-1" role="list" aria-label="Equipment index results">
+        <div className="catalog-ledger-results grid min-h-0 flex-1 content-start gap-2 overflow-y-auto pr-1" role="list" aria-label="Equipment index results">
           {catalogMode === "items" ? (
             items.length ? (
               items.map((item) => (
@@ -2020,8 +2020,8 @@ function QuoteWorkspace(props: {
   };
 
   return (
-    <section className="grid min-h-0 lg:h-full">
-      <div className="quote-ledger flex min-h-0 flex-col overflow-hidden border border-stone-300 bg-white">
+    <section className="quote-workspace grid h-full min-h-0">
+      <div className="quote-ledger flex h-full min-h-0 flex-col overflow-hidden border border-stone-300 bg-white">
         <div className="quote-ledger-head">
           <div>
             <h2>{props.step === "pick" ? "Start estimate" : "Quote equipment"}</h2>
@@ -2032,7 +2032,7 @@ function QuoteWorkspace(props: {
             <strong className="font-mono text-lg tabular-nums text-stone-950">{money.format(props.totals.total)}</strong>
           </div>
         </div>
-        <div className="flex min-h-0 flex-1 flex-col gap-3 p-3">
+        <div className={`flex min-h-0 flex-1 flex-col gap-3 p-3 ${props.step === "pick" || props.step === "finalize" ? "overflow-y-auto" : "overflow-hidden"}`}>
           {showWorkspaceCompatibilityPanel(props.step) ? (
             <QuoteCompatibilityPanel
               currentQuoteSignature={quoteLineSignature(props.lines.filter((line) => !isLabor(line)))}
@@ -2100,7 +2100,7 @@ function QuoteWorkspace(props: {
           ) : null}
 
           {props.step === "customize" || props.step === "review" || props.step === "finalize" ? (
-            <div className="quote-ledger-schedule">
+            <div className={`quote-ledger-schedule ${props.step === "finalize" ? "quote-ledger-schedule-static" : ""}`} role="region" aria-label="Quote cart items" tabIndex={0}>
               <QuoteLines lines={props.lines} items={props.items} onAddItemToPackage={props.onAddItemToPackage} onUpdateLine={props.onUpdateLine} onRemoveLine={props.onRemoveLine} />
             </div>
           ) : null}
@@ -2342,7 +2342,11 @@ function TemplateConfigureDialog({
   );
 }
 
-function QuoteLines({
+export function packageLineIds(lines: QuoteLine[]): string[] {
+  return lines.map((line) => line.lineId);
+}
+
+export function QuoteLines({
   lines,
   items,
   onAddItemToPackage,
@@ -2404,7 +2408,19 @@ function QuoteLines({
               <span className="font-mono font-black tabular-nums"><span className="sr-only">Quantity </span>{row.lines.reduce((sum, line) => sum + line.quantity, 0)}</span>
               <span className="font-mono text-stone-400"><span className="sr-only">Unit sell not applicable</span><span aria-hidden="true">—</span></span>
               <span className="font-mono font-black tabular-nums"><span className="sr-only">Extension </span>{money.format(row.lines.reduce((sum, line) => sum + lineTotal(line), 0))}</span>
-              <ChevronDown size={17} className="text-stone-500" />
+              <button
+                type="button"
+                className="grid size-8 place-items-center rounded-sm text-stone-500 hover:bg-red-50 hover:text-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-700"
+                aria-label={`Remove ${row.packageNickname?.trim() || row.packageName}`}
+                title="Remove complete template"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  packageLineIds(row.lines).forEach(onRemoveLine);
+                }}
+              >
+                <Trash2 size={17} />
+              </button>
             </summary>
             <div className="grid gap-2 border-t border-stone-300 bg-stone-50 p-3">
               <div className="grid gap-2">
