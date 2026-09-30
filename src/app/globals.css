@@ -18,6 +18,8 @@ body {
 body {
   margin: 0;
   font-family: var(--font-sans);
+  background: #f3f4f2;
+  color: #17201e;
 }
 
 button,
@@ -41,7 +43,7 @@ summary {
 
 @layer components {
   .panel {
-    @apply min-w-0 rounded-lg border border-stone-200 bg-white shadow-sm;
+    @apply min-w-0 rounded-sm border border-stone-300 bg-white;
   }
 
   .panel-header {
@@ -49,19 +51,19 @@ summary {
   }
 
   .panel-header h2 {
-    @apply text-xl font-black tracking-normal;
+    @apply text-lg font-black tracking-tight;
   }
 
   .panel-header p {
-    @apply mt-1 text-sm text-stone-600;
+    @apply mt-1 text-xs font-medium text-stone-600;
   }
 
   .input {
-    @apply min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium outline-none transition focus:border-teal-700 focus:ring-2 focus:ring-teal-700/20;
+    @apply min-h-11 w-full rounded-sm border border-stone-300 bg-white px-3 py-2 text-sm font-medium outline-none transition focus:border-teal-700 focus:ring-2 focus:ring-teal-700/20;
   }
 
   .textarea {
-    @apply min-h-24 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium outline-none transition focus:border-teal-700 focus:ring-2 focus:ring-teal-700/20;
+    @apply min-h-24 w-full rounded-sm border border-stone-300 bg-white px-3 py-2 text-sm font-medium outline-none transition focus:border-teal-700 focus:ring-2 focus:ring-teal-700/20;
   }
 
   .field {
@@ -73,19 +75,19 @@ summary {
   }
 
   .icon-button {
-    @apply inline-grid size-10 place-items-center rounded-lg border border-stone-200 bg-white text-stone-900 transition hover:border-teal-700 hover:text-teal-800;
+    @apply inline-grid size-10 place-items-center rounded-sm border border-stone-300 bg-white text-stone-900 transition hover:border-teal-700 hover:text-teal-800;
   }
 
   .button-primary {
-    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-teal-700 px-4 py-2 text-sm font-black text-white transition hover:bg-teal-800;
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-sm bg-teal-700 px-4 py-2 text-sm font-black text-white transition hover:bg-teal-800;
   }
 
   .button-secondary {
-    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-4 py-2 text-sm font-black text-stone-900 transition hover:border-teal-700 hover:text-teal-800;
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-sm border border-stone-300 bg-white px-4 py-2 text-sm font-black text-stone-900 transition hover:border-teal-700 hover:text-teal-800;
   }
 
   .button-ghost {
-    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-black text-stone-700 transition hover:bg-stone-100 hover:text-red-800;
+    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-sm px-3 py-2 text-sm font-black text-stone-700 transition hover:bg-stone-100 hover:text-red-800;
   }
 
   .nav-button {
@@ -102,6 +104,142 @@ summary {
 
   .chip-active {
     @apply border-teal-700 bg-teal-50 text-teal-900;
+  }
+
+  header .nav-button {
+    @apply text-stone-200 hover:border-stone-600 hover:bg-stone-800 hover:text-white;
+  }
+
+  header .nav-button-active {
+    @apply border-teal-500 bg-teal-900 text-white;
+  }
+
+  .quote-takeoff-grid {
+    @apply xl:grid-cols-[300px_minmax(0,1fr)] 2xl:grid-cols-[300px_minmax(720px,1fr)_300px];
+  }
+
+  .compatibility-rail {
+    @apply min-w-0 xl:col-span-2 2xl:col-span-1;
+  }
+
+  .catalog-ledger-row {
+    @apply border border-stone-300 bg-white p-3 transition hover:border-teal-700 hover:bg-teal-50/30;
+  }
+
+  .catalog-ledger .panel-header,
+  .quote-ledger .panel-header {
+    @apply border-stone-700 bg-stone-800 text-white;
+  }
+
+  .catalog-ledger .panel-header p,
+  .quote-ledger .panel-header p {
+    @apply text-stone-300;
+  }
+
+
+  .catalog-ledger-category {
+    @apply truncate border-l-2 border-teal-700 pl-2 text-xs font-bold text-stone-600;
+  }
+
+  .quote-schedule {
+    @apply grid overflow-hidden border border-stone-300 bg-white;
+  }
+
+  .quote-schedule-columns,
+  .quote-schedule-row {
+    grid-template-columns: minmax(210px, 2fr) minmax(100px, 0.8fr) 52px 92px 104px 18px;
+  }
+
+  .quote-schedule-columns {
+    @apply hidden gap-3 border-b border-stone-400 bg-stone-100 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-stone-500 md:grid;
+  }
+
+  .quote-schedule-row {
+    @apply grid cursor-pointer list-none items-center gap-3 px-3 py-3 text-sm;
+  }
+
+  .quote-schedule-group,
+  .quote-schedule-item {
+    @apply overflow-hidden border-b border-stone-300 last:border-b-0;
+  }
+
+  .quote-schedule-group > summary {
+    @apply border-l-4 border-teal-700 bg-teal-50/60;
+  }
+
+  .quote-schedule-item > summary {
+    @apply border-l-4 border-transparent bg-white hover:bg-stone-50;
+  }
+
+  .quote-schedule-type {
+    @apply truncate text-xs font-bold uppercase text-stone-500;
+  }
+
+  .compatibility-ledger {
+    @apply border border-stone-300 bg-white;
+  }
+
+  .compatibility-ledger-header {
+    @apply flex items-start justify-between gap-3 border-b border-stone-700 bg-stone-800 p-3 text-white;
+  }
+
+  .compatibility-ledger-title {
+    @apply text-sm font-black;
+  }
+
+  .compatibility-ledger-note {
+    @apply mt-1 text-xs text-stone-300;
+  }
+
+  .compatibility-ledger-count {
+    @apply shrink-0 border border-amber-400 bg-amber-100 px-2 py-1 text-[10px] font-black uppercase text-amber-950;
+  }
+
+  .compatibility-ledger-metrics {
+    @apply grid grid-cols-4 border-b border-stone-300 bg-stone-50;
+  }
+
+  .compatibility-ledger-metrics > div {
+    @apply grid gap-0.5 border-r border-stone-300 p-2 last:border-r-0;
+  }
+
+  .compatibility-ledger-metrics strong {
+    @apply font-mono text-lg tabular-nums;
+  }
+
+  .compatibility-ledger-metrics span {
+    @apply text-[10px] font-bold uppercase text-stone-500;
+  }
+
+  .compatibility-ledger-details > summary {
+    @apply cursor-pointer border-b border-stone-300 px-3 py-2 text-xs font-black text-stone-700 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-700;
+  }
+
+  .compatibility-ledger-results {
+    @apply max-h-[55dvh] overflow-y-auto p-2;
+  }
+
+  .compatibility-ledger-empty {
+    @apply border border-dashed border-stone-300 p-4 text-center text-xs font-bold text-stone-500;
+  }
+
+  .compatibility-ledger-boundary {
+    @apply border-t border-stone-300 bg-amber-50 px-3 py-2 text-xs font-black text-amber-950;
+  }
+
+  .compatibility-ledger-data {
+    @apply px-3 py-2 text-[10px] leading-relaxed text-stone-500;
+  }
+}
+
+@media (max-width: 767px) {
+  .quote-schedule-row {
+    grid-template-columns: minmax(0, 1fr) auto auto 18px;
+  }
+
+  .quote-schedule-row > :nth-child(2),
+  .quote-schedule-row > :nth-child(4) {
+    display: none;
   }
 }
 
