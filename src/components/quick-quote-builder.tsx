@@ -35,7 +35,8 @@ import { getSupabaseAuthClient } from "@/lib/supabase/auth-client";
 import type { SessionUser } from "@/lib/auth-types";
 import type { IntegrationPluginStatus } from "@/lib/plugins/types";
 import type { CatalogItem, DebugLogEntry, DraftQuote, ExportColumnKey, QuoteLine, QuoteMeta, QuoteTemplate, SavedQuote, ServiceTitanSettings, UserSessionRecord } from "@/lib/types";
-import { ItemVerificationPanel, quoteLineSignature, replaceItemVerificationEntry, type ItemVerificationEntry } from "@/components/item-verification-panel";
+import { quoteLineSignature, replaceItemVerificationEntry, type ItemVerificationEntry } from "@/components/item-verification-panel";
+import { QuoteCompatibilityPanel, showWorkspaceCompatibilityPanel } from "@/components/quote-compatibility-panel";
 import type { CompatibilityResult } from "@/lib/validation/domain";
 
 type View = "home" | "quote" | "items" | "templates" | "previous" | "settings" | "client";
@@ -1360,6 +1361,9 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
                 search={search}
                 setSearch={setSearch}
                 setCategory={setCategory}
+                itemVerifications={itemVerifications}
+                currentQuoteSignature={quoteLineSignature(activeLines.filter((line) => !isLabor(line)))}
+                onDismissItemVerification={(id) => setItemVerifications((current) => current.filter((entry) => entry.id !== id))}
                 onAdd={(item) => {
                   addItem(item);
                   setQuoteStep("customize");
@@ -1622,9 +1626,6 @@ function HomePage({ user, meta, lines, total, drafts, onContinue, onLoadDraft }:
         <button className="button-primary w-fit" onClick={onContinue}>
           Open Quote Workspace
         </button>
-        <a className="button-secondary w-fit" href="/validation">
-          Open Item Compatibility Review
-        </a>
       </div>
     </section>
   );
@@ -1875,6 +1876,9 @@ function CatalogPanel({
   search,
   setSearch,
   setCategory,
+  itemVerifications,
+  currentQuoteSignature,
+  onDismissItemVerification,
   onAdd,
   onAddTemplate,
 }: {
@@ -1886,6 +1890,9 @@ function CatalogPanel({
   search: string;
   setSearch: (value: string) => void;
   setCategory: (value: string) => void;
+  itemVerifications: ItemVerificationEntry[];
+  currentQuoteSignature: string;
+  onDismissItemVerification: (id: string) => void;
   onAdd: (item: CatalogItem) => void;
   onAddTemplate: (template: QuoteTemplate, jumpToCustomize?: boolean, selections?: TemplateItemSelection[]) => void;
 }) {
@@ -1907,7 +1914,7 @@ function CatalogPanel({
         </div>
         <PackagePlus size={20} />
       </div>
-      <div className="grid min-h-0 flex-1 grid-rows-[auto_auto_auto_minmax(0,1fr)] gap-3 p-4">
+      <div className="grid min-h-0 flex-1 grid-rows-[auto_auto_auto_auto_minmax(0,1fr)] gap-3 p-4">
         <div className="grid grid-cols-2 gap-2 rounded-lg border border-stone-200 bg-stone-50 p-1">
           <button className={`chip justify-center ${catalogMode === "items" ? "chip-active" : ""}`} onClick={() => setCatalogMode("items")}>
             Items
@@ -1952,6 +1959,11 @@ function CatalogPanel({
             <strong>{visibleTemplates.length}</strong>
           </div>
         )}
+        <QuoteCompatibilityPanel
+          currentQuoteSignature={currentQuoteSignature}
+          entries={itemVerifications}
+          onDismiss={onDismissItemVerification}
+        />
         <div className="grid min-h-0 content-start gap-2 overflow-auto pr-1">
           {catalogMode === "items" ? (
             items.length ? (
@@ -2064,11 +2076,13 @@ function QuoteWorkspace(props: {
             <QuoteStageProgress steps={steps} currentStep={props.step} setStep={props.setStep} />
           </div>
 
-          <ItemVerificationPanel
-            currentQuoteSignature={quoteLineSignature(props.lines.filter((line) => !isLabor(line)))}
-            entries={props.itemVerifications}
-            onDismiss={props.onDismissItemVerification}
-          />
+          {showWorkspaceCompatibilityPanel(props.step) ? (
+            <QuoteCompatibilityPanel
+              currentQuoteSignature={quoteLineSignature(props.lines.filter((line) => !isLabor(line)))}
+              entries={props.itemVerifications}
+              onDismiss={props.onDismissItemVerification}
+            />
+          ) : null}
 
           {props.step === "pick" ? (
             <div className="grid gap-4">
