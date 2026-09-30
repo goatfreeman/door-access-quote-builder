@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { QuoteCompatibilityPanel, showWorkspaceCompatibilityPanel } from "./quote-compatibility-panel";
+import { QuoteCompatibilityPanel, showWorkspaceCompatibilityPanel, summarizeCompatibilityEntries } from "./quote-compatibility-panel";
 import type { ItemVerificationEntry } from "./item-verification-panel";
 
 function render(entries: ItemVerificationEntry[] = []) {
@@ -14,11 +14,12 @@ function render(entries: ItemVerificationEntry[] = []) {
 }
 
 describe("QuoteCompatibilityPanel", () => {
-  it("tells users that compatibility checks run while they choose quote items", () => {
+  it("presents compatibility as a compact quote exception ledger", () => {
     const html = render();
 
-    expect(html).toContain("Equipment compatibility");
-    expect(html).toContain("Compatibility checks run automatically when you add catalog equipment to this quote.");
+    expect(html).toContain("Compatibility ledger");
+    expect(html).toContain("0 need review");
+    expect(html).toContain("Automated evidence does not approve the design.");
     expect(html).toContain("Choose an item to start the first check.");
   });
 
@@ -36,5 +37,49 @@ describe("QuoteCompatibilityPanel", () => {
   it("keeps compatibility feedback visible when equipment can change without the catalog", () => {
     expect(showWorkspaceCompatibilityPanel("finalize")).toBe(true);
     expect(showWorkspaceCompatibilityPanel("customize")).toBe(false);
+  });
+
+  it("summarizes checking, confirmed, and unresolved review entries", () => {
+    expect(summarizeCompatibilityEntries([
+      { id: "loading", phase: "loading", itemName: "Loading" },
+      { id: "notice", phase: "notice", itemName: "Notice", message: "OPEN" },
+      { id: "error", phase: "error", itemName: "Error", error: "Unavailable" },
+      {
+        id: "confirmed",
+        phase: "complete",
+        itemName: "Confirmed",
+        quoteSignature: "current",
+        result: {
+          request: { manufacturer: "Maker", sourcePartNumber: "PART", normalizedLookupKey: "PART", description: "Part", relatedItems: [], question: "Check" },
+          finalStatus: "CONFIRMED",
+          decisionNotice: "Review required.",
+          reports: [],
+        },
+      },
+      {
+        id: "stale",
+        phase: "complete",
+        itemName: "Stale",
+        quoteSignature: "old",
+        result: {
+          request: { manufacturer: "Maker", sourcePartNumber: "OLD", normalizedLookupKey: "OLD", description: "Old", relatedItems: [], question: "Check" },
+          finalStatus: "CONFIRMED",
+          decisionNotice: "Review required.",
+          reports: [],
+        },
+      },
+      {
+        id: "not-applicable",
+        phase: "complete",
+        itemName: "Not applicable",
+        quoteSignature: "current",
+        result: {
+          request: { manufacturer: "Maker", sourcePartNumber: "NA", normalizedLookupKey: "NA", description: "N/A", relatedItems: [], question: "Check" },
+          finalStatus: "NOT APPLICABLE",
+          decisionNotice: "Review required.",
+          reports: [],
+        },
+      },
+    ], "current")).toEqual({ checking: 1, confirmed: 1, notApplicable: 1, needReview: 3 });
   });
 });

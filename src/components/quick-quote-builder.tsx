@@ -1234,23 +1234,23 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
 
   return (
     <main className="min-h-screen bg-stone-100 text-stone-950">
-      <header className="sticky top-0 z-40 border-b border-stone-200 bg-stone-100/95 px-4 py-3 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
+      <header className="sticky top-0 z-40 border-b border-stone-700 bg-stone-900 px-4 py-3 text-white">
+        <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
             {!isClientView ? (
               <button className="icon-button md:hidden" onClick={() => setMenuOpen(true)} aria-label="Open menu">
                 <Menu size={19} />
               </button>
             ) : null}
-            <button className="grid size-10 place-items-center rounded-lg bg-stone-900 text-xl font-black text-white disabled:cursor-default" onClick={isClientView ? undefined : goToHome} disabled={isClientView} aria-label="Go to home page">
-              Q
+            <button className="grid size-10 place-items-center rounded-sm border border-teal-500 bg-teal-700 text-xl font-black text-white disabled:cursor-default" onClick={isClientView ? undefined : goToHome} disabled={isClientView} aria-label="Go to home page">
+              C
             </button>
             <button className="hidden min-w-0 text-left disabled:cursor-default xl:block" onClick={isClientView ? undefined : goToHome} disabled={isClientView} aria-label="Go to home page">
               <span className="flex min-w-0 flex-wrap items-center gap-2">
-                <h1 className="truncate text-lg font-black leading-tight sm:text-2xl">Quick Quote Builder</h1>
+                <h1 className="truncate text-lg font-black leading-tight sm:text-2xl">Estimating Desk</h1>
                 {!isProductionStage ? <span className="hidden rounded-full border border-amber-300 bg-amber-100 px-2 py-1 text-xs font-black uppercase tracking-normal text-amber-900 2xl:inline-flex">Dev Build</span> : null}
               </span>
-              <p className="hidden text-sm text-stone-600 2xl:block">Quote equipment, labor, templates, and saved jobs.</p>
+              <p className="hidden text-sm text-stone-300 2xl:block">Equipment takeoff and quote control</p>
             </button>
           </div>
           {!isClientView ? (
@@ -1313,7 +1313,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
                 {!isOnline || pendingOfflineWrites || notifications.length ? <span className="absolute right-2 top-2 size-2 rounded-full bg-red-700" /> : null}
               </button>
               {notificationOpen ? (
-                <div className="absolute right-0 top-12 z-50 w-80 rounded-lg border border-stone-200 bg-white p-4 shadow-xl">
+                <div className="absolute right-0 top-12 z-50 w-80 rounded-lg border border-stone-200 bg-white p-4 text-stone-950 shadow-xl">
                   <div className="flex items-center justify-between gap-3">
                     <p className="font-bold">Notifications</p>
                     {notifications.length ? (
@@ -1347,7 +1347,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
 
       {menuOpen && !isClientView ? <MobileMenu nav={nav} view={view} setView={navigateToView} goToQuote={goToQuote} close={() => setMenuOpen(false)} onSignOut={signOut} onSettingsHoldStart={startSettingsHold} onSettingsHoldEnd={cancelSettingsHold} /> : null}
 
-      <section className={`mx-auto grid min-h-[calc(100dvh-96px)] max-w-7xl items-stretch gap-4 px-4 py-4 ${view === "quote" && quoteStep !== "pick" && quoteStep !== "finalize" ? "lg:grid-cols-[320px_minmax(0,1fr)]" : ""}`}>
+      <section className={`mx-auto grid min-h-[calc(100dvh-96px)] max-w-[1600px] items-stretch gap-3 px-3 py-3 sm:px-4 ${view === "quote" && quoteStep !== "pick" && quoteStep !== "finalize" ? "quote-takeoff-grid" : ""}`}>
         {view === "home" ? <HomePage user={sessionUser} meta={meta} lines={activeLines} total={totals.total} drafts={userDraftQuotes} onContinue={goToQuote} onLoadDraft={loadDraftQuote} /> : null}
         {view === "quote" ? (
           <>
@@ -1361,9 +1361,6 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
                 search={search}
                 setSearch={setSearch}
                 setCategory={setCategory}
-                itemVerifications={itemVerifications}
-                currentQuoteSignature={quoteLineSignature(activeLines.filter((line) => !isLabor(line)))}
-                onDismissItemVerification={(id) => setItemVerifications((current) => current.filter((entry) => entry.id !== id))}
                 onAdd={(item) => {
                   addItem(item);
                   setQuoteStep("customize");
@@ -1400,6 +1397,15 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
                 setEmailPromptOpen(true);
               }}
             />
+            {quoteStep !== "pick" && quoteStep !== "finalize" ? (
+              <aside className="compatibility-rail">
+                <QuoteCompatibilityPanel
+                  currentQuoteSignature={quoteLineSignature(activeLines.filter((line) => !isLabor(line)))}
+                  entries={itemVerifications}
+                  onDismiss={(id) => setItemVerifications((current) => current.filter((entry) => entry.id !== id))}
+                />
+              </aside>
+            ) : null}
           </>
         ) : null}
 
@@ -1500,7 +1506,7 @@ function previousStep(step: QuoteStep): QuoteStep {
   return "pick";
 }
 
-function QuoteStageProgress({ steps, currentStep, setStep }: { steps: QuoteStep[]; currentStep: QuoteStep; setStep: (step: QuoteStep) => void }) {
+function QuoteStageProgress({ steps, currentStep, setStep, dark = false }: { steps: QuoteStep[]; currentStep: QuoteStep; setStep: (step: QuoteStep) => void; dark?: boolean }) {
   return (
     <div className="grid grid-cols-[auto_1fr_auto_1fr_auto_1fr_auto] items-start gap-2">
       {steps.map((step, index) => {
@@ -1508,10 +1514,10 @@ function QuoteStageProgress({ steps, currentStep, setStep }: { steps: QuoteStep[
         return (
           <div key={step} className="contents">
             <button className="group grid justify-items-center gap-1" onClick={() => setStep(step)} aria-current={isActive ? "step" : undefined}>
-              <span className={`grid size-9 place-items-center rounded-full border text-sm font-black transition ${isActive ? "border-teal-700 bg-teal-700 text-white" : "border-stone-300 bg-white text-stone-600 group-hover:border-teal-700 group-hover:text-teal-800"}`}>
+              <span className={`grid size-9 place-items-center rounded-full border text-sm font-black transition ${isActive ? "border-teal-600 bg-teal-700 text-white" : dark ? "border-stone-500 bg-stone-700 text-stone-100 group-hover:border-teal-400" : "border-stone-300 bg-white text-stone-600 group-hover:border-teal-700 group-hover:text-teal-800"}`}>
                 {index + 1}
               </span>
-              <span className={`text-xs font-black capitalize ${isActive ? "text-teal-800" : "text-stone-500 group-hover:text-teal-800"}`}>{step}</span>
+              <span className={`text-xs font-black capitalize ${isActive ? (dark ? "text-teal-300" : "text-teal-800") : dark ? "text-stone-300 group-hover:text-white" : "text-stone-500 group-hover:text-teal-800"}`}>{step}</span>
             </button>
             {index < steps.length - 1 ? <span className="mt-4 h-px min-w-5 bg-stone-300" /> : null}
           </div>
@@ -1785,13 +1791,13 @@ function CartDropdown({
   }, [lines]);
 
   return (
-    <div className="fixed inset-0 z-50 grid h-[100dvh] w-full max-w-[100vw] grid-rows-[auto_minmax(0,1fr)_auto_auto] gap-3 overflow-hidden rounded-none border border-stone-200 bg-white p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-2xl sm:p-4 sm:pb-[calc(1rem+env(safe-area-inset-bottom))] md:absolute md:inset-auto md:right-0 md:top-12 md:h-auto md:max-h-[calc(100vh-7rem)] md:w-[min(390px,calc(100vw-1.5rem))] md:grid-rows-none md:overflow-auto md:rounded-lg md:pb-4">
+    <div className="fixed inset-0 z-50 grid h-[100dvh] w-full max-w-[100vw] grid-rows-[auto_minmax(0,1fr)_auto_auto] gap-3 overflow-hidden rounded-none border border-stone-200 bg-white p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] text-stone-950 shadow-2xl sm:p-4 sm:pb-[calc(1rem+env(safe-area-inset-bottom))] md:absolute md:inset-auto md:right-0 md:top-12 md:h-auto md:max-h-[calc(100vh-7rem)] md:w-[min(390px,calc(100vw-1.5rem))] md:grid-rows-none md:overflow-auto md:rounded-lg md:pb-4">
       <div className="flex items-center justify-between">
         <div>
-          <p className="font-black">Shopping cart</p>
-          <p className="text-sm text-stone-500">{lines.length} lines</p>
+          <p className="font-black">Quote lines</p>
+          <p className="text-sm text-stone-500">{lines.length} schedule lines</p>
         </div>
-        <button className="icon-button md:hidden" onClick={onClose} aria-label="Close shopping cart">
+        <button className="icon-button md:hidden" onClick={onClose} aria-label="Close quote lines">
           <X size={18} />
         </button>
       </div>
@@ -1861,7 +1867,7 @@ function CartDropdown({
       </div>
       <TotalsCard totals={totals} />
       <button className="button-primary" onClick={onNext}>
-        Go to cart
+        Review quote
       </button>
     </div>
   );
@@ -1876,9 +1882,6 @@ function CatalogPanel({
   search,
   setSearch,
   setCategory,
-  itemVerifications,
-  currentQuoteSignature,
-  onDismissItemVerification,
   onAdd,
   onAddTemplate,
 }: {
@@ -1890,9 +1893,6 @@ function CatalogPanel({
   search: string;
   setSearch: (value: string) => void;
   setCategory: (value: string) => void;
-  itemVerifications: ItemVerificationEntry[];
-  currentQuoteSignature: string;
-  onDismissItemVerification: (id: string) => void;
   onAdd: (item: CatalogItem) => void;
   onAddTemplate: (template: QuoteTemplate, jumpToCustomize?: boolean, selections?: TemplateItemSelection[]) => void;
 }) {
@@ -1906,15 +1906,15 @@ function CatalogPanel({
     return templates.filter((template) => normalizeSearchValue(`${template.name} ${template.description}`).includes(normalizedSearch));
   }, [search, templates]);
   return (
-    <aside className="panel flex min-h-[70dvh] flex-col overflow-hidden lg:h-full lg:min-h-0">
+    <aside className="panel catalog-ledger flex min-h-[70dvh] flex-col overflow-hidden lg:h-full lg:min-h-0">
       <div className="panel-header">
         <div>
-          <h2>Item Catalog</h2>
-          <p>{catalogMode === "items" ? "Pick equipment, parts, and labor." : "Add a saved setup to the quote."}</p>
+          <h2>Equipment index</h2>
+          <p>{catalogMode === "items" ? "Search by description or part number." : "Add a standard system package."}</p>
         </div>
         <PackagePlus size={20} />
       </div>
-      <div className="grid min-h-0 flex-1 grid-rows-[auto_auto_auto_auto_minmax(0,1fr)] gap-3 p-4">
+      <div className="grid min-h-0 flex-1 grid-rows-[auto_auto_auto_minmax(0,1fr)] gap-3 p-3">
         <div className="grid grid-cols-2 gap-2 rounded-lg border border-stone-200 bg-stone-50 p-1">
           <button className={`chip justify-center ${catalogMode === "items" ? "chip-active" : ""}`} onClick={() => setCatalogMode("items")}>
             Items
@@ -1959,16 +1959,11 @@ function CatalogPanel({
             <strong>{visibleTemplates.length}</strong>
           </div>
         )}
-        <QuoteCompatibilityPanel
-          currentQuoteSignature={currentQuoteSignature}
-          entries={itemVerifications}
-          onDismiss={onDismissItemVerification}
-        />
         <div className="grid min-h-0 content-start gap-2 overflow-auto pr-1">
           {catalogMode === "items" ? (
             items.length ? (
               items.map((item) => (
-                <article key={item.id} className="rounded-lg border border-stone-200 bg-white p-3">
+                <article key={item.id} className="catalog-ledger-row">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="font-black">{item.name}</p>
@@ -1979,8 +1974,8 @@ function CatalogPanel({
                     </button>
                   </div>
                   <div className="mt-3 flex items-center justify-between text-sm">
-                    <span className="rounded-full bg-teal-50 px-2 py-1 font-bold text-teal-800">{item.category}</span>
-                    <span className="font-black">{money.format(item.unitPrice)}</span>
+                    <span className="catalog-ledger-category">{item.category}</span>
+                    <span className="font-mono font-black tabular-nums">{money.format(item.unitPrice)}</span>
                   </div>
                 </article>
               ))
@@ -2060,20 +2055,28 @@ function QuoteWorkspace(props: {
   };
 
   return (
-    <section className="grid min-h-0 gap-4 lg:h-full">
-      <div className="panel flex min-h-0 flex-col overflow-hidden">
+    <section className="grid min-h-0 gap-3 lg:h-full">
+      <div className="panel quote-ledger flex min-h-0 flex-col overflow-hidden">
         <div className="panel-header">
           <div>
-            <h2>Quote Workspace</h2>
-            <p>{props.step === "pick" ? "Start fresh or build from a saved template." : "Review cart details and finalize the quote."}</p>
+            <h2>Equipment schedule</h2>
+            <p>{props.step === "pick" ? "Start a takeoff or use a standard package." : "Build the takeoff. Resolve exceptions. Issue the quote."}</p>
           </div>
-          <div className="hidden min-w-[360px] sm:block">
-            <QuoteStageProgress steps={steps} currentStep={props.step} setStep={props.setStep} />
+          <div className="hidden min-w-[360px] sm:grid sm:gap-2">
+            <QuoteStageProgress steps={steps} currentStep={props.step} setStep={props.setStep} dark />
+            <div className="flex items-center justify-end gap-3 border-t border-stone-600 pt-2 text-xs">
+              <span className="text-stone-300">Current quote</span>
+              <strong className="font-mono text-base tabular-nums text-white">{money.format(props.totals.total)}</strong>
+            </div>
           </div>
         </div>
         <div className="flex min-h-0 flex-1 flex-col gap-4 p-4">
           <div className="sm:hidden">
             <QuoteStageProgress steps={steps} currentStep={props.step} setStep={props.setStep} />
+            <div className="mt-3 flex items-center justify-between border-y border-stone-300 bg-stone-50 px-3 py-2 text-sm">
+              <span className="font-bold text-stone-600">Current quote</span>
+              <strong className="font-mono tabular-nums">{money.format(props.totals.total)}</strong>
+            </div>
           </div>
 
           {showWorkspaceCompatibilityPanel(props.step) ? (
@@ -2159,12 +2162,12 @@ function QuoteWorkspace(props: {
               <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
                 {props.step === "customize" ? (
                   <button className="button-primary" onClick={() => props.setStep("review")}>
-                    Next
+                    Review pricing
                   </button>
                 ) : null}
                 {props.step === "review" ? (
                   <button className="button-primary" onClick={() => props.setStep("finalize")}>
-                    Add to cart
+                    Prepare quote
                   </button>
                 ) : null}
                 {props.step === "finalize" ? (
@@ -2426,19 +2429,30 @@ function QuoteLines({
     return <div className="rounded-lg border border-dashed border-stone-300 bg-stone-50 p-8 text-center text-stone-500">Add catalog items or choose a template to start.</div>;
   }
   return (
-    <div className="grid gap-3">
+    <div className="quote-schedule">
+      <div className="quote-schedule-columns" aria-hidden="true">
+        <span>Description / part number</span>
+        <span>Type</span>
+        <span>Qty</span>
+        <span>Unit sell</span>
+        <span>Extension</span>
+        <span />
+      </div>
       {rows.map((row) =>
         row.type === "package" ? (
-          <details key={`package-${row.packageKey}`} className="overflow-hidden rounded-lg border border-teal-200 bg-teal-50">
-            <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 p-4 [&::-webkit-details-marker]:hidden">
+          <details key={`package-${row.packageKey}`} className="quote-schedule-group">
+            <summary className="quote-schedule-row [&::-webkit-details-marker]:hidden">
               <div className="min-w-0">
-                <p className="truncate font-black text-teal-950">{row.packageNickname?.trim() || row.packageName}</p>
-                <p className="mt-1 text-sm font-medium text-teal-900">{row.lines.length} items · Qty {row.lines.reduce((sum, line) => sum + line.quantity, 0)}</p>
+                <p className="truncate font-black">{row.packageNickname?.trim() || row.packageName}</p>
+                <p className="truncate text-xs text-stone-500">{row.packageSourceName || `${row.lines.length} equipment lines`}</p>
               </div>
-              <span className="font-black">{money.format(row.lines.reduce((sum, line) => sum + lineTotal(line), 0))}</span>
+              <span className="quote-schedule-type">Opening / package</span>
+              <span className="font-mono font-black tabular-nums"><span className="sr-only">Quantity </span>{row.lines.reduce((sum, line) => sum + line.quantity, 0)}</span>
+              <span className="font-mono text-stone-400"><span className="sr-only">Unit sell not applicable</span><span aria-hidden="true">—</span></span>
+              <span className="font-mono font-black tabular-nums"><span className="sr-only">Extension </span>{money.format(row.lines.reduce((sum, line) => sum + lineTotal(line), 0))}</span>
               <ChevronDown size={17} className="text-stone-500" />
             </summary>
-            <div className="grid gap-3 border-t border-teal-200 p-4">
+            <div className="grid gap-2 border-t border-stone-300 bg-stone-50 p-3">
               <div className="grid gap-2">
                 {row.lines.map((line) => (
                   <QuoteLineEditor key={line.lineId} line={line} onUpdateLine={onUpdateLine} onRemoveLine={onRemoveLine} />
@@ -2451,13 +2465,19 @@ function QuoteLines({
             </div>
           </details>
         ) : (
-          <details key={row.line.lineId} className="overflow-hidden rounded-lg border border-stone-200 bg-stone-50">
-            <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 p-4 [&::-webkit-details-marker]:hidden">
-              <p className="truncate font-black">{row.line.name}</p>
-              <span className="font-black">Qty {row.line.quantity}</span>
+          <details key={row.line.lineId} className="quote-schedule-item">
+            <summary className="quote-schedule-row [&::-webkit-details-marker]:hidden">
+              <div className="min-w-0">
+                <p className="truncate font-black">{row.line.name}</p>
+                <p className="truncate font-mono text-xs text-stone-500">{row.line.sku || "NO PART NUMBER"}</p>
+              </div>
+              <span className="quote-schedule-type">{isLabor(row.line) ? "Labor" : "Equipment"}</span>
+              <span className="font-mono font-black tabular-nums"><span className="sr-only">Quantity </span>{row.line.quantity}</span>
+              <span className="font-mono tabular-nums"><span className="sr-only">Unit sell </span>{money.format(lineSellUnitPrice(row.line))}</span>
+              <span className="font-mono font-black tabular-nums"><span className="sr-only">Extension </span>{money.format(lineTotal(row.line))}</span>
               <ChevronDown size={17} className="text-stone-500" />
             </summary>
-            <div className="border-t border-stone-200 p-4">
+            <div className="border-t border-stone-300 bg-stone-50 p-3">
               <QuoteLineEditor line={row.line} onUpdateLine={onUpdateLine} onRemoveLine={onRemoveLine} />
             </div>
           </details>
