@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { CatalogPanel, QuickQuoteBuilderSkeleton, TakeoffStageBar, quoteEntryStep } from "./quick-quote-builder";
+import { CatalogPanel, QuickQuoteBuilderSkeleton, QuoteLines, TakeoffStageBar, packageLineIds, quoteEntryStep } from "./quick-quote-builder";
+import type { QuoteLine } from "@/lib/types";
 
 describe("takeoff ledger shell", () => {
   it("uses the three-stage takeoff workflow", () => {
@@ -42,6 +43,21 @@ describe("takeoff ledger shell", () => {
 
     expect(html).toContain('aria-label="Equipment index results"');
     expect(html).toContain("catalog-ledger-results");
+    expect(html).toContain("catalog-ledger-controls");
+  });
+
+  it("removes every line in a template package from its schedule row", () => {
+    const lines: QuoteLine[] = [
+      { lineId: "line-1", itemId: "item-1", name: "Reader", sku: "R-1", packageId: "package-1", packageName: "Door package", quantity: 1, unitPrice: 100, notes: "" },
+      { lineId: "line-2", itemId: "item-2", name: "Lock", sku: "L-1", packageId: "package-1", packageName: "Door package", quantity: 1, unitPrice: 200, notes: "" },
+    ];
+    const html = renderToStaticMarkup(
+      <QuoteLines lines={lines} items={[]} onAddItemToPackage={vi.fn()} onUpdateLine={vi.fn()} onRemoveLine={vi.fn()} />,
+    );
+
+    expect(packageLineIds(lines)).toEqual(["line-1", "line-2"]);
+    expect(html).toContain('aria-label="Remove Door package"');
+    expect(html).toContain("lucide-trash2");
   });
 
   it("continues an unsaved quote at equipment customization", () => {
