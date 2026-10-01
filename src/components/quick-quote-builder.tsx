@@ -89,6 +89,14 @@ type TemplateItemSelection = {
   };
 };
 
+export function customTemplateSelection(current: TemplateItemSelection, requirementId: string, category: string): TemplateItemSelection {
+  return {
+    requirementId,
+    quantity: current.quantity,
+    customItem: current.customItem ?? { name: "", sku: "", unitPrice: 0, category },
+  };
+}
+
 function closeOnBackdropMouseDown(event: ReactMouseEvent<HTMLElement>, onClose: () => void) {
   if (event.target === event.currentTarget) {
     onClose();
@@ -1358,6 +1366,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
             {quoteStep !== "pick" && quoteStep !== "finalize" ? (
               <CatalogPanel
                 items={visibleItems}
+                catalogItems={activeItems}
                 templates={templates}
                 allCategories={sharedCategories}
                 categories={catalogCategories}
@@ -1841,6 +1850,7 @@ function CartDropdown({
 
 export function CatalogPanel({
   items,
+  catalogItems,
   templates,
   allCategories,
   categories,
@@ -1852,6 +1862,7 @@ export function CatalogPanel({
   onAddTemplate,
 }: {
   items: CatalogItem[];
+  catalogItems: CatalogItem[];
   templates: QuoteTemplate[];
   allCategories: string[];
   categories: string[];
@@ -1974,7 +1985,7 @@ export function CatalogPanel({
       {templateConfigurator ? (
         <TemplateConfigureDialog
           template={templateConfigurator}
-          items={items}
+          items={catalogItems}
           categories={allCategories}
           onCancel={() => setTemplateConfigurator(null)}
           onConfirm={(selections) => {
@@ -2149,7 +2160,7 @@ function QuoteWorkspace(props: {
   );
 }
 
-function TemplateConfigureDialog({
+export function TemplateConfigureDialog({
   template,
   items,
   categories,
@@ -2164,11 +2175,61 @@ function TemplateConfigureDialog({
 }) {
   const [requirements, setRequirements] = useState(() => templateCategoryRequirements(template));
   const [newCategoryName, setNewCategoryName] = useState("");
+  const [itemSearches, setItemSearches] = useState<Record<string, string>>({});
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const onCancelRef = useRef(onCancel);
+  useEffect(() => {
+    onCancelRef.current = onCancel;
+  }, [onCancel]);
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    const focusableSelector = "button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex='-1'])";
+    const focusableElements = () => Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector));
+    const focusFirst = () => (focusableElements()[0] ?? dialog).focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCancelRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = focusableElements();
+      if (!focusable.length) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    const keepFocusInDialog = (event: FocusEvent) => {
+      if (!dialog.contains(event.target as Node)) focusFirst();
+    };
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("focusin", keepFocusInDialog);
+    focusFirst();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("focusin", keepFocusInDialog);
+      previousFocus?.focus();
+    };
+  }, []);
   const [selections, setSelections] = useState<Record<string, TemplateItemSelection>>(() => {
     const initial: Record<string, TemplateItemSelection> = {};
     templateCategoryRequirements(template).forEach((requirement) => {
-      const match = items.find((item) => itemCategory(item) === requirement.category);
-      initial[requirement.id] = { requirementId: requirement.id, itemId: match?.id ?? "", quantity: requirement.quantity };
+      initial[requirement.id] = { requirementId: requirement.id, itemId: "", quantity: requirement.quantity };
     });
     return initial;
   });
@@ -2179,9 +2240,8 @@ function TemplateConfigureDialog({
   const addExtraCategory = () => {
     const category = categoryOptions.find((option) => !requirements.some((requirement) => requirement.category === option)) ?? categoryOptions[0] ?? "";
     const id = makeId("requirement");
-    const match = items.find((item) => itemCategory(item) === category);
     setRequirements((current) => [...current, { id, category, quantity: 1 }]);
-    setSelections((current) => ({ ...current, [id]: { requirementId: id, itemId: match?.id ?? "", quantity: 1 } }));
+    setSelections((current) => ({ ...current, [id]: { requirementId: id, itemId: "", quantity: 1 } }));
   };
   const addNamedExtraCategory = () => {
     const category = newCategoryName.trim();
@@ -2193,16 +2253,16 @@ function TemplateConfigureDialog({
   };
   const updateExtraCategory = (requirementId: string, category: string) => {
     const requirement = requirements.find((candidate) => candidate.id === requirementId);
-    const match = items.find((item) => itemCategory(item) === category);
     setRequirements((current) => current.map((candidate) => (candidate.id === requirementId ? { ...candidate, category } : candidate)));
     setSelections((current) => ({
       ...current,
       [requirementId]: {
         requirementId,
-        itemId: match?.id ?? "",
+        itemId: "",
         quantity: current[requirementId]?.quantity ?? requirement?.quantity ?? 1,
       },
     }));
+    setItemSearches((current) => ({ ...current, [requirementId]: "" }));
   };
   const removeExtraCategory = (requirementId: string) => {
     setRequirements((current) => current.filter((requirement) => requirement.id !== requirementId));
@@ -2215,10 +2275,10 @@ function TemplateConfigureDialog({
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onMouseDown={(event) => closeOnBackdropMouseDown(event, onCancel)}>
-      <div className="grid max-h-[calc(100vh-2rem)] w-full max-w-4xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+      <div ref={dialogRef} tabIndex={-1} className="grid max-h-[calc(100vh-2rem)] w-full max-w-4xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg bg-white shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="template-configure-title" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-3 border-b border-stone-200 p-5">
           <div>
-            <h3 className="text-2xl font-black">{template.name || "Template"}</h3>
+            <h3 id="template-configure-title" className="text-2xl font-black">{template.name || "Template"}</h3>
             <p className="mt-1 text-sm text-stone-600">Choose the item that should satisfy each category for this quote. Extra categories only affect this quote.</p>
           </div>
           <button className="icon-button" onClick={onCancel} aria-label="Close template item chooser">
@@ -2229,12 +2289,17 @@ function TemplateConfigureDialog({
           <div className="grid gap-3">
             {requirements.map((requirement) => {
               const categoryItems = items.filter((item) => itemCategory(item) === requirement.category);
+              const itemSearch = itemSearches[requirement.id] ?? "";
+              const normalizedItemSearch = normalizeSearchValue(itemSearch);
+              const visibleCategoryItems = normalizedItemSearch
+                ? categoryItems.filter((item) => normalizeSearchValue(`${item.name} ${item.sku}`).includes(normalizedItemSearch))
+                : categoryItems;
               const selection = selections[requirement.id] ?? { requirementId: requirement.id, itemId: "", quantity: requirement.quantity };
               const isOther = Boolean(selection.customItem);
               const isTemplateRequirement = templateCategoryRequirements(template).some((candidate) => candidate.id === requirement.id);
               return (
                 <div key={requirement.id} className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3">
-                  <div className="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)_100px] md:items-end">
+                  <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_100px] md:items-end">
                   <div>
                     <p className="text-xs font-black uppercase tracking-normal text-stone-500">Category</p>
                     {isTemplateRequirement ? (
@@ -2253,32 +2318,7 @@ function TemplateConfigureDialog({
                       </select>
                     )}
                   </div>
-                  <label className="field">
-                    <span>Item</span>
-                    <select
-                      className="input"
-                      value={isOther ? "__other__" : selection.itemId ?? ""}
-                      onChange={(event) => {
-                        const value = event.target.value;
-                        setSelections((current) => ({
-                          ...current,
-                          [requirement.id]:
-                            value === "__other__"
-                              ? { requirementId: requirement.id, quantity: selection.quantity, customItem: { name: "", sku: "", unitPrice: 0, category: requirement.category } }
-                              : { requirementId: requirement.id, itemId: value, quantity: selection.quantity },
-                        }));
-                      }}
-                    >
-                      <option value="">Select item</option>
-                      {categoryItems.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.name} / {item.sku}
-                        </option>
-                      ))}
-                      <option value="__other__">Other item</option>
-                    </select>
-                    {!categoryItems.length ? <span className="text-xs font-bold text-red-800">No active items in this category.</span> : null}
-                  </label>
+
                   <label className="field">
                     <span>Qty</span>
                     <input
@@ -2289,6 +2329,57 @@ function TemplateConfigureDialog({
                       onChange={(event) => setSelections((current) => ({ ...current, [requirement.id]: { ...selection, quantity: Math.max(1, Number(event.target.value) || 1) } }))}
                     />
                   </label>
+                  </div>
+                  <div className="grid gap-2" role="group" aria-label={`Product catalog for ${requirement.category}`}>
+                    <label className="field">
+                      <span>Choose product</span>
+                      <input
+                        className="input"
+                        value={itemSearch}
+                        onChange={(event) => setItemSearches((current) => ({ ...current, [requirement.id]: event.target.value }))}
+                        placeholder={`Search ${requirement.category} products`}
+                      />
+                    </label>
+                    <div className="template-product-results grid max-h-64 content-start gap-2 overflow-y-auto pr-1" role="list">
+                      {visibleCategoryItems.map((item) => {
+                        const selected = !isOther && selection.itemId === item.id;
+                        return (
+                          <article key={item.id} className={`catalog-ledger-row ${selected ? "border-teal-700 ring-1 ring-teal-700" : ""}`} role="listitem">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="font-black">{item.name}</p>
+                                <p className="mt-1 font-mono text-xs text-stone-500">{item.sku}</p>
+                              </div>
+                              <button
+                                className={`icon-button ${selected ? "border-teal-700 bg-teal-50 text-teal-800" : ""}`}
+                                onClick={() => setSelections((current) => ({ ...current, [requirement.id]: { requirementId: requirement.id, itemId: item.id, quantity: selection.quantity } }))}
+                                aria-label={`${selected ? "Selected" : "Select"} ${item.name}, ${item.sku}`}
+                                aria-pressed={selected}
+                              >
+                                {selected ? <ShieldCheck size={18} /> : <Plus size={18} />}
+                              </button>
+                            </div>
+                            <div className="mt-3 flex items-center justify-between text-sm">
+                              <span className="catalog-ledger-category">{item.category}</span>
+                              <span className="font-mono font-black tabular-nums">{money.format(item.unitPrice)}</span>
+                            </div>
+                          </article>
+                        );
+                      })}
+                      {!visibleCategoryItems.length ? (
+                        <p className="rounded-lg border border-dashed border-stone-300 bg-white p-4 text-center text-sm text-stone-500">
+                          {categoryItems.length ? "No products match this search." : "No active items in this category."}
+                        </p>
+                      ) : null}
+                    </div>
+                    <button
+                      className={`button-secondary w-fit ${isOther ? "border-teal-700 bg-teal-50 text-teal-800" : ""}`}
+                      onClick={() => setSelections((current) => ({ ...current, [requirement.id]: customTemplateSelection(selection, requirement.id, requirement.category) }))}
+                      aria-pressed={isOther}
+                    >
+                      <Plus size={17} />
+                      Other product
+                    </button>
                   </div>
                   {!isTemplateRequirement ? (
                     <div className="flex justify-end">

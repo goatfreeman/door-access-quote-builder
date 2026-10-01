@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { CatalogPanel, QuickQuoteBuilderSkeleton, QuoteLines, TakeoffStageBar, packageLineIds, quoteEntryStep } from "./quick-quote-builder";
+import { CatalogPanel, QuickQuoteBuilderSkeleton, QuoteLines, TakeoffStageBar, TemplateConfigureDialog, customTemplateSelection, packageLineIds, quoteEntryStep } from "./quick-quote-builder";
 import type { QuoteLine } from "@/lib/types";
 
 describe("takeoff ledger shell", () => {
@@ -29,6 +29,7 @@ describe("takeoff ledger shell", () => {
     const html = renderToStaticMarkup(
       <CatalogPanel
         items={[]}
+        catalogItems={[]}
         templates={[]}
         allCategories={[]}
         categories={["All"]}
@@ -44,6 +45,39 @@ describe("takeoff ledger shell", () => {
     expect(html).toContain('aria-label="Equipment index results"');
     expect(html).toContain("catalog-ledger-results");
     expect(html).toContain("catalog-ledger-controls");
+  });
+
+  it("uses a searchable catalog instead of an item option menu for template products", () => {
+    const html = renderToStaticMarkup(
+      <TemplateConfigureDialog
+        template={{ id: "template-1", name: "Door package", description: "", lines: [], categoryRequirements: [{ id: "reader", category: "Reader", quantity: 1 }] }}
+        items={[
+          { id: "reader-1", name: "Standard reader", sku: "R-100", category: "Reader", unitPrice: 100 },
+          { id: "reader-2", name: "Keypad reader", sku: "R-200", category: "Reader", unitPrice: 150 },
+        ]}
+        categories={["Reader"]}
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain('aria-label="Product catalog for Reader"');
+    expect(html).toContain('role="dialog"');
+    expect(html).toContain('aria-modal="true"');
+    expect(html).toContain('tabindex="-1"');
+    expect(html).toContain('placeholder="Search Reader products"');
+    expect(html).toContain('aria-label="Select Standard reader, R-100"');
+    expect(html).toContain("template-product-results");
+    expect(html).toContain("R-100");
+    expect(html).toContain("R-200");
+    expect(html).toContain("0 of 1 categories selected");
+    expect(html).not.toContain("<select");
+  });
+
+  it("preserves custom product details when the active custom choice is selected again", () => {
+    const current = { requirementId: "reader", quantity: 2, customItem: { name: "Existing reader", sku: "CUSTOM-1", unitPrice: 45, category: "Reader" } };
+
+    expect(customTemplateSelection(current, "reader", "Reader")).toEqual(current);
   });
 
   it("removes every line in a template package from its schedule row", () => {
