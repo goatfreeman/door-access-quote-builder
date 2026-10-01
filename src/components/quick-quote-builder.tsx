@@ -1856,6 +1856,33 @@ function CartDropdown({
   );
 }
 
+export function EquipmentCategoryStrip({
+  categories,
+  category,
+  setCategory,
+}: {
+  categories: string[];
+  category: string;
+  setCategory: (value: string) => void;
+}) {
+  const options = Array.from(new Set(categories));
+
+  return (
+    <div className="catalog-category-control catalog-category-strip flex shrink-0 gap-2 overflow-x-auto pb-1" role="group" aria-label="Equipment categories">
+      {options.map((item) => (
+        <button
+          key={item}
+          className={`chip shrink-0 whitespace-nowrap ${category === item ? "chip-active" : ""}`}
+          aria-pressed={category === item}
+          onClick={() => setCategory(item)}
+        >
+          {item}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function CatalogPanel({
   items,
   catalogItems,
@@ -1881,10 +1908,8 @@ export function CatalogPanel({
   onAdd: (item: CatalogItem) => void;
   onAddTemplate: (template: QuoteTemplate, jumpToCustomize?: boolean, selections?: TemplateItemSelection[]) => void;
 }) {
-  const [filterOpen, setFilterOpen] = useState(false);
   const [catalogMode, setCatalogMode] = useState<"items" | "templates">("items");
   const [templateConfigurator, setTemplateConfigurator] = useState<QuoteTemplate | null>(null);
-  const hasCategories = categories.some((item) => item !== "All");
   const visibleTemplates = useMemo(() => {
     const normalizedSearch = normalizeSearchValue(search);
     if (!normalizedSearch) return templates;
@@ -1908,36 +1933,11 @@ export function CatalogPanel({
             Templates
           </button>
           </div>
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+        <div className="shrink-0">
           <input className="input" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={catalogMode === "items" ? "Search items or SKU" : "Search templates"} />
-          <button className={`icon-button ${filterOpen ? "border-teal-700 text-teal-800" : ""}`} onClick={() => setFilterOpen((open) => !open)} aria-label="Filter categories" disabled={catalogMode === "templates"}>
-            <Menu size={18} />
-          </button>
         </div>
-        {catalogMode === "items" && filterOpen ? (
-          <div className="catalog-category-control catalog-category-filter grid max-h-48 grid-cols-2 gap-2 overflow-y-auto rounded-lg border border-stone-200 bg-stone-50 p-2">
-            {hasCategories ? (
-              categories.map((item) => (
-                <button
-                  key={item}
-                  className={`chip ${category === item ? "chip-active" : ""}`}
-                  onClick={() => {
-                    setCategory(item);
-                    setFilterOpen(false);
-                  }}
-                >
-                  {item}
-                </button>
-              ))
-            ) : (
-              <p className="col-span-2 rounded-md border border-dashed border-stone-300 bg-white p-3 text-center text-sm font-bold text-stone-500">No categories</p>
-            )}
-          </div>
-        ) : catalogMode === "items" ? (
-          <div className="catalog-category-control flex items-center justify-between rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm">
-            <span className="font-bold text-stone-600">Category</span>
-            <strong>{hasCategories ? category : "None"}</strong>
-          </div>
+        {catalogMode === "items" ? (
+          <EquipmentCategoryStrip categories={categories} category={category} setCategory={setCategory} />
         ) : (
           <div className="catalog-category-control flex items-center justify-between rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm">
             <span className="font-bold text-stone-600">Templates</span>

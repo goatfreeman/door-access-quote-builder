@@ -1,6 +1,7 @@
+import { Children, isValidElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { CatalogPanel, QuickQuoteBuilderSkeleton, QuoteLines, TakeoffStageBar, TemplateConfigureDialog, customTemplateSelection, packageLineIds, quoteEntryStep, quoteShowsCatalog, quoteWorkspaceStep } from "./quick-quote-builder";
+import { CatalogPanel, EquipmentCategoryStrip, QuickQuoteBuilderSkeleton, QuoteLines, TakeoffStageBar, TemplateConfigureDialog, customTemplateSelection, packageLineIds, quoteEntryStep, quoteShowsCatalog, quoteWorkspaceStep } from "./quick-quote-builder";
 import type { QuoteLine } from "@/lib/types";
 
 describe("takeoff ledger shell", () => {
@@ -25,14 +26,14 @@ describe("takeoff ledger shell", () => {
     expect(html).not.toContain("Description / part number");
   });
 
-  it("keeps equipment results in their own scrollable region", () => {
+  it("keeps equipment results and category choices in separate scrollable regions", () => {
     const html = renderToStaticMarkup(
       <CatalogPanel
         items={[]}
         catalogItems={[]}
         templates={[]}
         allCategories={[]}
-        categories={["All"]}
+        categories={["All", "Readers", "Locks"]}
         category="All"
         search=""
         setSearch={vi.fn()}
@@ -45,6 +46,45 @@ describe("takeoff ledger shell", () => {
     expect(html).toContain('aria-label="Equipment index results"');
     expect(html).toContain("catalog-ledger-results");
     expect(html).toContain("catalog-ledger-controls");
+    expect(html).toContain('aria-label="Equipment categories"');
+    expect(html).toContain("catalog-category-strip");
+    expect(html).toContain("overflow-x-auto");
+    expect(html).toContain('aria-pressed="true"');
+    expect(html).toContain("Readers");
+    expect(html).toContain("Locks");
+    expect(html).not.toContain('aria-label="Filter categories"');
+  });
+
+  it("selects every equipment category directly from the horizontal list", () => {
+    const setCategory = vi.fn();
+    const strip = EquipmentCategoryStrip({
+      categories: ["All", "Readers", "Locks"],
+      category: "Readers",
+      setCategory,
+    });
+    const buttons = Children.toArray(strip.props.children).filter(
+      (child): child is ReactElement<{ "aria-pressed": boolean; onClick: () => void }> =>
+        isValidElement<{ "aria-pressed": boolean; onClick: () => void }>(child),
+    );
+
+    expect(buttons.map((button) => button.props["aria-pressed"])).toEqual([false, true, false]);
+    buttons.forEach((button) => button.props.onClick());
+    expect(setCategory.mock.calls).toEqual([["All"], ["Readers"], ["Locks"]]);
+  });
+
+  it("renders only one active All choice when catalog data also uses that category name", () => {
+    const strip = EquipmentCategoryStrip({
+      categories: ["All", "All", "Readers"],
+      category: "All",
+      setCategory: vi.fn(),
+    });
+    const buttons = Children.toArray(strip.props.children).filter(
+      (child): child is ReactElement<{ "aria-pressed": boolean }> =>
+        isValidElement<{ "aria-pressed": boolean }>(child),
+    );
+
+    expect(buttons).toHaveLength(2);
+    expect(buttons.filter((button) => button.props["aria-pressed"])).toHaveLength(1);
   });
 
   it("uses a searchable catalog instead of an item option menu for template products", () => {
