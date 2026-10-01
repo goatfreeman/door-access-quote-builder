@@ -158,6 +158,7 @@ const defaultExportColumns = exportColumnDefinitions.map((column) => column.key)
 
 const isView = (value: unknown): value is View => ["home", "quote", "items", "templates", "previous", "settings", "client"].includes(String(value));
 const isQuoteStep = (value: unknown): value is QuoteStep => ["pick", "customize", "review", "finalize"].includes(String(value));
+export const quoteWorkspaceStep = (value: unknown): QuoteStep => (isQuoteStep(value) && value !== "pick" ? value : "customize");
 const quoteSlugFromPath = () => {
   if (typeof window === "undefined") return "";
   const [, viewSegment, slug] = window.location.pathname.split("/");
@@ -360,7 +361,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   });
   const [quoteStep, setQuoteStep] = useState<QuoteStep>(() => {
     const session = readStorage<{ quoteStep?: unknown }>(STORAGE_KEYS.session, {});
-    return isQuoteStep(session.quoteStep) ? session.quoteStep : "pick";
+    return quoteWorkspaceStep(session.quoteStep);
   });
   const [menuOpen, setMenuOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
@@ -438,6 +439,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   const navigateToView = (nextView: View, quote?: SavedQuote) => {
     if (view === "items" && nextView !== "items" && itemEditsDirtyRef.current && !window.confirm(unsavedItemChangesMessage)) return;
     if (nextView !== "items") itemEditsDirtyRef.current = false;
+    if (nextView === "quote") setQuoteStep("customize");
     setView(nextView);
     setRouteQuoteSlug(quote?.shareToken ?? "");
     if (typeof window === "undefined") return;
@@ -507,7 +509,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
     if (serverDraft && serverTime > 0) {
       setLines(serverDraft.lines);
       setMeta({ ...quoteMetaDefaults(settings), ...serverDraft.meta });
-      if (serverDraft.quoteStep && isQuoteStep(serverDraft.quoteStep)) setQuoteStep(serverDraft.quoteStep);
+      if (serverDraft.quoteStep) setQuoteStep(quoteWorkspaceStep(serverDraft.quoteStep));
       pushNotification("Draft restored", `Loaded the latest server draft from ${serverDraft.deviceName || "another device"}.`);
     } else {
       setMeta((current) => (current.customer || current.project || current.quoteNumber !== emptyMeta.quoteNumber ? current : quoteMetaDefaults(settings)));
@@ -550,6 +552,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
       }
       if (nextPosition !== null) historyPositionRef.current = nextPosition;
       if (pathView && pathView !== "items") itemEditsDirtyRef.current = false;
+      if (pathView === "quote") setQuoteStep("customize");
       if (pathView) setView(pathView);
       setRouteQuoteSlug(quoteSlugFromPath());
     };
@@ -1127,7 +1130,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
       setEditingQuoteId("");
       setLines([]);
       setMeta(quoteMetaDefaults(settings));
-      setQuoteStep("pick");
+      setQuoteStep("customize");
       pushNotification("Quote updated", "A revision snapshot was saved before applying the latest changes.");
       return;
     }
@@ -1150,7 +1153,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
     navigateToView("previous", saved);
     setLines([]);
     setMeta(quoteMetaDefaults(settings));
-    setQuoteStep("pick");
+    setQuoteStep("customize");
     pushNotification("Quote saved", `${saved.meta.quoteNumber} is now in Previous Quotes for the team.`);
   };
 
@@ -1195,6 +1198,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   const isClientView = view === "client";
 
   const goToQuote = () => {
+    setQuoteStep("customize");
     navigateToView("quote");
     setMenuOpen(false);
     setCartOpen(false);
@@ -1355,7 +1359,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
 
       {menuOpen && !isClientView ? <MobileMenu nav={nav} view={view} setView={navigateToView} goToQuote={goToQuote} close={() => setMenuOpen(false)} onSignOut={signOut} onSettingsHoldStart={startSettingsHold} onSettingsHoldEnd={cancelSettingsHold} /> : null}
 
-      <section className={`mx-auto grid max-w-[1600px] items-stretch gap-3 px-3 py-3 sm:px-4 ${view === "quote" ? "quote-shell-grid min-h-0 w-full" : "min-h-[calc(100dvh-96px)]"} ${view === "quote" && quoteStep !== "pick" && quoteStep !== "finalize" ? "quote-takeoff-grid" : ""}`}>
+      <section className={`mx-auto grid max-w-[1600px] items-stretch gap-3 px-3 py-3 sm:px-4 ${view === "quote" ? "quote-shell-grid min-h-0 w-full" : "min-h-[calc(100dvh-96px)]"} ${view === "quote" && quoteShowsCatalog(quoteStep) ? "quote-takeoff-grid" : ""}`}>
         {view === "home" ? <HomePage user={sessionUser} meta={meta} lines={activeLines} total={totals.total} drafts={userDraftQuotes} onContinue={() => {
           setQuoteStep(quoteEntryStep(activeLines.length > 0 || Boolean(meta.customer || meta.project)));
           goToQuote();
@@ -1363,7 +1367,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
         {view === "quote" ? (
           <>
             <TakeoffStageBar currentStep={quoteStep} onStep={setQuoteStep} />
-            {quoteStep !== "pick" && quoteStep !== "finalize" ? (
+            {quoteShowsCatalog(quoteStep) ? (
               <CatalogPanel
                 items={visibleItems}
                 catalogItems={activeItems}
@@ -1410,7 +1414,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
                 setEmailPromptOpen(true);
               }}
             />
-            {quoteStep !== "pick" && quoteStep !== "finalize" ? (
+            {quoteShowsCatalog(quoteStep) ? (
               <aside className="compatibility-rail">
                 <QuoteCompatibilityPanel
                   currentQuoteSignature={quoteLineSignature(activeLines.filter((line) => !isLabor(line)))}
@@ -1515,17 +1519,21 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
 function previousStep(step: QuoteStep): QuoteStep {
   if (step === "finalize") return "review";
   if (step === "review") return "customize";
-  if (step === "customize") return "pick";
-  return "pick";
+  return "customize";
 }
 
 export function quoteEntryStep(hasUnsavedQuote: boolean): QuoteStep {
-  return hasUnsavedQuote ? "customize" : "pick";
+  void hasUnsavedQuote;
+  return "customize";
+}
+
+export function quoteShowsCatalog(step: QuoteStep) {
+  return step === "customize" || step === "review";
 }
 
 export function TakeoffStageBar({ currentStep, onStep }: { currentStep: QuoteStep; onStep: (step: QuoteStep) => void }) {
   const stages: Array<{ label: string; target: QuoteStep; active: boolean }> = [
-    { label: "1 Equipment", target: currentStep === "pick" ? "pick" : "customize", active: currentStep === "pick" || currentStep === "customize" },
+    { label: "1 Equipment", target: "customize", active: currentStep === "pick" || currentStep === "customize" },
     { label: "2 Pricing & scope", target: "review", active: currentStep === "review" },
     { label: "3 Review & issue", target: "finalize", active: currentStep === "finalize" },
   ];
@@ -2038,9 +2046,15 @@ function QuoteWorkspace(props: {
             <h2>{props.step === "pick" ? "Start estimate" : "Quote equipment"}</h2>
             <p>{props.step === "pick" ? "Start a takeoff or use a standard package." : `${props.lines.length} lines · Base cost and sell price shown`}</p>
           </div>
-          <div className="text-right">
-            <span className="block text-[10px] font-black uppercase tracking-wide text-stone-500">Current quote</span>
-            <strong className="font-mono text-lg tabular-nums text-stone-950">{money.format(props.totals.total)}</strong>
+          <div className="flex items-center gap-3">
+            <button className="button-ghost" onClick={props.onStartFresh} aria-label="Start a fresh quote">
+              <Trash2 size={16} />
+              Start fresh
+            </button>
+            <div className="text-right">
+              <span className="block text-[10px] font-black uppercase tracking-wide text-stone-500">Current quote</span>
+              <strong className="font-mono text-lg tabular-nums text-stone-950">{money.format(props.totals.total)}</strong>
+            </div>
           </div>
         </div>
         <div className={`flex min-h-0 flex-1 flex-col gap-3 p-3 ${props.step === "pick" || props.step === "finalize" ? "overflow-y-auto" : "overflow-hidden"}`}>
@@ -2121,9 +2135,11 @@ function QuoteWorkspace(props: {
           ) : null}
           {props.step !== "pick" ? (
             <div className="quote-ledger-footer">
-              <button className="button-secondary" onClick={() => props.setStep(previousStep(props.step))}>
-                Back
-              </button>
+              {props.step !== "customize" ? (
+                <button className="button-secondary" onClick={() => props.setStep(previousStep(props.step))}>
+                  Back
+                </button>
+              ) : null}
               <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
                 {props.step === "customize" ? (
                   <button className="button-primary" onClick={() => props.setStep("review")}>
