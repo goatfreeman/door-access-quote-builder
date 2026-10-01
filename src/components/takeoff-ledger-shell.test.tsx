@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { CatalogPanel, QuickQuoteBuilderSkeleton, QuoteLines, TakeoffStageBar, packageLineIds, quoteEntryStep } from "./quick-quote-builder";
-import type { QuoteLine } from "@/lib/types";
+import { CatalogPanel, QuickQuoteBuilderSkeleton, QuoteLines, TakeoffStageBar, deterministicQuoteFindings, packageLineIds, quoteEntryStep } from "./quick-quote-builder";
+import type { CatalogItem, QuoteLine, ServiceTitanSettings } from "@/lib/types";
 
 describe("takeoff ledger shell", () => {
   it("uses the three-stage takeoff workflow", () => {
@@ -63,5 +63,21 @@ describe("takeoff ledger shell", () => {
   it("continues an unsaved quote at equipment customization", () => {
     expect(quoteEntryStep(true)).toBe("customize");
     expect(quoteEntryStep(false)).toBe("pick");
+  });
+
+  it("recalculates deterministic findings from the current quote contents", () => {
+    const items: CatalogItem[] = [
+      { id: "converter", name: "Singlemode converter", sku: "CONV-SM", category: "Media Converter", unitPrice: 1 },
+      { id: "fiber", name: "Multimode fiber", sku: "FIBER-MM", category: "Fiber Cable", unitPrice: 1 },
+    ];
+    const settings: ServiceTitanSettings = {
+      compatibilityItemAttributes: { converter: { fiber_mode: "singlemode" }, fiber: { fiber_mode: "multimode" } },
+      compatibilityRules: [{ id: "fiber-mode", name: "Fiber mode", enabled: true, type: "attribute-match", source: { category: "Media Converter" }, target: { category: "Fiber Cable" }, attributeKey: "fiber_mode", status: "CONFLICT", message: "Mismatch", revision: 1 }],
+    };
+    const converter = { lineId: "line-converter", itemId: "converter", name: "Singlemode converter", sku: "CONV-SM", quantity: 1, unitPrice: 1, notes: "" };
+    const fiber = { lineId: "line-fiber", itemId: "fiber", name: "Multimode fiber", sku: "FIBER-MM", quantity: 1, unitPrice: 1, notes: "" };
+
+    expect(deterministicQuoteFindings([converter, fiber], items, settings)).toHaveLength(1);
+    expect(deterministicQuoteFindings([converter], items, settings)).toEqual([]);
   });
 });

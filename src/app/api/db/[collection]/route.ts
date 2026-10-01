@@ -29,6 +29,9 @@ export async function PUT(request: Request, context: { params: Promise<{ collect
   if (!isCollection(collection)) {
     return Response.json({ error: "Unknown collection" }, { status: 404 });
   }
+  if (collection === "settings" && user.role !== "admin") {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   try {
     const payload = await request.json();

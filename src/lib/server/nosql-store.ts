@@ -1,4 +1,4 @@
-import type { CatalogItem, DebugLogEntry, DraftQuote, ExportColumnKey, QuoteMeta, QuoteRevision, QuoteTemplate, SavedQuote, ServiceTitanSettings, TemplateCategoryRequirement, UserSessionRecord } from "@/lib/types";
+import type { CatalogItem, CompatibilityAttributeDefinition, CompatibilityItemSelector, CompatibilityRule, CompatibilityRuleStatus, DebugLogEntry, DraftQuote, ExportColumnKey, QuoteMeta, QuoteRevision, QuoteTemplate, SavedQuote, ServiceTitanSettings, TemplateCategoryRequirement, UserSessionRecord } from "@/lib/types";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/schema-types";
 
@@ -538,7 +538,7 @@ function emptySettings(): ServiceTitanSettings {
   return {};
 }
 
-function sanitizeSettings(value: unknown): ServiceTitanSettings {
+export function sanitizeSettings(value: unknown): ServiceTitanSettings {
   const settings = isObject(value) ? value : {};
   const exportColumns = Array.isArray(settings.exportColumns) ? settings.exportColumns.filter((column): column is ExportColumnKey => exportColumnKeys.includes(column as ExportColumnKey)) : undefined;
   return {
@@ -546,7 +546,72 @@ function sanitizeSettings(value: unknown): ServiceTitanSettings {
     taxState: typeof settings.taxState === "string" ? settings.taxState : undefined,
     defaultTaxPercent: Number.isFinite(Number(settings.defaultTaxPercent)) ? Number(settings.defaultTaxPercent) : undefined,
     exportColumns: exportColumns?.length ? exportColumns : undefined,
+    categories: stringArray(settings.categories),
+    compatibilityAttributes: sanitizeCompatibilityAttributes(settings.compatibilityAttributes),
+    compatibilityItemAttributes: sanitizeCompatibilityItemAttributes(settings.compatibilityItemAttributes),
+    compatibilityRules: sanitizeCompatibilityRules(settings.compatibilityRules),
   };
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
+}
+
+function sanitizeCompatibilityAttributes(value: unknown): CompatibilityAttributeDefinition[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!isObject(entry) || typeof entry.id !== "string" || typeof entry.key !== "string" || typeof entry.label !== "string") return [];
+    return [{ id: entry.id, key: entry.key, label: entry.label, allowedValues: stringArray(entry.allowedValues) }];
+  });
+}
+
+function sanitizeCompatibilityItemAttributes(value: unknown): Record<string, Record<string, string>> {
+  if (!isObject(value)) return {};
+  return Object.fromEntries(Object.entries(value).flatMap(([itemId, rawAttributes]) => {
+    if (!isObject(rawAttributes)) return [];
+    const attributes = Object.fromEntries(Object.entries(rawAttributes).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
+    return [[itemId, attributes]];
+  }));
+}
+
+function sanitizeCompatibilitySelector(value: unknown): CompatibilityItemSelector | undefined {
+  if (!isObject(value)) return undefined;
+  return {
+    itemId: typeof value.itemId === "string" ? value.itemId : undefined,
+    category: typeof value.category === "string" ? value.category : undefined,
+    attributeKey: typeof value.attributeKey === "string" ? value.attributeKey : undefined,
+    attributeValue: typeof value.attributeValue === "string" ? value.attributeValue : undefined,
+  };
+}
+
+function sanitizeCompatibilityRules(value: unknown): CompatibilityRule[] {
+  if (!Array.isArray(value)) return [];
+  const types = new Set<CompatibilityRule["type"]>(["attribute-match", "prohibited-combination", "required-companion"]);
+  const statuses = new Set<CompatibilityRuleStatus>(["OPEN", "CONFLICT", "BLOCKED"]);
+  return value.flatMap((entry) => {
+    if (!isObject(entry)
+      || typeof entry.id !== "string"
+      || typeof entry.name !== "string"
+      || typeof entry.enabled !== "boolean"
+      || !types.has(entry.type as CompatibilityRule["type"])
+      || !statuses.has(entry.status as CompatibilityRuleStatus)
+      || typeof entry.message !== "string") return [];
+    const source = sanitizeCompatibilitySelector(entry.source);
+    const target = sanitizeCompatibilitySelector(entry.target);
+    if (!source || !target) return [];
+    return [{
+      id: entry.id,
+      name: entry.name,
+      enabled: entry.enabled,
+      type: entry.type as CompatibilityRule["type"],
+      source,
+      target,
+      attributeKey: typeof entry.attributeKey === "string" ? entry.attributeKey : undefined,
+      status: entry.status as CompatibilityRuleStatus,
+      message: entry.message,
+      revision: Number.isInteger(entry.revision) && Number(entry.revision) > 0 ? Number(entry.revision) : 1,
+    }];
+  });
 }
 
 function nullableNumber(value: unknown) {
