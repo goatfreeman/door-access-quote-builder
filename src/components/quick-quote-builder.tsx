@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import type { Dispatch, MouseEvent as ReactMouseEvent, SetStateAction } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { getPendingWriteCount, readDb, syncPendingWrites, writeDb } from "@/lib/client-db";
 import { applyCatalogItemEdit, changedCatalogItemEditPatch, hasCatalogItemEditChanges } from "@/lib/catalog-item-editor";
 import { writeDebugLog } from "@/lib/debug-log";
@@ -2511,6 +2512,7 @@ export function QuoteLines({
   onRemoveLine: (lineId: string) => void;
 }) {
   const [packageSelector, setPackageSelector] = useState("");
+  const [editorLineId, setEditorLineId] = useState("");
   const rows = useMemo(() => {
     const result: Array<{ type: "package"; packageKey: string; packageName: string; packageNickname?: string; packageSourceName?: string; lines: QuoteLine[] } | { type: "line"; line: QuoteLine }> = [];
     const packageIndexes = new Map<string, number>();
@@ -2533,6 +2535,7 @@ export function QuoteLines({
 
     return result;
   }, [lines]);
+  const editorLine = lines.find((line) => line.lineId === editorLineId && !line.packageName);
 
   if (!lines.length) {
     return <div className="rounded-lg border border-dashed border-stone-300 bg-stone-50 p-8 text-center text-stone-500">Add catalog items or choose a template to start.</div>;
@@ -2556,7 +2559,7 @@ export function QuoteLines({
                 <p className="truncate text-xs text-stone-500">{row.packageSourceName || `${row.lines.length} equipment lines`}</p>
               </div>
               <span className="quote-schedule-type">Opening / package</span>
-              <span className="font-mono font-black tabular-nums"><span className="sr-only">Quantity </span>{row.lines.reduce((sum, line) => sum + line.quantity, 0)}</span>
+              <span className="quote-package-quantity-empty" aria-hidden="true" />
               <span className="font-mono text-stone-400"><span className="sr-only">Unit sell not applicable</span><span aria-hidden="true">—</span></span>
               <span className="font-mono font-black tabular-nums"><span className="sr-only">Extension </span>{money.format(row.lines.reduce((sum, line) => sum + lineTotal(line), 0))}</span>
               <button
@@ -2586,12 +2589,18 @@ export function QuoteLines({
             </div>
           </details>
         ) : (
-          <details key={row.line.lineId} className="quote-schedule-item">
-            <summary className="quote-schedule-row [&::-webkit-details-marker]:hidden">
-              <div className="min-w-0">
+          <div key={row.line.lineId} className="quote-schedule-item">
+            <div className="quote-schedule-row">
+              <button
+                type="button"
+                className="min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
+                aria-label={`Edit ${row.line.name}`}
+                aria-haspopup="dialog"
+                onClick={() => setEditorLineId(row.line.lineId)}
+              >
                 <p className="truncate font-black">{row.line.name}</p>
                 <p className="truncate font-mono text-xs text-stone-500">{row.line.sku || "NO PART NUMBER"}</p>
-              </div>
+              </button>
               <span className="quote-schedule-type">{isLabor(row.line) ? "Labor" : "Equipment"}</span>
               <QuoteQuantityStepper
                 name={row.line.name}
@@ -2600,14 +2609,30 @@ export function QuoteLines({
               />
               <span className="font-mono tabular-nums"><span className="sr-only">Unit sell </span>{money.format(lineSellUnitPrice(row.line))}</span>
               <span className="font-mono font-black tabular-nums"><span className="sr-only">Extension </span>{money.format(lineTotal(row.line))}</span>
-              <ChevronDown size={17} className="text-stone-500" />
-            </summary>
-            <div className="border-t border-stone-300 bg-stone-50 p-3">
-              <QuoteLineEditor line={row.line} onUpdateLine={onUpdateLine} onRemoveLine={onRemoveLine} />
+              <button
+                type="button"
+                className="grid size-8 place-items-center rounded-sm text-stone-500 hover:bg-teal-50 hover:text-teal-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
+                aria-label={`Open ${row.line.name} editor`}
+                aria-haspopup="dialog"
+                onClick={() => setEditorLineId(row.line.lineId)}
+              >
+                <Settings size={17} />
+              </button>
             </div>
-          </details>
+          </div>
         ),
       )}
+      {editorLine ? (
+        <QuoteLineEditorDialog
+          line={editorLine}
+          onClose={() => setEditorLineId("")}
+          onUpdateLine={onUpdateLine}
+          onRemoveLine={(lineId) => {
+            setEditorLineId("");
+            onRemoveLine(lineId);
+          }}
+        />
+      ) : null}
       {packageSelector ? (
         <TemplateItemSelector
           items={items}
@@ -2621,6 +2646,102 @@ export function QuoteLines({
         />
       ) : null}
     </div>
+  );
+}
+
+function QuoteLineEditorDialog({
+  line,
+  onClose,
+  onUpdateLine,
+  onRemoveLine,
+}: {
+  line: QuoteLine;
+  onClose: () => void;
+  onUpdateLine: (lineId: string, patch: Partial<QuoteLine>) => void;
+  onRemoveLine: (lineId: string) => void;
+}) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const fallbackFocus = previousFocus?.closest<HTMLElement>('[aria-label="Quote cart items"]') ?? null;
+    const previousOverflow = document.body.style.overflow;
+    const focusableSelector = "button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex='-1'])";
+    const focusableElements = () => Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector));
+    const focusFirst = () => (focusableElements()[0] ?? dialog).focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = focusableElements();
+      if (!focusable.length) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    const handleFocusIn = (event: FocusEvent) => {
+      if (!dialog.contains(event.target as Node)) focusFirst();
+    };
+
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("focusin", handleFocusIn);
+    focusFirst();
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("focusin", handleFocusIn);
+      if (previousFocus?.isConnected) previousFocus.focus();
+      else if (fallbackFocus?.isConnected) fallbackFocus.focus();
+    };
+  }, []);
+
+  return createPortal(
+    <div
+      ref={dialogRef}
+      tabIndex={-1}
+      className="quote-line-editor-overlay fixed inset-0 z-[70] grid min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-stone-100 text-stone-950"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="quote-line-editor-title"
+    >
+      <div className="flex items-start justify-between gap-4 border-b border-stone-300 bg-white px-4 py-3 sm:px-6">
+        <div className="min-w-0">
+          <h2 id="quote-line-editor-title" className="truncate text-xl font-black">Edit {line.name}</h2>
+          <p className="mt-1 truncate font-mono text-xs text-stone-500">{line.sku || "NO PART NUMBER"}</p>
+        </div>
+        <button type="button" className="icon-button shrink-0" onClick={onClose} aria-label={`Close ${line.name} editor`}>
+          <X size={18} />
+        </button>
+      </div>
+      <div className="min-h-0 overflow-y-auto p-4 sm:p-6">
+        <div className="mx-auto w-full max-w-4xl">
+          <QuoteLineEditor line={line} onUpdateLine={onUpdateLine} onRemoveLine={onRemoveLine} />
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 

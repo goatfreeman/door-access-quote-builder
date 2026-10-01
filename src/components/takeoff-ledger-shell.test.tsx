@@ -134,6 +134,8 @@ describe("takeoff ledger shell", () => {
     expect(html).toContain('aria-label="Remove Door package"');
     expect(html).toContain("lucide-trash2");
     expect(html).not.toContain("quote-quantity-stepper");
+    expect(html).toContain("quote-package-quantity-empty");
+    expect(html).not.toContain('<span class="sr-only">Quantity </span>2');
   });
 
   it("shows quantity controls on a collapsed quote line", () => {
@@ -146,6 +148,8 @@ describe("takeoff ledger shell", () => {
     expect(html).toContain('aria-label="Decrease Reader quantity"');
     expect(html).toContain('aria-label="Increase Reader quantity"');
     expect(html).toContain('aria-label="Reader quantity: 2"');
+    expect(html).toContain("lucide-settings");
+    expect(html).not.toContain("lucide-chevron-down");
   });
 
   it("changes quantity without activating the expandable quote row", () => {
@@ -180,6 +184,7 @@ describe("takeoff ledger shell", () => {
   it("reserves quantity-control space without clipping narrow desktop rows", () => {
     const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8").replace(/\s+/g, " ");
     expect(css).toContain("grid-template-columns: minmax(180px, 2fr) minmax(80px, 0.8fr) 96px 80px 96px 32px;");
+    expect(css).toContain(".quote-line-editor-overlay { display: none !important; }");
   });
 
   it("opens every quote directly in the Takeoff Ledger equipment workspace", () => {
