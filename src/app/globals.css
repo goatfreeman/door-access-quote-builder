@@ -328,6 +328,22 @@ summary {
 }
 
 @media (max-height: 700px) {
+  .items-catalog-panel {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .items-catalog-body {
+    flex: none;
+    min-height: max-content;
+    overflow: visible;
+  }
+
+  .items-catalog-list {
+    min-height: 12rem;
+    max-height: 20rem;
+  }
+
   .quote-screen .catalog-ledger {
     overflow-y: auto;
     overscroll-behavior: contain;
