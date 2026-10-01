@@ -2950,7 +2950,7 @@ function buildQuoteHistory(quote: SavedQuote): QuoteHistoryEntry[] {
   }));
 }
 
-function ItemsPage({
+export function ItemsPage({
   items,
   categories,
   setItems,
@@ -3173,8 +3173,8 @@ function ItemsPage({
     setAddItemOpen(false);
   };
   return (
-    <section className="panel lg:col-span-2">
-      <div className="panel-header">
+    <section className="panel items-catalog-panel flex h-[calc(100dvh-7rem)] min-h-0 flex-col overflow-hidden lg:col-span-2">
+      <div className="panel-header shrink-0">
         <div>
           <h2>Items</h2>
           <p>Full catalog view with editable pricing, MSRP, inventory, links, and notes.</p>
@@ -3184,8 +3184,8 @@ function ItemsPage({
           Add Item
         </button>
       </div>
-      <div className="grid min-h-0 gap-4 p-4 lg:grid-cols-[260px_minmax(0,1fr)]">
-        <aside className="grid content-start gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3">
+      <div className="items-catalog-body grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-4 overflow-hidden p-4 lg:grid-cols-[260px_minmax(0,1fr)] lg:grid-rows-1">
+        <aside className="items-catalog-filters grid min-h-0 content-start gap-3 overflow-y-auto rounded-lg border border-stone-200 bg-stone-50 p-3">
           <div>
             <p className="font-black">Sort & filter</p>
             <p className="mt-1 text-sm text-stone-600">{sortedItems.length} visible items</p>
@@ -3211,7 +3211,7 @@ function ItemsPage({
             </select>
           </label>
         </aside>
-        <div className="grid content-start gap-3">
+        <div className="items-catalog-list grid min-h-0 content-start gap-3 overflow-y-auto pr-1" role="region" aria-label="Catalog items" tabIndex={0}>
           {sortedItems.length ? sortedItems.map((item) => {
             const itemEdit = itemEdits[item.id];
             const itemDraft = itemEdit?.draft ?? item;
