@@ -218,7 +218,8 @@ summary {
     @apply border-l-4 border-teal-700 bg-teal-50/60;
   }
 
-  .quote-schedule-item > summary {
+  .quote-schedule-item > summary,
+  .quote-schedule-item > .quote-schedule-row {
     @apply border-l-4 border-transparent bg-white hover:bg-stone-50;
   }
 
@@ -395,6 +396,10 @@ summary {
 @media print {
   @page {
     margin: 0.55in;
+  }
+
+  .quote-line-editor-overlay {
+    display: none !important;
   }
 
   main > :not(.print-document) {
