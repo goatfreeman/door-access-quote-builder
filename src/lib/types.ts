@@ -149,10 +149,42 @@ export type ExportColumnKey =
   | "lineTotal"
   | "notes";
 
+export type CompatibilityRuleStatus = "OPEN" | "CONFLICT" | "BLOCKED";
+
+export type CompatibilityAttributeDefinition = {
+  id: string;
+  key: string;
+  label: string;
+  allowedValues: string[];
+};
+
+export type CompatibilityItemSelector = {
+  itemId?: string;
+  category?: string;
+  attributeKey?: string;
+  attributeValue?: string;
+};
+
+export type CompatibilityRule = {
+  id: string;
+  name: string;
+  enabled: boolean;
+  type: "attribute-match" | "prohibited-combination" | "required-companion";
+  source: CompatibilityItemSelector;
+  target: CompatibilityItemSelector;
+  attributeKey?: string;
+  status: CompatibilityRuleStatus;
+  message: string;
+  revision: number;
+};
+
 export type ServiceTitanSettings = {
   lastSyncAt?: string;
   taxState?: string;
   defaultTaxPercent?: number;
   exportColumns?: ExportColumnKey[];
   categories?: string[];
+  compatibilityAttributes?: CompatibilityAttributeDefinition[];
+  compatibilityItemAttributes?: Record<string, Record<string, string>>;
+  compatibilityRules?: CompatibilityRule[];
 };

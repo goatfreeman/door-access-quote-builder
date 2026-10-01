@@ -314,6 +314,10 @@ drop policy if exists "profiles update own" on public.profiles;
 create policy "profiles update own" on public.profiles
   for update to authenticated using (id = auth.uid()) with check (id = auth.uid());
 
+-- Users can change their display name but cannot assign their own role.
+revoke update on public.profiles from authenticated;
+grant update (display_name) on public.profiles to authenticated;
+
 drop policy if exists "items team read active" on public.catalog_items;
 create policy "items team read active" on public.catalog_items
   for select to authenticated using (deleted_at is null or public.is_admin());

@@ -34,6 +34,55 @@ describe("QuoteCompatibilityPanel", () => {
     expect(html).toContain("Review unavailable");
   });
 
+  it("shows deterministic rule warnings without an AI request", () => {
+    const html = renderToStaticMarkup(
+      <QuoteCompatibilityPanel
+        currentQuoteSignature="item-a:1"
+        entries={[]}
+        deterministicFindings={[{
+          id: "fiber-mode:item-a:item-b",
+          ruleId: "fiber-mode",
+          ruleRevision: 1,
+          status: "CONFLICT",
+          title: "Fiber mode must match",
+          message: "The converter requires singlemode fiber, but the cable is multimode.",
+          itemIds: ["item-a", "item-b"],
+        }]}
+        onDismiss={() => undefined}
+      />,
+    );
+
+    expect(html).toContain("1 need review");
+    expect(html).toContain("Rule-based checks");
+    expect(html).toContain("Fiber mode must match");
+    expect(html).toContain("CONFLICT");
+    expect(html).toContain("does not use AI");
+  });
+
+  it("counts successful deterministic checks as confirmed instead of review", () => {
+    const html = renderToStaticMarkup(
+      <QuoteCompatibilityPanel
+        currentQuoteSignature="item-a:1"
+        entries={[]}
+        deterministicFindings={[{
+          id: "fiber-mode:item-a:item-b",
+          ruleId: "fiber-mode",
+          ruleRevision: 2,
+          status: "CONFIRMED",
+          title: "Fiber mode must match",
+          message: "Configured fiber modes match.",
+          itemIds: ["item-a", "item-b"],
+        }]}
+        onDismiss={() => undefined}
+      />,
+    );
+
+    expect(html).toContain("1</strong><span>Confirmed");
+    expect(html).toContain("0 need review");
+    expect(html).toContain("Revision 2");
+    expect(html).toContain('class="compatibility-ledger-details" open=""');
+  });
+
   it("keeps compatibility feedback visible when equipment can change without the catalog", () => {
     expect(showWorkspaceCompatibilityPanel("finalize")).toBe(true);
     expect(showWorkspaceCompatibilityPanel("customize")).toBe(false);

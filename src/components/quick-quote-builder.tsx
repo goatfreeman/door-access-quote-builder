@@ -29,6 +29,7 @@ import type { Dispatch, MouseEvent as ReactMouseEvent, SetStateAction } from "re
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getPendingWriteCount, readDb, syncPendingWrites, writeDb } from "@/lib/client-db";
 import { applyCatalogItemEdit, changedCatalogItemEditPatch, hasCatalogItemEditChanges } from "@/lib/catalog-item-editor";
+import { evaluateCompatibilityRules, type DeterministicCompatibilityFinding } from "@/lib/compatibility-rules";
 import { writeDebugLog } from "@/lib/debug-log";
 import { groupQuoteLines, quoteLineExportGroup, quoteLinePrimaryLabel, quoteLineSecondaryLabel } from "@/lib/quote/line-labels";
 import { getSupabaseAuthClient } from "@/lib/supabase/auth-client";
@@ -37,11 +38,12 @@ import type { IntegrationPluginStatus } from "@/lib/plugins/types";
 import type { CatalogItem, DebugLogEntry, DraftQuote, ExportColumnKey, QuoteLine, QuoteMeta, QuoteTemplate, SavedQuote, ServiceTitanSettings, UserSessionRecord } from "@/lib/types";
 import { quoteLineSignature, replaceItemVerificationEntry, type ItemVerificationEntry } from "@/components/item-verification-panel";
 import { QuoteCompatibilityPanel, showWorkspaceCompatibilityPanel } from "@/components/quote-compatibility-panel";
+import { CompatibilitySettingsPanel } from "@/components/compatibility-settings-panel";
 import type { CompatibilityResult } from "@/lib/validation/domain";
 
 type View = "home" | "quote" | "items" | "templates" | "previous" | "settings" | "client";
 type QuoteStep = "pick" | "customize" | "review" | "finalize";
-type SettingsSection = "account" | "database" | "export" | "quoteDefaults" | "categories" | "plugins" | "sync" | "debug" | "recovery";
+type SettingsSection = "account" | "database" | "export" | "quoteDefaults" | "categories" | "compatibility" | "plugins" | "sync" | "debug" | "recovery";
 type DatabaseStatus = {
   provider: string;
   persistent: boolean;
@@ -424,6 +426,10 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
   }, [draftQuotes, sessionUser.id, sessionUser.name]);
   const userSessions = useMemo(() => sessions.filter((session) => session.userId === sessionUser.id && !session.endedAt && Date.now() - new Date(session.lastSeenAt).getTime() < 12 * 60 * 60 * 1000), [sessions, sessionUser.id]);
   const activeLines = useMemo(() => lines.filter((line) => !isLabor(line)), [lines]);
+  const deterministicFindings = useMemo(
+    () => deterministicQuoteFindings(activeLines, activeItems, settings),
+    [activeItems, activeLines, settings],
+  );
   const totals = useMemo(() => buildQuoteTotals(lines, meta), [lines, meta]);
   const cartCount = activeLines.reduce((sum, line) => sum + line.quantity, 0);
 
@@ -1394,6 +1400,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
               onSave={saveQuote}
               saveError={quoteSaveError}
               itemVerifications={itemVerifications}
+              deterministicFindings={deterministicFindings}
               onDismissItemVerification={(id) => setItemVerifications((current) => current.filter((entry) => entry.id !== id))}
               onPrint={printQuote}
               onEmail={() => {
@@ -1406,6 +1413,7 @@ export function QuickQuoteBuilder({ initialUser }: { initialUser?: SessionUser |
                 <QuoteCompatibilityPanel
                   currentQuoteSignature={quoteLineSignature(activeLines.filter((line) => !isLabor(line)))}
                   entries={itemVerifications}
+                  deterministicFindings={deterministicFindings}
                   onDismiss={(id) => setItemVerifications((current) => current.filter((entry) => entry.id !== id))}
                 />
               </aside>
@@ -1512,6 +1520,15 @@ function previousStep(step: QuoteStep): QuoteStep {
 
 export function quoteEntryStep(hasUnsavedQuote: boolean): QuoteStep {
   return hasUnsavedQuote ? "customize" : "pick";
+}
+
+export function deterministicQuoteFindings(lines: QuoteLine[], items: CatalogItem[], settings: ServiceTitanSettings) {
+  return evaluateCompatibilityRules({
+    lines,
+    items,
+    attributesByItem: settings.compatibilityItemAttributes,
+    rules: settings.compatibilityRules,
+  });
 }
 
 export function TakeoffStageBar({ currentStep, onStep }: { currentStep: QuoteStep; onStep: (step: QuoteStep) => void }) {
@@ -2006,6 +2023,7 @@ function QuoteWorkspace(props: {
   onSave: () => void;
   saveError: string;
   itemVerifications: ItemVerificationEntry[];
+  deterministicFindings: DeterministicCompatibilityFinding[];
   onDismissItemVerification: (id: string) => void;
   onPrint: () => void;
   onEmail: () => void;
@@ -2037,6 +2055,7 @@ function QuoteWorkspace(props: {
             <QuoteCompatibilityPanel
               currentQuoteSignature={quoteLineSignature(props.lines.filter((line) => !isLabor(line)))}
               entries={props.itemVerifications}
+              deterministicFindings={props.deterministicFindings}
               onDismiss={props.onDismissItemVerification}
             />
           ) : null}
@@ -4225,6 +4244,7 @@ function SettingsPage({
     { id: "export", label: "Export Options" },
     { id: "quoteDefaults", label: "Quote Defaults", admin: true },
     { id: "categories", label: "Categories", admin: true },
+    { id: "compatibility", label: "Compatibility Rules", admin: true },
     { id: "plugins", label: "Plugins", admin: true },
     { id: "sync", label: "Sync", admin: true },
     { id: "debug", label: "Debug Logs", admin: true },
@@ -4597,6 +4617,14 @@ function SettingsPage({
                 )}
               </div>
             </section>
+          ) : null}
+          {activeSection === "compatibility" ? (
+            <CompatibilitySettingsPanel
+              settings={settings}
+              setSettings={setSettings}
+              items={items}
+              categories={managedCategories}
+            />
           ) : null}
           {activeSection === "plugins" ? (
             <section className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-4">

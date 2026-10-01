@@ -1,5 +1,7 @@
 export type DbCollection = "items" | "templates" | "quotes" | "settings" | "drafts" | "sessions" | "debugLogs";
 
+const collectionWriteChains = new Map<DbCollection, Promise<void>>();
+
 async function putCollection(collection: DbCollection, value: unknown) {
   const response = await fetch(`/api/db/${collection}`, {
     method: "PUT",
@@ -29,7 +31,14 @@ export async function readDb<T>(collection: DbCollection, fallback: T): Promise<
 
 export async function writeDb(collection: DbCollection, value: unknown) {
   if (typeof navigator !== "undefined" && !navigator.onLine) return;
-  await putCollection(collection, value);
+  const previous = collectionWriteChains.get(collection) ?? Promise.resolve();
+  const next = previous.catch(() => undefined).then(() => putCollection(collection, value));
+  collectionWriteChains.set(collection, next);
+  try {
+    await next;
+  } finally {
+    if (collectionWriteChains.get(collection) === next) collectionWriteChains.delete(collection);
+  }
 }
 
 export function getPendingWriteCount() {
