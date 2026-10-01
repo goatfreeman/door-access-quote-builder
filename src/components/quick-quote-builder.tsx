@@ -2453,6 +2453,50 @@ export function packageLineIds(lines: QuoteLine[]): string[] {
   return lines.map((line) => line.lineId);
 }
 
+export function nextQuoteQuantity(quantity: number, delta: number): number {
+  return Math.max(0, (Number(quantity) || 0) + delta);
+}
+
+export function QuoteQuantityStepper({
+  name,
+  quantity,
+  onChange,
+}: {
+  name: string;
+  quantity: number;
+  onChange: (quantity: number) => void;
+}) {
+  const normalizedQuantity = nextQuoteQuantity(quantity, 0);
+  const changeQuantity = (event: ReactMouseEvent<HTMLButtonElement>, delta: number) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onChange(nextQuoteQuantity(normalizedQuantity, delta));
+  };
+
+  return (
+    <div className="quote-quantity-stepper inline-flex items-center justify-center gap-1" role="group" aria-label={`${name} quantity: ${normalizedQuantity}`}>
+      <button
+        type="button"
+        className="grid size-8 shrink-0 place-items-center rounded-sm border border-stone-300 bg-white text-stone-700 hover:border-teal-700 hover:text-teal-800 disabled:cursor-not-allowed disabled:opacity-40"
+        aria-label={`Decrease ${name} quantity`}
+        disabled={normalizedQuantity <= 0}
+        onClick={(event) => changeQuantity(event, -1)}
+      >
+        <Minus size={15} />
+      </button>
+      <span className="min-w-6 text-center font-mono font-black tabular-nums" aria-live="polite">{normalizedQuantity}</span>
+      <button
+        type="button"
+        className="grid size-8 shrink-0 place-items-center rounded-sm border border-stone-300 bg-white text-stone-700 hover:border-teal-700 hover:text-teal-800"
+        aria-label={`Increase ${name} quantity`}
+        onClick={(event) => changeQuantity(event, 1)}
+      >
+        <Plus size={15} />
+      </button>
+    </div>
+  );
+}
+
 export function QuoteLines({
   lines,
   items,
@@ -2549,7 +2593,11 @@ export function QuoteLines({
                 <p className="truncate font-mono text-xs text-stone-500">{row.line.sku || "NO PART NUMBER"}</p>
               </div>
               <span className="quote-schedule-type">{isLabor(row.line) ? "Labor" : "Equipment"}</span>
-              <span className="font-mono font-black tabular-nums"><span className="sr-only">Quantity </span>{row.line.quantity}</span>
+              <QuoteQuantityStepper
+                name={row.line.name}
+                quantity={row.line.quantity}
+                onChange={(quantity) => onUpdateLine(row.line.lineId, { quantity })}
+              />
               <span className="font-mono tabular-nums"><span className="sr-only">Unit sell </span>{money.format(lineSellUnitPrice(row.line))}</span>
               <span className="font-mono font-black tabular-nums"><span className="sr-only">Extension </span>{money.format(lineTotal(row.line))}</span>
               <ChevronDown size={17} className="text-stone-500" />

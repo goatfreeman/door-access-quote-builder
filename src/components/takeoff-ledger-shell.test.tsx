@@ -1,7 +1,8 @@
+import { readFileSync } from "node:fs";
 import { Children, isValidElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { CatalogPanel, EquipmentCategoryStrip, QuickQuoteBuilderSkeleton, QuoteLines, TakeoffStageBar, TemplateConfigureDialog, customTemplateSelection, packageLineIds, quoteEntryStep, quoteShowsCatalog, quoteWorkspaceStep } from "./quick-quote-builder";
+import { CatalogPanel, EquipmentCategoryStrip, QuickQuoteBuilderSkeleton, QuoteLines, QuoteQuantityStepper, TakeoffStageBar, TemplateConfigureDialog, customTemplateSelection, nextQuoteQuantity, packageLineIds, quoteEntryStep, quoteShowsCatalog, quoteWorkspaceStep } from "./quick-quote-builder";
 import type { QuoteLine } from "@/lib/types";
 
 describe("takeoff ledger shell", () => {
@@ -132,6 +133,53 @@ describe("takeoff ledger shell", () => {
     expect(packageLineIds(lines)).toEqual(["line-1", "line-2"]);
     expect(html).toContain('aria-label="Remove Door package"');
     expect(html).toContain("lucide-trash2");
+    expect(html).not.toContain("quote-quantity-stepper");
+  });
+
+  it("shows quantity controls on a collapsed quote line", () => {
+    const line: QuoteLine = { lineId: "line-1", itemId: "item-1", name: "Reader", sku: "R-1", quantity: 2, unitPrice: 100, notes: "" };
+    const html = renderToStaticMarkup(
+      <QuoteLines lines={[line]} items={[]} onAddItemToPackage={vi.fn()} onUpdateLine={vi.fn()} onRemoveLine={vi.fn()} />,
+    );
+
+    expect(html).toContain("quote-quantity-stepper");
+    expect(html).toContain('aria-label="Decrease Reader quantity"');
+    expect(html).toContain('aria-label="Increase Reader quantity"');
+    expect(html).toContain('aria-label="Reader quantity: 2"');
+  });
+
+  it("changes quantity without activating the expandable quote row", () => {
+    const onChange = vi.fn();
+    const stepper = QuoteQuantityStepper({ name: "Reader", quantity: 2, onChange });
+    const buttons = Children.toArray(stepper.props.children).filter(
+      (child): child is ReactElement<{ onClick: (event: { preventDefault: () => void; stopPropagation: () => void }) => void }> =>
+        isValidElement(child) && child.type === "button",
+    );
+    const event = { preventDefault: vi.fn(), stopPropagation: vi.fn() };
+
+    buttons[0].props.onClick(event);
+    buttons[1].props.onClick(event);
+
+    expect(onChange.mock.calls).toEqual([[1], [3]]);
+    expect(event.preventDefault).toHaveBeenCalledTimes(2);
+    expect(event.stopPropagation).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops quantity at zero", () => {
+    expect(nextQuoteQuantity(0, -1)).toBe(0);
+    expect(nextQuoteQuantity(-2, -1)).toBe(0);
+    expect(nextQuoteQuantity(2, 1)).toBe(3);
+
+    const stepper = QuoteQuantityStepper({ name: "Reader", quantity: 0, onChange: vi.fn() });
+    const buttons = Children.toArray(stepper.props.children).filter(
+      (child): child is ReactElement<{ disabled?: boolean }> => isValidElement(child) && child.type === "button",
+    );
+    expect(buttons[0].props.disabled).toBe(true);
+  });
+
+  it("reserves quantity-control space without clipping narrow desktop rows", () => {
+    const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8").replace(/\s+/g, " ");
+    expect(css).toContain("grid-template-columns: minmax(180px, 2fr) minmax(80px, 0.8fr) 96px 80px 96px 32px;");
   });
 
   it("opens every quote directly in the Takeoff Ledger equipment workspace", () => {
