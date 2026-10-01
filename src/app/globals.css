@@ -362,10 +362,6 @@ summary {
     padding-bottom: 0.25rem;
   }
 
-  .quote-screen .catalog-category-filter {
-    max-height: 5rem;
-  }
-
   .quote-screen .catalog-ledger-results {
     flex: none;
     overflow: visible;
