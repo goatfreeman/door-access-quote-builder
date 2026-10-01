@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { CatalogPanel, QuickQuoteBuilderSkeleton, QuoteLines, TakeoffStageBar, TemplateConfigureDialog, customTemplateSelection, packageLineIds, quoteEntryStep } from "./quick-quote-builder";
+import { CatalogPanel, QuickQuoteBuilderSkeleton, QuoteLines, TakeoffStageBar, TemplateConfigureDialog, customTemplateSelection, packageLineIds, quoteEntryStep, quoteShowsCatalog, quoteWorkspaceStep } from "./quick-quote-builder";
 import type { QuoteLine } from "@/lib/types";
 
 describe("takeoff ledger shell", () => {
@@ -94,8 +94,14 @@ describe("takeoff ledger shell", () => {
     expect(html).toContain("lucide-trash2");
   });
 
-  it("continues an unsaved quote at equipment customization", () => {
+  it("opens every quote directly in the Takeoff Ledger equipment workspace", () => {
     expect(quoteEntryStep(true)).toBe("customize");
-    expect(quoteEntryStep(false)).toBe("pick");
+    expect(quoteEntryStep(false)).toBe("customize");
+    expect(quoteShowsCatalog("customize")).toBe(true);
+    expect(quoteShowsCatalog("review")).toBe(true);
+    expect(quoteShowsCatalog("finalize")).toBe(false);
+    expect(quoteWorkspaceStep("pick")).toBe("customize");
+    expect(quoteWorkspaceStep("review")).toBe("review");
+    expect(quoteWorkspaceStep("unexpected")).toBe("customize");
   });
 });
